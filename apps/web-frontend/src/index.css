@@ -2,103 +2,56 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
-:root {
+@theme {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
   
-  /* Modern Heritage Palette */
-  --bg-background: #F9F8F6;
-  --bg-surface: #FFFFFF;
-  --text-primary: #1A1C21;
-  --text-secondary: #5F646D;
-  --accent-primary: #2563EB;
-  --accent-soft: #EFF6FF;
-  --border-color: #E5E7EB;
-  --border-strong: #D1D5DB;
+  --color-background: #F9F8F6;
+  --color-surface: #FFFFFF;
+  --color-primary: #1A1C21;
+  --color-secondary: #5F646D;
+  --color-accent: #2563EB;
+  --color-accent-soft: #EFF6FF;
+  --color-border: #E5E7EB;
+  --color-border-strong: #D1D5DB;
   
-  /* Strict Spacing System */
-  --s-1: 4px;
-  --s-2: 8px;
-  --s-3: 12px;
-  --s-4: 16px;
-  --s-6: 24px;
-  --s-8: 32px;
-  --s-12: 48px;
-  --s-16: 64px;
-  --s-24: 96px;
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-3: 12px;
+  --spacing-4: 16px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+  --spacing-24: 96px;
 
   --h-control: 48px;
-  --r-md: 10px;
-  --r-lg: 16px;
-  
-  --shadow-subtle: 0 1px 3px 0 rgb(0 0 0 / 0.1);
-  --shadow-card: 0 10px 15px -3px rgb(0 0 0 / 0.05);
+  --radius-md: 10px;
+  --radius-lg: 16px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-background: #0F1115;
-    --bg-surface: #1B1E26;
-    --text-primary: #F3F4F6;
-    --text-secondary: #9CA3AF;
-    --accent-primary: #3B82F6;
-    --accent-soft: rgba(59, 130, 246, 0.1);
-    --border-color: #2D323E;
-    --border-strong: #3D4452;
+    --color-background: #0F1115;
+    --color-surface: #1B1E26;
+    --color-primary: #F3F4F6;
+    --color-secondary: #9CA3AF;
+    --color-accent: #3B82F6;
+    --color-accent-soft: rgba(59, 130, 246, 0.1);
+    --color-border: #2D323E;
+    --color-border-strong: #3D4452;
   }
-}
-
-@theme {
-  --font-sans: var(--font-sans);
-  
-  --color-background: var(--bg-background);
-  --color-surface: var(--bg-surface);
-  
-  /* Text Colors */
-  --color-primary: var(--text-primary);
-  --color-secondary: var(--text-secondary);
-  
-  /* Brand Colors */
-  --color-accent: var(--accent-primary);
-  --color-accent-soft: var(--accent-soft);
-  
-  --color-border: var(--border-color);
-  --color-border-strong: var(--border-strong);
-
-  --spacing-1: var(--s-1);
-  --spacing-2: var(--s-2);
-  --spacing-3: var(--s-3);
-  --spacing-4: var(--s-4);
-  --spacing-6: var(--s-6);
-  --spacing-8: var(--s-8);
-  --spacing-12: var(--s-12);
-  --spacing-16: var(--s-16);
-  --spacing-24: var(--s-24);
-
-  --radius-md: var(--r-md);
-  --radius-lg: var(--r-lg);
-  
-  --shadow-subtle: var(--shadow-subtle);
-  --shadow-card: var(--shadow-card);
 }
 
 @layer base {
   body {
     @apply font-sans bg-background text-primary antialiased leading-relaxed;
   }
+  * { @apply border-border; }
 }
 
 @layer components {
   .container {
     @apply max-w-[1100px] mx-auto px-6 w-full;
-  }
-
-  /* Header Components */
-  .header {
-    @apply h-[80px] bg-surface border-b border-border sticky top-0 z-[1000];
-  }
-
-  .header-inner {
-    @apply h-full flex items-center justify-between;
   }
 
   .btn {
@@ -113,17 +66,16 @@
   }
 
   .card {
-    @apply bg-surface border border-border rounded-lg p-8 shadow-subtle;
+    @apply bg-surface border border-border rounded-lg p-8 shadow-sm;
   }
 
   .divider { @apply border-t border-border; }
 
-  h1 { @apply text-[64px] font-extrabold tracking-[-0.04em] leading-[1.1]; }
-  h2 { @apply text-[32px] font-bold tracking-[-0.02em]; }
+  h1 { @apply text-[64px] font-extrabold tracking-tight leading-[1.1]; }
+  h2 { @apply text-[32px] font-bold tracking-tight; }
   h3 { @apply text-[20px] font-semibold; }
 
-  .hero-sub { @apply text-[20px] leading-[1.6] max-w-[640px] mx-auto text-secondary; }
-  .text-xs { @apply text-[12px] font-semibold uppercase tracking-widest text-secondary; }
+  .hero-sub { @apply text-[20px] leading-relaxed max-w-[640px] mx-auto text-secondary; }
   .accent-text { @apply text-accent; }
 }
 
