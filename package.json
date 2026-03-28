@@ -1,0 +1,9 @@
+{
+  "name": "lineage-nexus-root",
+  "private": true,
+  "scripts": {
+    "dev": "cd apps/web-frontend && pnpm dev",
+    "build": "cd apps/web-frontend && pnpm build",
+    "backend": "cd apps/cloud-backend && uvicorn main:app --port 8080 --host 0.0.0.0 --reload"
+  }
+}
