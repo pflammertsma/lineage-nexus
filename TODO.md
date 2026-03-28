@@ -7,8 +7,13 @@ Instructions:
 
 ## 🚀 Active Tasks
 
-- [ ] **Functional Migration**: Port the Python ADK research logic (OpenArchieven, WikiTree) to a cloud-compatible backend service.
-- [ ] **Search Implementation**: Wire up the "Hero" search input to trigger actual archival queries via the new backend.
+- [ ] **Functional Migration**: Replace the Python ADK framework with a bespoke, stateless integration using the Gemini API directly (`google-genai`) to ensure total ownership and Bring-Your-Own-Key compatibility. Use a recent model, depending on the application needs: `gemini-flash-lite-latest`, `gemini-flash-latest` or `gemini-pro-latest`.
+  - [ ] **1. Architecture & Scaffold:** Scaffold a Python FastAPI application in `apps/cloud-backend`.
+  - [ ] **2. API Integration:** Implement direct `google-genai` client initializations that dynamically accept the user's `GOOGLE_API_KEY` per request via headers.
+  - [ ] **3. Tool Refactoring:** Port the existing business logic functions (OpenArchieven searches, WikiTree API) into standalone Python functions that Gemini tool calling can natively invoke without ADK wrappers.
+  - [ ] **4. Orchestration:** Build a custom, stateless chat router that handles multi-agent tool delegation and context manually.
+  - [ ] **5. Containerization:** Create a `Dockerfile` for the API, mapping routing to the container environment's `PORT` for GCP Cloud Run support.
+- [ ] **Search Implementation**: Wire up the "Hero" search input in the Vite frontend to trigger actual archival queries via the new backend.
 - [ ] **UI/UX Refinement**: Continue polishing the "Modern Heritage" design, focusing on header responsiveness and better interactive feedback.
 - [ ] **Deployment**: Prepare the `Dockerfile` and Cloud Run configurations for the final rollout to [lineage.nexus](https://lineage.nexus).
 
