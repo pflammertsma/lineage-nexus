@@ -7,11 +7,19 @@ Instructions:
 
 ## 🚀 Active Tasks
 
-- [ ] Create a web front end for the Lineage Nexus project. Users will provide their own API key, which for now will be stored in local storage. The front end should allow users to interact with our cloud hosted AI agents to perform research according to our current ADK project scope. The front end should be built using React. It will be hosted on Google Cloud Run using a Docker container. The front end should be able to be deployed locally. We will be preparing a Dockerfile and cloud run configuration for this purpose and will deploy our website to lineage.nexus, which has been registered already.
+- [ ] **Functional Migration**: Port the Python ADK research logic (OpenArchieven, WikiTree) to a cloud-compatible backend service.
+- [ ] **Search Implementation**: Wire up the "Hero" search input to trigger actual archival queries via the new backend.
+- [ ] **UI/UX Refinement**: Continue polishing the "Modern Heritage" design, focusing on header responsiveness and better interactive feedback.
+- [ ] **Deployment**: Prepare the `Dockerfile` and Cloud Run configurations for the final rollout to [lineage.nexus](https://lineage.nexus).
 
-## ✅ Completed Tasks (Recent)
+## ✅ Completed Tasks
 
-- [x] Created TODO file (2026-03-28)
+- [x] **Project Rebranding**: Renamed project to Lineage Nexus and updated all docs. (2026-03-28)
+- [x] **Web Frontend Initialization**: Scaffolded React/Vite app with pnpm. (2026-03-28)
+- [x] **Design System Implementation**: Built "Modern Heritage" utility system in `index.css`. (2026-03-28)
+- [x] **Core Components**: Implemented Header, Hero, FeatureGrid, and ApiKeyModal with unified styling. (2026-03-28)
+- [x] **Asset Integration**: Moved logo to standardized asset path and refined brand presence. (2026-03-28)
+- [x] **TODO File Creation**: (2026-03-28)
 
 # Appendix, ignore and do not remove
 

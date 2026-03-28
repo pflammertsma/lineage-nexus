@@ -17,8 +17,10 @@ The current system is an **ADK Multi-Agent System** designed for local execution
 
 We are currently building the next evolution of Lineage Nexus:
 - **Frontend**: A modern **React** application (Vite-based) located in `apps/web-frontend`.
+  - **Design System**: "Modern Heritage" featuring Parchment/Slate tones and grid-based precision.
+  - **Shared UI**: Centralized `index.css` utility system for consistent spacing and dimensions.
 - **Hosting**: Deployed via **Docker** to **Google Cloud Run** at [lineage.nexus](https://lineage.nexus).
 - **Architecture**:
-  - **Stateless Agents**: The agents are being migrated to a cloud-hosted environment.
-  - **User-Provided Keys**: To ensure sustainability, users provide their own Google AI API keys, which are stored securely in local storage.
-  - **Aesthetic**: A premium, high-end researcher experience with rich visuals and smooth transitions.
+  - **Stateless Agents**: Migrating ADK logic to a cloud-hosted environment.
+  - **Security**: "Bring-Your-Own-Key" model using browser local storage for user AI keys.
+  - **Aesthetic**: Premium researcher experience with refined typography and professional layout.

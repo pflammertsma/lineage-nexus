@@ -117,11 +117,27 @@ python apps/lineage_app.py
 
 This will open a new tab in your browser with the custom chat interface.
 
-## Accessing Lineage Nexus publicly through the web
+## Lineage Nexus Web Platform
 
-**Lineage Nexus is not publicly available on the web.** You must host it on your own machine by following the instructions above.
+We are currently building a fully-hosted version of Lineage Nexus at [https://lineage.nexus](https://lineage.nexus). This version features a modern React-based frontend and a state-of-the-art "Modern Heritage" design system.
 
-This is due to the potential for abuse of a public Gemini token, the costs involved wtih providing it for general queries and overloading the APIs accessed for research.
+### Features
+*   **Archival Agent**: Orchestrates research across Dutch national and regional archives.
+*   **WikiTree Integration**: Generates professional profiles and biographies.
+*   **Local Security**: Uses a "Bring-Your-Own-Key" model, storing user API keys only in the browser's local storage.
+
+### Development (Local)
+
+To run the web frontend locally:
+1. Navigate to `apps/web-frontend`.
+2. Install dependencies: `pnpm install`
+3. Run the dev server: `pnpm dev`
+
+## Accessing Lineage Nexus publicly through the web (Legacy ADK)
+
+The legacy ADK implementation is not publicly available on the web. It must be hosted on your own machine by following the instructions above. This is due to the potential for abuse of a public Gemini token, the costs involved with providing it for general queries, and overloading the APIs accessed for research.
+
+However, the next-generation platform is being deployed at **[https://lineage.nexus](https://lineage.nexus)** using Google Cloud Run and Docker.
 
 ## License
 
