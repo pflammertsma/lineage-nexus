@@ -11,6 +11,7 @@ function App() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
+  const [configOpen, setConfigOpen] = useState(false);
 
   const notify = (msg, type = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -74,10 +75,10 @@ function App() {
         ))}
       </div>
       <main className="flex-1">
-        <Hero onSearch={handleSearch} />
+        <Hero onSearch={handleSearch} onConfig={() => setConfigOpen(true)} />
         <ChatInterface messages={messages} isLoading={loading} />
         <FeatureGrid />
-        <ApiKeyModal notify={notify} />
+        {configOpen && <ApiKeyModal notify={notify} onClose={() => setConfigOpen(false)} />}
       </main>
       <footer className="py-16 bg-surface section-divider">
         <div className="container">

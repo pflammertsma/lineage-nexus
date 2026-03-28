@@ -1,12 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 
-const ApiKeyModal = ({ notify }) => {
-  const [apiKey, setApiKey] = useState('');
-  
-  useEffect(() => {
-    const savedKey = localStorage.getItem('google_api_key');
-    if (savedKey) setApiKey(savedKey);
-  }, []);
+const ApiKeyModal = ({ notify, onClose }) => {
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('google_api_key') || '');
 
   const handleSave = () => {
     localStorage.setItem('google_api_key', apiKey);
@@ -14,42 +9,43 @@ const ApiKeyModal = ({ notify }) => {
   };
 
   return (
-    <section id="about" className="py-24">
-      <div className="container flex justify-center">
-        <div className="card" style={{ maxWidth: '560px', width: '100%' }}>
-          <div className="text-center mb-8">
-            <div className="text-accent text-xs mb-2">SECURITY & PRIVACY</div>
-            <h2 className="mb-4">Bring your own key</h2>
-            <p className="text-secondary">
-              Power your research with your own Google AI Studio key. 
-              We never store your keys—everything stays in your browser.
-            </p>
+    <div className="fixed-inset flex items-center justify-center" style={{ zIndex: 3000, backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)', position: 'fixed', inset: 0 }}>
+      <div className="card" style={{ maxWidth: '420px', width: '90%', position: 'relative' }}>
+        <button onClick={onClose} style={{ position: 'absolute', top: '16px', right: '16px', border: 'none', background: 'transparent', cursor: 'pointer', color: 'var(--text-secondary)' }}>
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+        
+        <div className="text-center mb-6">
+          <div className="text-accent text-xs mb-2">CONFIGURATION</div>
+          <h2 className="mb-2" style={{ fontSize: '24px' }}>API Configuration</h2>
+          <p className="text-secondary text-sm">
+            Securely link your Google AI Studio account. Your key is stored locally in your browser and never sent to our servers.
+          </p>
+        </div>
+        
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
+            <label className="text-xs text-secondary">Google AI Studio API Key</label>
+            <input 
+              type="password" 
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="Paste your key here"
+              className="input-field"
+            />
           </div>
-          
-          <div className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <label className="text-xs text-secondary">Google AI Studio API Key</label>
-              <input 
-                type="password" 
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder="Paste your key here"
-                className="input-field"
-              />
-            </div>
-            <button onClick={handleSave} className="btn btn-primary w-full">
-              Save Configuration
-            </button>
-          </div>
-          
-          <div className="mt-8 pt-6 section-divider text-center">
-            <p className="text-xs text-secondary">
-              Don't have a key? <a href="https://ai.google.dev" className="text-accent underline">Get one for free at Google AI Studio</a>
-            </p>
-          </div>
+          <button onClick={() => { handleSave(); onClose(); }} className="btn btn-primary w-full">
+            Save Key
+          </button>
+        </div>
+        
+        <div className="mt-6 pt-6 divider text-center">
+          <p className="text-xs text-secondary" style={{ lineHeight: 1.6 }}>
+            Need a key? <a href="https://aistudio.google.com/app/api-keys" target="_blank" rel="noopener noreferrer" className="text-accent underline">Get one for free at Google AI Studio.</a>
+          </p>
         </div>
       </div>
-    </section>
+    </div>
   );
 };
 
