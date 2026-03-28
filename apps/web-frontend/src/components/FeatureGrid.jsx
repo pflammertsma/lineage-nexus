@@ -3,29 +3,29 @@ import React from 'react';
 const FeatureGrid = () => {
   const features = [
     {
-      title: "Archival Intelligence",
-      description: "Direct integration with Dutch national archives. AI agents navigate complex search patterns to find records others miss.",
+      title: "Lineage",
+      description: "Forget simple search. Our AI agents navigate complex archives and paper trails like seasoned researchers to find records others miss.",
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>
+          <circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" />
         </svg>
       )
     },
     {
-      title: "WikiTree Orchestration",
-      description: "Generate professional-grade biographies and source citations formatted for immediate WikiTree inclusion.",
+      title: "Nexus",
+      description: "Generate professional-grade WikiTree biographies and citations in seconds. No more manual entry—just results.",
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2v8"/><path d="m16 12-4 4-4-4"/><path d="M12 16v6"/>
+          <path d="M12 2v8" /><path d="m16 12-4 4-4-4" /><path d="M12 16v6" />
         </svg>
       )
     },
     {
-      title: "Privacy by Design",
-      description: "Local-storage based key management ensures your Google AI Studio credentials never leave your browser.",
+      title: "BYOK",
+      description: "Bring your own key: Lineage Nexus doesn't store your API key—it's only saved in your browser's local storage.",
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-          <rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          <rect width="18" height="11" x="3" y="11" rx="2" ry="2" /><path d="M7 11V7a5 5 0 0 1 10 0v4" />
         </svg>
       )
     }

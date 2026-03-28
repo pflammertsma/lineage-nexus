@@ -1,6 +1,15 @@
-import React from 'react';
+import React, { useState } from 'react';
 
-const Hero = () => {
+const Hero = ({ onSearch }) => {
+  const [query, setQuery] = useState('');
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (query.trim()) {
+      onSearch(query);
+    }
+  };
+
   return (
     <section className="py-24">
       <div className="container text-center">
@@ -9,14 +18,16 @@ const Hero = () => {
           Harness advanced AI orchestration to explore Dutch archives and automate professional genealogical record-keeping.
         </p>
 
-        <div className="mb-12" style={{ maxWidth: '640px', margin: '0 auto' }}>
+        <form onSubmit={handleSubmit} className="mb-12" style={{ maxWidth: '640px', margin: '0 auto' }}>
           <div className="flex gap-2">
             <input
               type="text"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
               placeholder="Search ancestor (e.g., Aaltje Zwiers 1847)"
               className="input-field flex-1"
             />
-            <button className="btn btn-accent px-8">
+            <button type="submit" className="btn btn-accent px-8">
               Start
             </button>
           </div>
@@ -25,7 +36,7 @@ const Hero = () => {
             <span className="text-xs">WikiTree</span>
             <span className="text-xs">National Archives</span>
           </div>
-        </div>
+        </form>
 
         <div className="flex justify-center">
           <div style={{ backgroundColor: 'var(--accent-soft)', color: 'var(--accent-primary)', padding: '8px 16px', borderRadius: '32px', fontSize: '12px', fontWeight: '800' }}>

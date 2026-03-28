@@ -1,0 +1,183 @@
+import httpx
+import re
+import copy
+from datetime import datetime
+from typing import Dict, Any, List, Optional
+
+MAX_RESULTS = 30
+
+def parse_openarchieven_url(url: str):
+    try:
+        normalized_url = url.rstrip('/')
+        last_slash_index = normalized_url.rfind('/')
+        if last_slash_index == -1:
+            return None, None
+        archive_identifier_part = normalized_url[last_slash_index + 1:]
+        if not archive_identifier_part:
+            return None, None
+        parts = archive_identifier_part.split(':')
+        if len(parts) == 2:
+            return parts[0], parts[1]
+        return None, None
+    except Exception:
+        return None, None
+
+def reformat_results(result: Dict[str, Any], multi_page_search: bool) -> Dict[str, Any]:
+    if result.get('status') == 'error':
+        return result
+    
+    if 'start_offset' in result and 'results_remaining' in result and 'records' in result:
+        if multi_page_search:
+            current_page = result['start_offset'] // MAX_RESULTS
+            total_records = result['start_offset'] + len(result['records']) + result['results_remaining']
+            total_pages = (total_records + MAX_RESULTS - 1) // MAX_RESULTS
+            result['page'] = current_page + 1
+            result['total_pages'] = total_pages
+        del result['start_offset']
+        del result['results_remaining']
+
+    if not result or 'records' not in result or not isinstance(result['records'], list):
+        return {"status": "error", "error_message": f"Unexpected response format: {result}"}
+
+    reformatted_result = copy.deepcopy(result)
+
+    for record in reformatted_result.get('records', []):
+        relations_map = {}
+        if 'RelationEP' in record and isinstance(record.get('RelationEP'), list):
+            for rel in record['RelationEP']:
+                if 'PersonKeyRef' in rel and 'RelationType' in rel:
+                    relations_map[rel['PersonKeyRef']] = rel['RelationType']
+
+        if 'RelationPP' in record and isinstance(record.get('RelationPP'), dict):
+            relation_pp = record['RelationPP']
+            relation_type = relation_pp.get('RelationType')
+            person_refs = relation_pp.get('PersonKeyRef', [])
+            if relation_type and isinstance(person_refs, list):
+                for person_ref in person_refs:
+                    if person_ref not in relations_map:
+                        relations_map[person_ref] = relation_type
+        
+        new_person_list = []
+        if 'Person' in record and isinstance(record['Person'], dict):
+            record['Person'] = [record['Person']]
+
+        for person_data in record.get('Person', []):
+            pid = person_data.get('@pid')
+            new_person = {k: v for k, v in person_data.items() if k != '@pid'}
+            if pid and pid in relations_map:
+                new_person['RelationType'] = relations_map[pid]
+                new_person = {'RelationType': new_person.pop('RelationType'), **new_person}
+            new_person_list.append(new_person)
+        record['Person'] = new_person_list
+        
+        record.pop('RelationEP', None)
+        record.pop('RelationPP', None)
+
+        if 'Event' in record and '@eid' in record.get('Event', {}):
+            del record['Event']['@eid']
+
+        if 'Source' in record:
+            source = record['Source']
+            if 'OpenArchievenLink' in record:
+                source['OpenArchieven'] = record.pop('OpenArchievenLink')
+            if 'SourceRemark' in source and isinstance(source.get('SourceRemark'), list):
+                source['SourceRemark'] = {
+                    item['@Key']: item.get('Value') 
+                    for item in source['SourceRemark'] if '@Key' in item
+                }
+            if 'SourceAvailableScans' in source and 'Scan' in source.get('SourceAvailableScans', {}):
+                scans_data = source['SourceAvailableScans']['Scan']
+                if isinstance(scans_data, list):
+                     source['SourceAvailableScans']['Scan'] = [
+                         scan.get('UriViewer') for scan in scans_data if 'UriViewer' in scan
+                     ]
+    return reformatted_result
+
+async def open_archives_get_record(url: str) -> dict:
+    archive, identifier = parse_openarchieven_url(url)
+    if not archive or not identifier:
+        return {"status": "error", "error_message": "Invalid OpenArchieven URL format."}
+    
+    base_url = "https://api.openarchieven.nl/1.1/records/show.json"
+    params = {"archive": archive, "identifier": identifier, "lang": "en"}
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(base_url, params=params, timeout=15.0)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"status": "error", "error_message": f"API request failed: {str(e)}"}
+
+async def open_archives_search(
+    query: str, 
+    eventplace: Optional[str] = None, 
+    eventtype: Optional[str] = None, 
+    relationtype: Optional[str] = None,
+    page: Optional[int] = 1,
+    multi_page_search: bool = False
+) -> dict:
+    if query.count(" &~& ") >= 2:
+        query = query.replace(" &~& ", " & ")
+    if " &~& " in query and " & " in query:
+        query = query.replace(" &~& ", " & ")
+    query = re.sub(r'(\b\d{4})-(?!\d)', rf'\1-{datetime.now().year}', query)
+    
+    start_offset = max(0, page - 1) * MAX_RESULTS if multi_page_search else 0
+
+    params = {
+        "name": query,
+        "lang": "en",
+        "number_show": MAX_RESULTS,
+        "start": start_offset,
+        "sort": 4
+    }
+    
+    if eventplace: params["eventplace"] = eventplace
+    if eventtype: params["eventtype"] = eventtype
+    if relationtype: params["relationtype"] = relationtype
+
+    if query.count("&") > 2:
+        return {"status": "error", "error_message": "Query cannot contain more than two '&' symbols."}
+
+    base_url = "https://api.openarchieven.nl/1.1/records/search.json"
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            response = await client.get(base_url, params=params, timeout=20.0)
+            response.raise_for_status()
+            search_results = response.json()
+            
+            total_found = search_results.get("response", {}).get("number_found", 0)
+            docs = search_results.get("response", {}).get("docs", [])
+            
+            if not multi_page_search and total_found > MAX_RESULTS:
+                return {
+                    "status": "error",
+                    "error_message": f"More than {MAX_RESULTS} results found. Refine your search or enabled multi-page search.",
+                    "total_found": total_found
+                }
+
+            records = []
+            for doc in docs:
+                # Fetching details async for better performance
+                # For simplicity in this first port, we follow the original logic of fetching show.json for each result
+                # but we could optimize this later by fetching concurrently.
+                show_url = "https://api.openarchieven.nl/1.1/records/show.json"
+                show_params = {"archive": doc["archive_code"], "identifier": doc["identifier"], "lang": "en"}
+                show_resp = await client.get(show_url, params=show_params, timeout=10.0)
+                if show_resp.status_code == 200:
+                    rec = show_resp.json()
+                    rec["OpenArchievenLink"] = {"archive_code": doc["archive_code"], "identifier": doc["identifier"]}
+                    records.append(rec)
+            
+            result = {
+                "status": "success",
+                "start_offset": start_offset,
+                "results_remaining": max(0, total_found - len(records) - start_offset),
+                "records": records
+            }
+            return reformat_results(result, multi_page_search)
+            
+        except Exception as e:
+            return {"status": "error", "error_message": f"API request failed: {str(e)}"}
