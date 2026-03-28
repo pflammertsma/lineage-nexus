@@ -1,6 +1,6 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.api.openarchieven_api import open_archives_search, open_archives_get_record
-from LineageAI.util.state_util import add_records_to_subject
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.api.openarchieven_api import open_archives_search, open_archives_get_record
+from adk_app.util.state_util import add_records_to_subject
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.genai import types
@@ -444,7 +444,7 @@ def open_archives_agent_instructions(context: ReadonlyContext) -> str:
     -----------------
 
     Upon completion of your designated task, you MUST ALWAYS transfer back to the
-    `LineageAiOrchestrator` agent. Do not, under any circumstances, attempt to communicate directly
+    `LineageNexusOrchestrator` agent. Do not, under any circumstances, attempt to communicate directly
     with the user to ask them for follow-up actions. Your findings must be reported back to the
     orchestrator for the next step in the research process. This is a non-negotiable protocol.
     """

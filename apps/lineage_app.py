@@ -1,6 +1,6 @@
 
 # This is a Plotly Dash application that connects to an Agent Development Kit (ADK) API server.
-# The ADK implementation resides in the LineageAI directory.
+# The ADK implementation resides in the `adk-app` directory.
 #
 # IMPORTANT: This script starts a web server that will not terminate on its own.
 # Agents should not invoke this script directly, as it will cause the agent to hang.
@@ -40,7 +40,7 @@ app = dash.Dash(
     ],
     assets_folder='../assets',
     background_callback_manager=background_callback_manager,
-    title="LineageAI",
+    title="Lineage Nexus",
     meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}]
 )
 

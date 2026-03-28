@@ -1,8 +1,8 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.agent.holocaust import holocaust_search
-from LineageAI.api.joodsmonument_api import joodsmonument_read_document
-from LineageAI.api.oorlogsbronnen_api import oorlogsbronnen_search, oorlogsbronnen_read_document
-from LineageAI.util.utils import print_truncated
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.agent.holocaust import holocaust_search
+from adk_app.api.joodsmonument_api import joodsmonument_read_document
+from adk_app.api.oorlogsbronnen_api import oorlogsbronnen_search, oorlogsbronnen_read_document
+from adk_app.util.utils import print_truncated
 import json
 
 """
@@ -10,7 +10,7 @@ Test various holocaust API functions.
 
 To execute:
 ```
-python -m LineageAI.test.holocaust_api_test
+python -m adk_app.test.holocaust_api_test
 ```
 """
 

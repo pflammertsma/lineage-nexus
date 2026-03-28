@@ -5,8 +5,8 @@ A simple Python interface for the WikiTree API using requests.
 See: https://github.com/wikitree/wikitree-api
 """
 
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.util.utils import rate_limited_get
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.util.utils import rate_limited_get
 import requests
 import json
 from typing import Dict, Any

@@ -1,6 +1,6 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.api.openarchieven_api import open_archives_search
-from LineageAI.util.utils import print_truncated
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.api.openarchieven_api import open_archives_search
+from adk_app.util.utils import print_truncated
 import json
 
 """
@@ -8,7 +8,7 @@ Test the WikiTree API functions.
 
 To execute:
 ```
-python -m LineageAI.test.openarchieven_api_test
+python -m adk_app.test.openarchieven_api_test
 ```
 """
 print("Testing searching OpenArchieven...")

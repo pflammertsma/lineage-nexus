@@ -2,7 +2,7 @@ import requests
 import json
 
 API_BASE_URL = "http://localhost:8000"
-APP_NAME = "LineageAI"
+APP_NAME = "Lineage Nexus"
 
 def check_api_status():
     """Checks if the backend API is online."""

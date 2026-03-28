@@ -1,5 +1,5 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.util.utils import rate_limited_get
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.util.utils import rate_limited_get
 import requests
 import json
 import re

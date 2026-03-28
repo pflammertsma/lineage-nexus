@@ -1,4 +1,4 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
 from zoneinfo import ZoneInfo
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
@@ -392,7 +392,7 @@ Her date of death is unknown.
     -----------------
 
     Upon completion of your designated task, you MUST ALWAYS transfer back to the
-    `LineageAiOrchestrator` agent. Do not, under any circumstances, attempt to communicate directly
+    `LineageNexusOrchestrator` agent. Do not, under any circumstances, attempt to communicate directly
     with the user to ask them for follow-up actions. Your findings must be reported back to the
     orchestrator for the next step in the research process. This is a non-negotiable protocol.
     

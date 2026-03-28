@@ -1,4 +1,4 @@
-from LineageAI.constants import logger
+from adk_app.constants import logger
 import logging
 import os
 import requests

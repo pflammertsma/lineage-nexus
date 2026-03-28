@@ -1,5 +1,5 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.api.wiewaswie import extract_source_id
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.api.wiewaswie import extract_source_id
 import json
 
 """
@@ -7,7 +7,7 @@ Test the WikiTree API functions.
 
 To execute:
 ```
-python -m LineageAI.wiewaswie_test
+python -m adk_app.wiewaswie_test
 ```
 """
 print("Testing fetching from WieWasWie...")

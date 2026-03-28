@@ -1,5 +1,5 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.api.wikitree_api import get_descendants
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.api.wikitree_api import get_descendants
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.genai import types
@@ -21,7 +21,7 @@ def generational_file_comparison_agent_instructions(context: ReadonlyContext) ->
       with the input genealogy file.
 
     If either of these inputs is missing, ask the user for clarification. If you believe that the
-    user is not trying to perform a comparison, simply transfer back to the LineageAiOrchestrator
+    user is not trying to perform a comparison, simply transfer back to the LineageNexusOrchestrator
     agent.
 
     Profiles are likely missing from WikiTree, and your goal is to use the input genealogy file to

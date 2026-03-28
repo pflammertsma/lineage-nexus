@@ -5,9 +5,9 @@ A simple Python interface for the WikiTree API using requests.
 See: https://github.com/wikitree/wikitree-api
 """
 
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.api.wikitree_api import get_relatives, get_profile, get_person, search_profiles
-from LineageAI.util.state_util import set_current_subject
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.api.wikitree_api import get_relatives, get_profile, get_person, search_profiles
+from adk_app.util.state_util import set_current_subject
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.genai import types
@@ -103,7 +103,7 @@ def wikitree_query_agent_instructions(context: ReadonlyContext) -> str:
     -------------------
 
     You cannot perform any genealogical research and must always transfer to the
-    LineageAiOrchestrator to do so. Only search for profiles if you are asked to find a specific
+    LineageNexusOrchestrator to do so. Only search for profiles if you are asked to find a specific
     profile on WikiTree; any other suggestion of finding records or searching for data should be
     done by dedicated research agents; not by you.
 
@@ -219,7 +219,7 @@ def wikitree_query_agent_instructions(context: ReadonlyContext) -> str:
     performing additional research:
     1. Perform more queries to WikiTree to understand which information is already available, such
         as ancestors and descendants, or obtaining the profiles of known family members.
-    2. If the profile is incomplete, you must transfer to the LineageAiOrchestrator to ask it to
+    2. If the profile is incomplete, you must transfer to the LineageNexusOrchestrator to ask it to
         look for archival records, historical documents, or other sources outside of WikiTree.
     
 
@@ -271,14 +271,14 @@ def wikitree_query_agent_instructions(context: ReadonlyContext) -> str:
 
     This function allows you to understand which relationships are already present in WikiTree, but
     this information may not be complete or accurate, so you must always transfer to the
-    LineageAiOrchestrator to perform research to confirm it.
+    LineageNexusOrchestrator to perform research to confirm it.
 
 
     UPDATING A BIOGRAPHY
     --------------------
 
     You are unable to update a biography directly using the WikiTree API. Instead, you must
-    transfer to the LineageAiOrchestrator.
+    transfer to the LineageNexusOrchestrator.
     
     
     UPDATING THE CURRENT STATE
@@ -299,7 +299,7 @@ def wikitree_query_agent_instructions(context: ReadonlyContext) -> str:
     -----------------
 
     Upon completion of your designated task, you MUST ALWAYS transfer back to the
-    `LineageAiOrchestrator` agent. Do not, under any circumstances, attempt to communicate directly
+    `LineageNexusOrchestrator` agent. Do not, under any circumstances, attempt to communicate directly
     with the user to ask them for follow-up actions. Your findings must be reported back to the
     orchestrator for the next step in the research process. This is a non-negotiable protocol.
 
@@ -314,7 +314,7 @@ def wikitree_query_agent_instructions(context: ReadonlyContext) -> str:
     You mustn't assume that the profile data is accurate unless explicitly instructed or you have
     validated data against records from the researcher agent.
 
-    Before transferring to the LineageAiOrchestrator, you must ensure that you have some basic
+    Before transferring to the LineageNexusOrchestrator, you must ensure that you have some basic
     information about the profile you were asked to find. This includes any of:
     - First and last name
     - Birth date or date range
@@ -332,7 +332,7 @@ def wikitree_query_agent_instructions(context: ReadonlyContext) -> str:
     profiles are constantly being updated and should be read from WikiTree again periodically.
 
     You are not able to perform any other functionality than described above. You must transfer to
-    the LineageAiOrchestrator for any other tasks, such as researching, formatting or updating
+    the LineageNexusOrchestrator for any other tasks, such as researching, formatting or updating
     profiles.
     """
 
@@ -346,7 +346,7 @@ wikitree_query_agent = LlmAgent(
     description="""
     You are the WikiTree Agent specializing in querying the WikiTree API to retrieve existing,
     albeit incomplete, genealogical profiles and understanding which data already exists on
-    WikiTree, before transferring to the LineageAiOrchestrator for further research.
+    WikiTree, before transferring to the LineageNexusOrchestrator for further research.
     
     You are instrumental in understanding what an existing profile on WikiTree contains. You're
     able to retrieve the current version of a WikiTree profile of the person we are researching,

@@ -1,5 +1,5 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.api.wikitree_api import search_profiles, get_person, get_profile, get_ancestors, get_descendants, get_relatives
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.api.wikitree_api import search_profiles, get_person, get_profile, get_ancestors, get_descendants, get_relatives
 import json
 
 """
@@ -7,7 +7,7 @@ Test the WikiTree API functions.
 
 To execute:
 ```
-python -m LineageAI.wikitree_api_test
+python -m adk_app.wikitree_api_test
 ```
 """
 print("Testing WikiTree API...")

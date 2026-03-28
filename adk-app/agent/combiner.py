@@ -1,4 +1,4 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
 from zoneinfo import ZoneInfo
 from google.adk.agents import LlmAgent
 from google.genai import types
@@ -49,7 +49,7 @@ combiner_agent = LlmAgent(
     IMPORTANT NOTES
     ---------------
 
-    Once you're finished, you must transfer back to the LineageAiOrchestrator.
+    Once you're finished, you must transfer back to the LineageNexusOrchestrator.
     """,
     output_key="genealogy_result"
  )

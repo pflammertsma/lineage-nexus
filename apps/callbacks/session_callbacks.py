@@ -110,9 +110,9 @@ def register_session_callbacks(app):
         new_messages = messages_data.copy()
 
         if not error:
-            new_sessions[session_id] = "LineageAI Help"
+            new_sessions[session_id] = "Lineage Nexus Help"
             
-            help_content = "I'm new to using LineageAI. Give me a brief explanation about genealogy and what LineageAI can do to perform research. Ask me what else I'd like to know, providing a list of suggestions including the websites and agents you work with."
+            help_content = "I'm new to using Lineage Nexus. Give me a brief explanation about genealogy and what Lineage Nexus can do to perform research. Ask me what else I'd like to know, providing a list of suggestions including the websites and agents you work with."
             
             help_message = {
                 "role": "user",

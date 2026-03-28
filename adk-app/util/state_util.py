@@ -1,10 +1,10 @@
 from google.adk.tools import ToolContext
 from typing import Dict, Any, List, Optional
-from LineageAI.util.models import Subject
+from adk_app.util.models import Subject
 import requests
 
 API_BASE_URL = "http://localhost:8000"
-APP_NAME = "LineageAI"
+APP_NAME = "Lineage Nexus"
 
 def set_current_subject(subject_data: Dict[str, Any], tool_context: ToolContext, title: Optional[str] = None):
     """

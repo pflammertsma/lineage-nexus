@@ -1,6 +1,6 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.api.joodsmonument_api import joodsmonument_search, joodsmonument_read_document
-from LineageAI.api.oorlogsbronnen_api import oorlogsbronnen_search, oorlogsbronnen_read_document
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.api.joodsmonument_api import joodsmonument_search, joodsmonument_read_document
+from adk_app.api.oorlogsbronnen_api import oorlogsbronnen_search, oorlogsbronnen_read_document
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 
@@ -37,7 +37,7 @@ def joodsmonument_agent_instructions(context: ReadonlyContext) -> str:
           document ID or URL.
        b. For results from `oorlogsbronnen_search`, invoke `oorlogsbronnen_read_document` with the
           person ID.
-    4. After retrieving any full documents, immediately transfer to the LineageAiOrchestrator for
+    4. After retrieving any full documents, immediately transfer to the LineageNexusOrchestrator for
        further processing. Do not attempt to format or summarize the information yourself.
     
     
@@ -118,7 +118,7 @@ def joodsmonument_agent_instructions(context: ReadonlyContext) -> str:
     -----------------
 
     Upon completion of your designated task, you MUST ALWAYS transfer back to the
-    `LineageAiOrchestrator` agent. Do not, under any circumstances, attempt to communicate directly
+    `LineageNexusOrchestrator` agent. Do not, under any circumstances, attempt to communicate directly
     with the user to ask them for follow-up actions. Your findings must be reported back to the
     orchestrator for the next step in the research process. This is a non-negotiable protocol.
     
@@ -152,11 +152,11 @@ def joodsmonument_agent_instructions(context: ReadonlyContext) -> str:
 
     As soon as you've read a matching profile, assume your work is complete; refrain from
     performing any further searches unless explicity instructed to do so. You must instead transfer
-    to LineageAiOrchestrator for next steps.
+    to LineageNexusOrchestrator for next steps.
     
     You must never attempt to format or generate a biography, even if explicitly instructed to do.
     If you receive a request that implies formatting a biography, you must immediately transfer to
-    the LineageAiOrchestrator so that it can have an appropriate agent fulfill that task.
+    the LineageNexusOrchestrator so that it can have an appropriate agent fulfill that task.
     """
 
 def holocaust_search(name: str) -> dict:

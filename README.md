@@ -1,12 +1,12 @@
-# <image src="docs/lineageai icon.svg" height="24" alt="ADK web interface"/> LineageAI
+# <image src="docs/logo.svg" height="24" alt="ADK web interface"/> Lineage Nexus
 
 ## Background
 
-*LineageAI* is a genealogical research agent that (in its current form) performs research solely through queries to [OpenArchieven](https://www.openarchieven.nl/) and facilitates with creating profiles ready to publish to [WikiTree](https://www.wikitree.com/).
+*Lineage Nexus* (available at [https://lineage.nexus](https://lineage.nexus)) is a genealogical research agent that (in its current form) performs research solely through queries to [OpenArchieven](https://www.openarchieven.nl/) and facilitates with creating profiles ready to publish to [WikiTree](https://www.wikitree.com/).
 
 ## Capabilities
 
-LineageAI is a chat-based interface that connects to:
+Lineage Nexus is a chat-based interface that connects to:
 * [Open Archives API](https://www.openarchieven.nl/api/docs/)
 * [WikiTree API](https://github.com/wikitree/wikitree-api)
 
@@ -30,7 +30,7 @@ More details about using ADK can be found in [the general ADK quickstart guide](
 
 ### Directory setup
 
-Note that this project serves as the base directory of where ADK projects are run. ADK identifies all subdirectories as agent projects, and due to this nature, the only directory immediately inside this project is our LineageAI agent project:
+Note that this project serves as the base directory of where ADK projects are run. ADK identifies all subdirectories as agent projects, and due to this nature, the only directory immediately inside this project is our Lineage Nexus agent project:
 
 This means that adding any directories into the root of this repository may appear (unexpectedly) as agent projects in the Agent Development Kit Dev UI when executing `adk web`.
 
@@ -51,9 +51,9 @@ This means that adding any directories into the root of this repository may appe
 1. Visit [ai.dev](https://ai.dev) to get your Google API key.
 2. Create `.env` file:
     ```
-    touch LineageAI/.env
+    touch adk-app/.env
     ```
-3. Add following lines to your `LineageAI/.env` file:
+3. Add following lines to your `adk-app/.env` file:
     ```
     GOOGLE_GENAI_USE_VERTEXAI=FALSE
     GOOGLE_API_KEY=*INSERT_YOUR_API_KEY_HERE*
@@ -78,7 +78,7 @@ This means that adding any directories into the root of this repository may appe
 
 ## Running the agent
 
-There are two ways to run the LineageAI agent: with the default ADK web interface, or with the custom Streamlit web interface.
+There are two ways to run the Lineage Nexus agent: with the default ADK web interface, or with the custom Streamlit web interface.
 
 ### Default Web Interface
 
@@ -117,9 +117,9 @@ python apps/lineage_app.py
 
 This will open a new tab in your browser with the custom chat interface.
 
-## Accessing LineageAI publicly through the web
+## Accessing Lineage Nexus publicly through the web
 
-**LineageAI is not publicly available on the web.** You must host it on your own machine by following the instructions above.
+**Lineage Nexus is not publicly available on the web.** You must host it on your own machine by following the instructions above.
 
 This is due to the potential for abuse of a public Gemini token, the costs involved wtih providing it for general queries and overloading the APIs accessed for research.
 
@@ -136,4 +136,4 @@ Please feel free to contribute to this project in any way:
 
 Thanks!
 
-<image src="docs/lineageai icon.svg" height="128" alt="ADK web interface"/>
+<image src="docs/logo.svg" height="128" alt="ADK web interface"/>

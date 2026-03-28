@@ -2,7 +2,7 @@ import logging
 import os
 from http.client import HTTPConnection
 
-APP_NAME = "LineageAI"
+APP_NAME = "Lineage Nexus"
 MODEL_SMART = "gemini-2.5-pro" # Expensive and slow
 MODEL_MIXED = "gemini-2.5-flash" # Cheaper but faster
 MODEL_FAST = "gemini-2.5-flash-lite" # Cheapest but fastest

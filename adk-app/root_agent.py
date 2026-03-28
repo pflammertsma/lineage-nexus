@@ -1,13 +1,13 @@
-from LineageAI.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
-from LineageAI.agent.openarchieven import open_archives_agent
-from LineageAI.agent.wikitree_format import wikitree_format_agent
-from LineageAI.agent.wikitree import wikitree_query_agent
-from LineageAI.agent.holocaust import holocaust_agent
+from adk_app.constants import logger, MODEL_SMART, MODEL_MIXED, MODEL_FAST
+from adk_app.agent.openarchieven import open_archives_agent
+from adk_app.agent.wikitree_format import wikitree_format_agent
+from adk_app.agent.wikitree import wikitree_query_agent
+from adk_app.agent.holocaust import holocaust_agent
 from google.adk.agents import LlmAgent
 from google.adk.agents.readonly_context import ReadonlyContext
 from google.adk.tools import ToolContext
 from google.genai import types
-from LineageAI.util.state_util import get_current_subject, set_current_subject
+from adk_app.util.state_util import get_current_subject, set_current_subject
 
 def root_agent_instructions(context: ReadonlyContext) -> str:
     prompt = """
@@ -78,14 +78,14 @@ def root_agent_instructions(context: ReadonlyContext) -> str:
 
 # Create the root agent that orchestrates the entire genealogy research process
 root_agent = LlmAgent(
-    name="LineageAiOrchestrator",
+    name="LineageNexusOrchestrator",
     model=MODEL_SMART,
     tools=[set_current_subject],
     generate_content_config=types.GenerateContentConfig(
         temperature=0.2, # More deterministic output
     ),
     description="""
-    The LineageAI Orchestrator Agent is the central hub for genealogy research in the Netherlands.
+    The Lineage Nexus Orchestrator Agent is the central hub for genealogy research in the Netherlands.
     It coordinates a team of specialized agents to find, format, and present genealogical data
     to the user, with the ultimate goal of creating comprehensive WikiTree profiles.
     """,

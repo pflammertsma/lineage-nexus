@@ -11,8 +11,8 @@ def create_sidebar_content(prefix: str, app):
                 href="/",
                 className="sidebar-header",
                 children=[
-                    html.Img(src=app.get_asset_url('lineageai-icon.svg'), className="app-icon", alt="LineageAI Logo"),
-                    html.Span("LineageAI", className="app-title")
+                    html.Img(src=app.get_asset_url('logo.svg'), className="app-icon", alt="Lineage Nexus Logo"),
+                    html.Span("Lineage Nexus", className="app-title")
                 ]
             ),
         ], className="d-flex justify-content-between align-items-center"),
@@ -29,7 +29,7 @@ def create_sidebar_content(prefix: str, app):
             [
                 html.A(
                     "© 2025, Paul Lammertsma",
-                    href="https://github.com/pflammertsma/LineageAI",
+                    href="https://github.com/pflammertsma/lineage-nexus",
                     target="_blank",
                     rel="noopener noreferrer",
                     className="copyright",
@@ -80,7 +80,7 @@ def create_layout(app):
     mobile_sidebar = dbc.Offcanvas(
         id="offcanvas-sidebar",
         is_open=False,
-        title="LineageAI",
+        title="Lineage Nexus",
         children=create_sidebar_content(prefix='mobile', app=app)
     )
 
