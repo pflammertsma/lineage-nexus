@@ -34,14 +34,14 @@ const FeatureGrid = () => {
   return (
     <section id="features" className="py-24 bg-surface divider">
       <div className="container">
-        <div className="md:grid-3 flex flex-col gap-8">
+        <div className="grid md:grid-cols-3 gap-8">
           {features.map((feature, idx) => (
             <div key={idx} className="card flex flex-col items-start text-left">
-              <div style={{ color: 'var(--accent-primary)', marginBottom: '24px' }}>
+              <div className="text-accent mb-6">
                 {feature.icon}
               </div>
               <h3 className="mb-4">{feature.title}</h3>
-              <p className="text-secondary text-sm leading-relaxed" style={{ opacity: 0.9 }}>
+              <p className="text-secondary text-sm leading-relaxed opacity-90">
                 {feature.description}
               </p>
             </div>

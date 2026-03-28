@@ -12,6 +12,9 @@ __pycache__/
 # Mac stuff
 .DS_Store
 
+# Node
+node_modules/
+
 # Log files
 adk-app/*.log
 
