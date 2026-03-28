@@ -4,11 +4,22 @@ import Hero from './components/Hero';
 import FeatureGrid from './components/FeatureGrid';
 import ApiKeyModal from './components/ApiKeyModal';
 import ChatInterface from './components/ChatInterface';
+import Notification from './components/Notification';
 import './index.css';
 
 function App() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+
+  const notify = (msg, type = 'info') => {
+    const id = Math.random().toString(36).substr(2, 9);
+    setNotifications(prev => [...prev, { id, msg, type }]);
+  };
+
+  const removeNotification = (id) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
 
   const handleSearch = async (query) => {
     setLoading(true);
@@ -17,7 +28,7 @@ function App() {
 
     const apiKey = localStorage.getItem('google_api_key');
     if (!apiKey) {
-      alert("Please configure your Google AI Studio API Key first.");
+      notify("Please configure your Google AI Studio API Key first.", "error");
       setLoading(false);
       return;
     }
@@ -42,7 +53,7 @@ function App() {
       setMessages(prev => [...prev, { role: 'model', content: data.response }]);
     } catch (error) {
       console.error("Search failed:", error);
-      alert(`Failed to orchestrate research. Check if backend is running: ${error.message}`);
+      notify(`Failed to orchestrate research. ${error.message}`, "error");
     } finally {
       setLoading(false);
     }
@@ -51,11 +62,22 @@ function App() {
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
+      <div className="toast-container">
+        {notifications.map(n => (
+          <Notification 
+            key={n.id} 
+            id={n.id} 
+            message={n.msg} 
+            type={n.type} 
+            onClose={removeNotification} 
+          />
+        ))}
+      </div>
       <main className="flex-1">
         <Hero onSearch={handleSearch} />
         <ChatInterface messages={messages} isLoading={loading} />
         <FeatureGrid />
-        <ApiKeyModal />
+        <ApiKeyModal notify={notify} />
       </main>
       <footer className="py-16 bg-surface section-divider">
         <div className="container">
