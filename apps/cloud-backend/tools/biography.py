@@ -133,8 +133,8 @@ follows:
   - `[[Category:Westerbork Transit Camp Victims]]` (death there) or
     `[[Category:Westerbork Transit Camp Prisoners]]` (only internment).
 - `[[Category:Jewish Roots]]` for people you strongly suspect that the person was Jewish.
-- `[[Category:Lammertsma Name Study]]` for people associated with the very specific surname
-  "Lammertsma"; see the section on special cases below.
+- `[[Category:Lammertsma Name Study]]` but ONLY for people associated with the very specific
+  surname "Lammertsma"; see the section on special cases below.
 
 Strictly adhere to the provided list of categories. Before applying any category, always verify
 that its name is an exact match to one of the approved categories.
@@ -184,8 +184,8 @@ follows:
       WikiTree profile)
   - If none of that data is missing, omit those fields; e.g.:
     `{{Netherlands Sticker | provincie=Groningen | jaar=1763}}`.
-- `{{One Name Study|name=Lammertsma}}` for people associated with the very specific surname
-  "Lammertsma"; see the section on special cases below.
+- `{{One Name Study|name=Lammertsma}}` but ONLY for people associated with the very specific
+  surname "Lammertsma"; see the section on special cases below.
 
 If you have read an existing profile that contains other templates than those defined above,
 you must keep them.
