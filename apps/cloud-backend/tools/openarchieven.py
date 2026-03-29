@@ -202,6 +202,7 @@ async def open_archives_search(
             
             total_found = search_results.get("response", {}).get("number_found", 0)
             docs = search_results.get("response", {}).get("docs", [])
+            records = []
             
             if total_found == 0:
                 await report_status(f"No recordings found matching '{query}'.")
@@ -215,7 +216,6 @@ async def open_archives_search(
                         "total_found": total_found
                     }
 
-                records = []
                 if docs:
                     await report_status(f"Fetching {len(docs)} detailed records in parallel...")
                     
@@ -231,16 +231,15 @@ async def open_archives_search(
                         except Exception: 
                             return None
                     
-                    # Fetch in batches of 10 to be respectful to the API
+                    # Fetch in batches of 10
                     batch_size = 10
                     for i in range(0, len(docs), batch_size):
                         batch = docs[i:i+batch_size]
                         results = await asyncio.gather(*(fetch_one(d) for d in batch))
                         records.extend([r for r in results if r])
-                        if i + batch_size < len(docs):
-                            await report_status(f"Retrieved {len(records)} of {len(docs)} records...")
                 
-                await report_status(f"Completed analysis of {len(records)} records.")
+                if len(records) > 0:
+                    await report_status(f"Completed analysis of {len(records)} records.")
             
             result = {
                 "status": "success",

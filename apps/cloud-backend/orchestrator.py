@@ -63,7 +63,7 @@ class ResearchOrchestrator:
                         last_yield_time = time.time()
                     
                     # Heartbeat if we haven't yielded in a while (e.g., during model inference)
-                    if time.time() - last_yield_time > 5.0:
+                    if time.time() - last_yield_time > 30.0:
                         yield {"status": "Still analyzing research artifacts..."}
                         last_yield_time = time.time()
                         
