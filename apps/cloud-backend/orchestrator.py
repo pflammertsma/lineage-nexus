@@ -51,6 +51,8 @@ class ResearchOrchestrator:
             research_task = asyncio.create_task(self._conduct_research(message, history))
             register_status_queue(status_queue, task=research_task)
 
+            import time
+            last_yield_time = time.time()
             # Consume all status/result updates while research is running
             while not research_task.done():
                 try:
@@ -58,6 +60,13 @@ class ResearchOrchestrator:
                     while not status_queue.empty():
                         msg = await status_queue.get()
                         yield {"status": msg}
+                        last_yield_time = time.time()
+                    
+                    # Heartbeat if we haven't yielded in a while (e.g., during model inference)
+                    if time.time() - last_yield_time > 5.0:
+                        yield {"status": "Still analyzing research artifacts..."}
+                        last_yield_time = time.time()
+                        
                 except Exception: pass
                 await asyncio.sleep(0.1)
                 
