@@ -129,7 +129,7 @@ const ChatInterface = ({ messages, isLoading, status }) => {
                   <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
                   <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
                 </div>
-                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-secondary/60 italic">
+                <span className="text-[11px] font-bold uppercase tracking-[0.2em] text-secondary/60">
                   {status || 'Connecting to archives...'}
                 </span>
               </div>
