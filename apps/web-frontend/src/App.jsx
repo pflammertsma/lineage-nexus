@@ -249,8 +249,8 @@ function App() {
               <main className="flex-1 overflow-hidden relative bg-surface">
                 {messages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in">
-                    <div className="w-20 h-20 bg-accent-soft rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-accent/10 border border-accent/20 transition-transform hover:scale-110 duration-500">
-                      <span className="text-3xl font-serif text-accent italic">L/N</span>
+                    <div className="w-24 h-24 mb-6 transition-transform hover:scale-110 duration-500">
+                      <img src="/logo.svg" alt="Lineage Nexus Logo" className="w-full h-full object-contain pointer-events-none drop-shadow-2xl" />
                     </div>
                     <h2 className="text-4xl font-serif mb-4 tracking-tight">
                       Good afternoon, Paul.

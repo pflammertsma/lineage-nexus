@@ -97,7 +97,7 @@ class ResearchOrchestrator:
         current_history.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
         
         turn_count = 0
-        max_turns = 10
+        max_turns = 4
         
         all_tools = [
             open_archives_search, 
@@ -140,6 +140,8 @@ class ResearchOrchestrator:
                     "response": response.text or "",
                     "usage": response.usage_metadata.model_dump() if response.usage_metadata else {}
                 }
+
+            await report_status(f"Invoking {len(function_calls)} tools...")
 
             tool_parts = []
             for fc in function_calls:
