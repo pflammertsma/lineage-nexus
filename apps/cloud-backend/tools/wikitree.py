@@ -124,6 +124,7 @@ profiles are constantly being updated and should be read from WikiTree again per
 """
 
 WIKITREE_API_URL = "https://api.wikitree.com/api.php"
+WIKITREE_APP_ID = "LineageNexus"
 
 PROFILE_FIELDS = [
     "Name", "BirthDate", "BirthLocation", "DeathDate", "DeathLocation",
@@ -145,6 +146,8 @@ async def search_profiles(
     """
     params = {
         "action": "searchPerson",
+        "appId": WIKITREE_APP_ID,
+        "format": "json",
         "FirstName": first_name,
         "LastName": last_name,
         "BirthDate": birth_date,
@@ -177,6 +180,8 @@ async def search_profiles(
 async def get_person(name_or_id: str, fields: Optional[List[str]] = None) -> dict:
     params = {
         "action": "getPerson",
+        "appId": WIKITREE_APP_ID,
+        "format": "json",
         "key": name_or_id,
         "bioFormat": "wiki",
         "resolveRedirect": 1
@@ -200,6 +205,8 @@ async def get_person(name_or_id: str, fields: Optional[List[str]] = None) -> dic
 async def get_relatives(name: str, fields: Optional[List[str]] = None) -> dict:
     params = {
         "action": "getRelatives",
+        "appId": WIKITREE_APP_ID,
+        "format": "json",
         "keys": name,
         "getParents": 1,
         "getSiblings": 1,
