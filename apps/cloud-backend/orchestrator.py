@@ -18,6 +18,15 @@ genealogical research in the Netherlands using archival and WikiTree tools.
 4. **ANALYZE**: Correlate across multiple sources.
 5. **FORMAT**: Delegate the final biography to the `format_biography` tool.
 
+### SEARCH INTELLIGENCE (Strict Rules)
+- **ZERO RESULT PROTOCOL**: If a search returns 0 results, **DO NOT** attempt to narrow it down (e.g., by adding year ranges or locations). A narrower search will always result in 0 if the broader one failed. Instead, **BROADEN** the search by:
+    - Using the fuzzy pair operator `&~&` between names.
+    - Removing one of the middle names or surnames.
+    - Removing the year range.
+    - Using wildcards (e.g., `K*sper` instead of `Kasper`).
+- **PARALLELISM**: When searching, avoid making multiple identical or slightly varied calls in the same turn if the first one is likely to fail. Wait for results before refining.
+- **WIKITREE FIRST**: If searching for a person, always check WikiTree first to see if a profile ID already exists before starting archival searches.
+
 ### GUIDELINES
 - Be factual and cite your sources.
 - **NEVER** format the final biography without using the `format_biography` tool.
@@ -136,4 +145,17 @@ class ResearchOrchestrator:
             
             current_history.append(types.Content(role="user", parts=tool_parts))
             
-        return {"response": "Maximum research turns reached. Here is what I found...", "usage": {}}
+        # If we hit the turn limit, force a final summary response
+        await report_status("Synthesizing final research report...")
+        final_response = await self.client.aio.models.generate_content(
+            model=self.model_name,
+            contents=current_history + [types.Content(role="user", parts=[types.Part.from_text(text="I've reached my maximum research turns. Summarize everything found so far and explain the logical links between the identified individuals.")])],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_INSTRUCTION,
+                temperature=0.0
+            )
+        )
+        return {
+            "response": f"(Maximum research turns reached) {final_response.text}",
+            "usage": final_response.usage_metadata.model_dump() if final_response.usage_metadata else {}
+        }
