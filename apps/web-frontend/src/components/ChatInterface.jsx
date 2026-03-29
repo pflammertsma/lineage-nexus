@@ -1,4 +1,6 @@
 import React from 'react';
+import { User, Shield } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 
 const ChatInterface = ({ messages, isLoading }) => {
   if (messages.length === 0) return null;
@@ -15,29 +17,55 @@ const ChatInterface = ({ messages, isLoading }) => {
           {messages.map((msg, idx) => (
             <div 
               key={idx} 
-              className={`flex flex-col gap-2 ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300`}
             >
-              <div className={`text-xs uppercase tracking-widest opacity-40 font-bold`}>
-                {msg.role === 'user' ? 'Researcher' : 'Orchestrator'}
+              <div className="flex items-center gap-2 mb-2 px-1 opacity-40 select-none">
+                {msg.role === 'user' ? (
+                  <>
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-right">Researcher</span>
+                    <User size={12} />
+                  </>
+                ) : (
+                  <>
+                    <Shield size={12} />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">Orchestrator</span>
+                  </>
+                )}
               </div>
+              
               <div 
-                className={`card ${msg.role === 'user' ? 'bg-accent-soft border-accent' : 'bg-card'}`}
-                style={{ maxWidth: '100%', width: 'auto' }}
+                className={`relative px-6 py-4 rounded-2xl border transition-all shadow-sm max-w-[85%] ${
+                  msg.role === 'user' 
+                    ? 'bg-accent text-white border-accent shadow-accent/10 rounded-tr-none' 
+                    : 'bg-card border-border rounded-tl-none'
+                }`}
               >
-                <div 
-                  className="prose text-sm leading-relaxed whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{ __html: (msg.content || '').replace(/\n/g, '<br/>') }}
-                />
+                <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-primary/90'} space-y-4 markdown-content`}>
+                  <ReactMarkdown>
+                    {msg.content || ""}
+                  </ReactMarkdown>
+                </div>
               </div>
             </div>
           ))}
           
+          {/* Thinking / Status Indicator */}
           {isLoading && (
-            <div className="flex items-center gap-4 opacity-40">
-              <div className="animate-pulse w-2 h-2 rounded-full bg-accent-primary"></div>
-              <div className="animate-pulse w-2 h-2 rounded-full bg-accent-primary" style={{ animationDelay: '0.2s' }}></div>
-              <div className="animate-pulse w-2 h-2 rounded-full bg-accent-primary" style={{ animationDelay: '0.4s' }}></div>
-              <span className="text-xs font-bold uppercase tracking-widest">{status || 'Orchestrating...'}</span>
+            <div className="flex flex-col items-start mb-8 animate-in fade-in slide-in-from-bottom-2">
+              <div className="flex items-center gap-2 mb-2 px-1 opacity-40 select-none">
+                <Shield size={12} className="animate-spin duration-3000" />
+                <span className="text-[10px] font-bold uppercase tracking-widest">Orchestrator thinking...</span>
+              </div>
+              <div className="bg-card border border-border px-6 py-4 rounded-2xl rounded-tl-none shadow-sm flex items-center gap-4">
+                <div className="flex gap-1">
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0s' }}></span>
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></span>
+                  <span className="w-1.5 h-1.5 bg-accent rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></span>
+                </div>
+                <span className="text-xs font-bold uppercase tracking-widest opacity-40 italic">
+                  {status || 'Orchestrating...'}
+                </span>
+              </div>
             </div>
           )}
         </div>

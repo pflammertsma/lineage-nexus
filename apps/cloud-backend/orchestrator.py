@@ -1,11 +1,15 @@
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, AsyncGenerator
+from datetime import datetime
+import json
 from google import genai
 from google.genai import types
-import json
 
 # Import tools
 from tools.openarchieven import open_archives_search, open_archives_get_record
 from tools.wikitree import search_profiles, get_full_profile, get_person_info, get_relatives_info
+
+def get_ts():
+    return datetime.now().strftime("%H:%M:%S")
 
 SYSTEM_INSTRUCTION = """
 You are the Lineage Nexus Heritage Research Orchestrator. Your role is to conduct professional
@@ -36,7 +40,7 @@ class ResearchOrchestrator:
         self.client = client
         self.model_name = model_name
 
-    async def chat(self, message: str, history: List[Dict[str, str]] = []) -> Any:
+    async def chat(self, message: str, history: List[Dict[str, str]] = []) -> AsyncGenerator[Any, None]:
         # Convert simple history format to Gemini's expected Content format
         contents = []
         for turn in history:
@@ -54,7 +58,7 @@ class ResearchOrchestrator:
         max_turns = 10
         turn_count = 0
         
-        print(f"DEBUG: Starting research orchestration for query: '{message}'")
+        print(f"[{get_ts()}] DEBUG: Starting research orchestration for query: '{message}'")
         
         while turn_count < max_turns:
             turn_count += 1
@@ -72,7 +76,7 @@ class ResearchOrchestrator:
             function_calls = [p.function_call for p in response.candidates[0].content.parts if p.function_call]
             
             if not function_calls:
-                print(f"DEBUG: Received final response. Content: {response.text[:100]}...")
+                print(f"[{get_ts()}] DEBUG: Received final response.")
                 yield {
                     "response": response.text or "",
                     "usage": response.usage_metadata.model_dump() if response.usage_metadata else {}
@@ -82,7 +86,7 @@ class ResearchOrchestrator:
             tool_parts = []
             for fc in function_calls:
                 status = f"Searching: {fc.name} (args: {fc.args})"
-                print(f"DEBUG: [Turn {turn_count}] {status}")
+                print(f"[{get_ts()}] DEBUG: [Turn {turn_count}] {status}")
                 yield {"status": status}
                 
                 tool_func = tool_map.get(fc.name)
@@ -90,7 +94,9 @@ class ResearchOrchestrator:
                     try:
                         result = await tool_func(**fc.args)
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"result": result}))
+                        yield {"status": f"Analyzing results from {fc.name}..."}
                     except Exception as e:
+                        print(f"[{get_ts()}] ERROR: Tool {fc.name} failed: {e}")
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": str(e)}))
             
             current_history.append(types.Content(role="user", parts=tool_parts))

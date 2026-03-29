@@ -91,9 +91,28 @@
   .toast-success { @apply border-l-4 border-l-[#10B981]; }
   .toast-error { @apply border-l-4 border-l-[#EF4444]; }
   .toast-info { @apply border-l-4 border-l-accent; }
+  
+  .markdown-content h1, .markdown-content h2, .markdown-content h3 { @apply text-base font-bold mb-4 mt-6 first:mt-0 leading-tight border-none; }
+  .markdown-content p { @apply mb-4 last:mb-0; }
+  .markdown-content ul, .markdown-content ol { @apply pl-6 mb-4 space-y-2; list-style-type: disc; }
+  .markdown-content strong { @apply font-bold text-accent; }
 }
 
 @keyframes slide-in {
   from { transform: translateX(100%); opacity: 0; }
   to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-bottom {
+  from { transform: translateY(8px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+@layer utilities {
+  .animate-in { animation: fade-in 0.3s ease-out, slide-in-bottom 0.3s ease-out; }
 }

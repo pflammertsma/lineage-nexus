@@ -59,11 +59,6 @@ const ChatInput = ({ onSearch, isLoading, status }) => {
               </div>
 
               <div className="flex items-center gap-3">
-                {isLoading && (
-                  <span className="text-[10px] uppercase font-bold tracking-widest opacity-40 animate-pulse">
-                    {status || 'Orchestrating...'}
-                  </span>
-                )}
                 <button
                   type="submit"
                   disabled={isLoading}

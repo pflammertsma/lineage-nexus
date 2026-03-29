@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import FeatureGrid from './components/FeatureGrid';
@@ -16,14 +17,35 @@ function App() {
   const [configOpen, setConfigOpen] = useState(false);
   const [pendingQuery, setPendingQuery] = useState(null);
   const [status, setStatus] = useState(null);
-  const [activeSessionId, setActiveSessionId] = useState(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(() => {
+    return localStorage.getItem('lineage_is_logged_in') === 'true';
+  });
+  const [activeSessionId, setActiveSessionId] = useState(() => {
+    return localStorage.getItem('lineage_active_session_id');
+  });
   
-  // Fake sessions for now to demonstrate UI
-  const [sessions, setSessions] = useState([
-    { id: '1', title: 'Johannes Lammertsma (Bolsward)' },
-    { id: '2', title: 'Hendrik Lammerts & Maaike' }
-  ]);
+  // Real sessions from localStorage
+  const [sessions, setSessions] = useState(() => {
+    const saved = localStorage.getItem('lineage_sessions');
+    return saved ? JSON.parse(saved) : [];
+  });
+
+  // Sync state to localStorage
+  useEffect(() => {
+    localStorage.setItem('lineage_sessions', JSON.stringify(sessions));
+    localStorage.setItem('lineage_is_logged_in', isLoggedIn);
+    localStorage.setItem('lineage_active_session_id', activeSessionId || '');
+  }, [sessions, isLoggedIn, activeSessionId]);
+
+  // Load messages for the active session
+  useEffect(() => {
+    if (activeSessionId) {
+      const active = sessions.find(s => s.id === activeSessionId);
+      if (active) setMessages(active.messages || []);
+    } else {
+      setMessages([]);
+    }
+  }, [activeSessionId]);
 
   const notify = (msg, type = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -38,13 +60,26 @@ function App() {
     // If not logged in, log them in first
     if (!isLoggedIn) {
       setIsLoggedIn(true);
-      // Wait for state to reflect or just continue if search handles it
     }
 
+    let sessionId = activeSessionId;
+    let newMessages = [...messages, { role: 'user', content: query }];
+    
+    // Create new session if none is active
+    if (!sessionId) {
+      sessionId = Math.random().toString(36).substr(2, 9);
+      const newSession = {
+        id: sessionId,
+        title: query.length > 30 ? query.substring(0, 30) + '...' : query,
+        messages: newMessages
+      };
+      setSessions(prev => [newSession, ...prev]);
+      setActiveSessionId(sessionId);
+    }
+
+    setMessages(newMessages);
     setLoading(true);
     setStatus("Orchestrating tools...");
-    const userMsg = { role: 'user', content: query };
-    setMessages(prev => [...prev, userMsg]);
 
     const apiKey = localStorage.getItem('google_api_key');
     if (!apiKey) {
@@ -109,73 +144,104 @@ function App() {
     }
   };
 
-  const LandingView = () => (
-    <div className="min-h-screen flex flex-col bg-surface overflow-y-auto">
-      <Header isLoggedIn={isLoggedIn} onSignIn={() => setIsLoggedIn(true)} />
-      <main className="flex-1">
-        <Hero onSearch={handleSearch} onConfig={() => setConfigOpen(true)} />
-        <FeatureGrid />
-      </main>
-      <footer className="py-16 bg-surface border-t border-border">
-        <div className="container flex flex-col items-center gap-6">
-          <span className="text-xl font-extrabold tracking-tight text-accent">Lineage Nexus</span>
-          <p className="text-xs opacity-40">© 2026 Lineage Nexus. All rights reserved.</p>
-        </div>
-      </footer>
-    </div>
-  );
-
-  const AppView = () => (
-    <div className="flex h-screen bg-surface">
-      <Sidebar 
-        sessions={sessions} 
-        activeSessionId={activeSessionId}
-        onNewChat={() => setMessages([])} 
-        onSelectSession={setActiveSessionId}
-      />
-      
-      <div className="flex-1 flex flex-col h-screen overflow-hidden relative">
-        <Header isLoggedIn={isLoggedIn} onSignIn={() => setIsLoggedIn(false)} />
-        
-        <div className="toast-container overflow-visible z-50">
-          {notifications.map(n => (
-            <Notification
-              key={n.id}
-              id={n.id}
-              message={n.msg}
-              type={n.type}
-              onClose={removeNotification}
-            />
-          ))}
-        </div>
-
-        <main className="flex-1 overflow-y-auto flex flex-col">
-          {messages.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-8">
-              <div className="text-center space-y-6" style={{ maxWidth: '600px' }}>
-                <div className="inline-block p-4 bg-accent-soft rounded-3xl mb-4 border border-accent/20">
-                  <span className="text-4xl text-accent font-serif tracking-tighter italic">L/N</span>
-                </div>
-                <h1 className="text-4xl font-serif tracking-tight text-primary leading-tight">
-                  Good afternoon, Paul.<br/>
-                  <span className="opacity-40 italic">Where should we start your research?</span>
-                </h1>
-              </div>
-            </div>
-          ) : (
-            <ChatInterface messages={messages} isLoading={loading} status={status} />
-          )}
-          <div className="h-32 shrink-0"></div>
-        </main>
-
-        <ChatInput onSearch={handleSearch} isLoading={loading} status={status} />
-      </div>
-    </div>
-  );
+  const handleSignIn = () => {
+    if (isLoggedIn) {
+      setIsLoggedIn(false);
+      navigate('/');
+    } else {
+      setIsLoggedIn(true);
+      navigate('/chat');
+    }
+  };
 
   return (
-    <>
-      {isLoggedIn ? <AppView /> : <LandingView />}
+    <div className="min-h-screen bg-background text-primary">
+      <Header 
+        isLoggedIn={isLoggedIn} 
+        onSignIn={handleSignIn}
+      />
+      
+      <div className="toast-container overflow-visible z-50">
+        {notifications.map(n => (
+          <Notification
+            key={n.id}
+            id={n.id}
+            message={n.msg}
+            type={n.type}
+            onClose={removeNotification}
+          />
+        ))}
+      </div>
+
+      <Routes>
+        <Route path="/" element={
+          isLoggedIn ? <Navigate to="/chat" replace /> : (
+            <main className="overflow-y-auto">
+              <Hero onSearch={(q) => {
+                setPendingQuery(q);
+                setIsLoggedIn(true);
+                navigate('/chat');
+              }} onConfig={() => setConfigOpen(true)} />
+              <FeatureGrid />
+              <footer className="py-16 bg-card border-t border-border">
+                <div className="container flex flex-col items-center gap-6">
+                  <span className="text-xl font-extrabold tracking-tight text-accent">Lineage Nexus</span>
+                  <p className="text-xs opacity-40">© 2026 Lineage Nexus. All rights reserved.</p>
+                </div>
+              </footer>
+            </main>
+          )
+        } />
+        
+        <Route path="/chat" element={
+          !isLoggedIn ? <Navigate to="/" replace /> : (
+            <div className="flex h-[calc(100vh-70px)] overflow-hidden">
+              <Sidebar 
+                sessions={sessions}
+                activeSessionId={activeSessionId}
+                onSelectSession={(id) => setActiveSessionId(id)}
+                onNewChat={() => {
+                  setActiveSessionId(null);
+                  setMessages([]);
+                }}
+              />
+              <main className="flex-1 overflow-hidden relative bg-surface">
+                {messages.length === 0 ? (
+                  <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in">
+                    <div className="w-20 h-20 bg-accent-soft rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-accent/10 border border-accent/20 transition-transform hover:scale-110 duration-500">
+                      <span className="text-3xl font-serif text-accent italic">L/N</span>
+                    </div>
+                    <h2 className="text-4xl font-serif mb-4 tracking-tight">
+                      Good afternoon, Paul.
+                    </h2>
+                    <p className="text-xl font-serif text-secondary/60 italic max-w-[500px]">
+                      Where should we start your research?
+                    </p>
+                  </div>
+                ) : (
+                  <div className="h-full overflow-y-auto">
+                    <ChatInterface 
+                      messages={messages} 
+                      isLoading={loading} 
+                      status={status}
+                    />
+                    <div className="h-40 shrink-0"></div>
+                  </div>
+                )}
+                <div className="absolute bottom-0 left-0 right-0 p-8 pt-0 pointer-events-none">
+                  <div className="max-w-[800px] mx-auto pointer-events-auto">
+                    <ChatInput 
+                      onSearch={handleSearch} 
+                      isLoading={loading}
+                      status={status}
+                    />
+                  </div>
+                </div>
+              </main>
+            </div>
+          )
+        } />
+      </Routes>
 
       {configOpen && (
         <ApiKeyModal
@@ -187,7 +253,7 @@ function App() {
           }}
         />
       )}
-    </>
+    </div>
   );
 }
 
