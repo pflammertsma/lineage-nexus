@@ -83,7 +83,8 @@ async def chat(
             
             async for update in orchestrator.chat(message=request.message, history=history_dicts):
                 # Padding must go before \n\n to stay within the same 'data' chunk
-                chunk = f"data: {json.dumps(update)} {' ' * 1024}\n\n"
+                payload = json.dumps(update)
+                chunk = f"data: {payload} {' ' * (4096 - len(payload))}\n\n"
                 yield chunk
                 
         except Exception as e:

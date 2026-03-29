@@ -409,11 +409,18 @@ You should always update the bio whenever you find more information that should 
 it, even if it's just to add sources.
 """
 
-async def format_wikitree_biography(client, model_name, research_data):
+async def format_wikitree_biography(client, model_name, research_data, user_instructions=None):
     """Invokes a specialized sub-agent to format research data into a high-fidelity WikiTree biography."""
+    from tools.utils import report_status
+    await report_status("Engaging specialized biography formatter agent...")
+    
+    prompt = f"Format this research data into a WikiTree biography: {research_data}"
+    if user_instructions:
+        prompt += f"\n\n[USER SPECIFIC INSTRUCTIONS]\n{user_instructions}"
+        
     response = await client.aio.models.generate_content(
         model=model_name,
-        contents=[types.Content(role="user", parts=[types.Part.from_text(text=f"Format this research data into a WikiTree biography: {research_data}")])],
+        contents=[types.Content(role="user", parts=[types.Part.from_text(text=prompt)])],
         config=types.GenerateContentConfig(
             system_instruction=WIKITREE_FORMAT_INSTRUCTIONS,
             temperature=0.4

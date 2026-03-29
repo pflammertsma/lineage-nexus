@@ -29,6 +29,9 @@ async def search_profiles(
     if fields:
         params["fields"] = ",".join(fields)
     
+    from tools.utils import report_status
+    await report_status(f"Searching WikiTree for profiles: {first_name} {last_name}...")
+    
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(WIKITREE_API_URL, params=params, timeout=15.0)
@@ -38,6 +41,7 @@ async def search_profiles(
                 return {'status': 'error', 'error_message': data['error']}
             
             results = data if isinstance(data, list) else data.get('results', data)
+            await report_status(f"Found {len(results)} potential WikiTree matches.")
             return {'status': 'ok', 'results': results}
         except Exception as e:
             return {'status': 'error', 'error_message': str(e)}
@@ -98,6 +102,8 @@ async def get_relatives_info(name: str, fields: Optional[List[str]] = None) -> d
             return {'status': 'error', 'error_message': str(e)}
 
 async def get_full_profile(profile_id: str) -> dict:
+    from tools.utils import report_status
+    await report_status(f"Fetching full research context for WikiTree profile: {profile_id}...")
     data = await get_relatives_info(profile_id, fields=PROFILE_FIELDS)
     if data.get('status') != 'ok':
         return data

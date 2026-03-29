@@ -2,7 +2,7 @@ import httpx
 import re
 import copy
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 MAX_RESULTS = 30
 
@@ -117,6 +117,14 @@ async def open_archives_search(
     page: Optional[int] = 1,
     multi_page_search: bool = False
 ) -> dict:
+    """
+    Performs a search for records on openarchieven.nl using its specific query syntax.
+    
+    CRITICAL: Before calling, review the following rules:
+    - Use '[Name1] &~& [Name2]' for fuzzy pairs (e.g., married couples).
+    - NEVER put city or province names in the 'query' string; use the 'eventplace' argument instead.
+    - Pre-1811 baptism records rarely have surnames; search for 'Name & FatherName' instead.
+    """
     if query.count(" &~& ") >= 2:
         query = query.replace(" &~& ", " & ")
     if " &~& " in query and " & " in query:
@@ -141,6 +149,9 @@ async def open_archives_search(
         return {"status": "error", "error_message": "Query cannot contain more than two '&' symbols."}
 
     base_url = "https://api.openarchieven.nl/1.1/records/search.json"
+
+    from tools.utils import report_status
+    await report_status(f"Searching archives for query: '{query}'...")
     
     async with httpx.AsyncClient() as client:
         try:
@@ -150,6 +161,7 @@ async def open_archives_search(
             
             total_found = search_results.get("response", {}).get("number_found", 0)
             docs = search_results.get("response", {}).get("docs", [])
+            await report_status(f"Found {total_found} total records matching '{query}'. Processing the top {len(docs)}...")
             
             if not multi_page_search and total_found > MAX_RESULTS:
                 return {
@@ -159,10 +171,10 @@ async def open_archives_search(
                 }
 
             records = []
-            for doc in docs:
-                # Fetching details async for better performance
-                # For simplicity in this first port, we follow the original logic of fetching show.json for each result
-                # but we could optimize this later by fetching concurrently.
+            for i, doc in enumerate(docs):
+                if i % 5 == 0 and i > 0:
+                    await report_status(f"Fetched {i} of {len(docs)} detailed archives...")
+                
                 show_url = "https://api.openarchieven.nl/1.1/records/show.json"
                 show_params = {"archive": doc["archive_code"], "identifier": doc["identifier"], "lang": "en"}
                 show_resp = await client.get(show_url, params=show_params, timeout=10.0)
@@ -170,6 +182,8 @@ async def open_archives_search(
                     rec = show_resp.json()
                     rec["OpenArchievenLink"] = {"archive_code": doc["archive_code"], "identifier": doc["identifier"]}
                     records.append(rec)
+            
+            await report_status(f"Completed analysis of {len(records)} records.")
             
             result = {
                 "status": "success",

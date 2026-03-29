@@ -146,7 +146,11 @@ function App() {
           try {
             const jsonStr = trimmed.slice(6);
             const data = JSON.parse(jsonStr);
-            if (data.status) setStatus(data.status);
+            console.log(`[SSE ${new Date().toLocaleTimeString()}] Data:`, data);
+            if (data.status) {
+              console.log("Setting Status:", data.status);
+              setStatus(data.status);
+            }
             if (data.response) {
               setMessages(prev => {
                 const updated = [...prev, { role: 'model', content: data.response }];
