@@ -15,7 +15,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
-    model: str = "gemini-flash-latest"  # Use stable Gemini 2.0 Flash
+    model: str = "gemini-flash-latest"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -82,8 +82,9 @@ async def chat(
             history_dicts = [{"role": msg.role, "content": msg.content} for msg in request.history]
             
             async for update in orchestrator.chat(message=request.message, history=history_dicts):
-                chunk = f"data: {json.dumps(update)}\n\n"
-                yield chunk + (" " * 1024)
+                # Padding must go before \n\n to stay within the same 'data' chunk
+                chunk = f"data: {json.dumps(update)} {' ' * 1024}\n\n"
+                yield chunk
                 
         except Exception as e:
             from google.genai.errors import ClientError

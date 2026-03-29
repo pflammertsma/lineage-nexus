@@ -47,6 +47,14 @@ function App() {
     }
   }, [activeSessionId]);
 
+  // Auto-run search from landing page
+  useEffect(() => {
+    if (isLoggedIn && pendingQuery && messages.length === 0) {
+      handleSearch(pendingQuery);
+      setPendingQuery(null);
+    }
+  }, [isLoggedIn, pendingQuery, messages.length]);
+
   const notify = (msg, type = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
     setNotifications(prev => [...prev, { id, msg, type }]);
