@@ -155,7 +155,8 @@ async def search_profiles(
         params["fields"] = ",".join(fields)
     
     from tools.utils import report_status
-    await report_status(f"Searching WikiTree for profiles: {first_name} {last_name}...")
+    search_desc = f"{first_name or ''} {last_name or ''}".strip()
+    await report_status(f"Searching WikiTree for profiles matching '{search_desc}'...")
     
     async with httpx.AsyncClient() as client:
         try:
@@ -163,12 +164,14 @@ async def search_profiles(
             response.raise_for_status()
             data = response.json()
             if isinstance(data, dict) and 'error' in data:
+                await report_status(f"WikiTree search error: {data['error']}")
                 return {'status': 'error', 'error_message': data['error']}
             
-            results = data if isinstance(data, list) else data.get('results', data)
-            await report_status(f"Found {len(results)} potential WikiTree matches.")
+            results = data if isinstance(data, list) else data.get('results', [])
+            await report_status(f"Found {len(results)} potential WikiTree matches for '{search_desc}'.")
             return {'status': 'ok', 'results': results}
         except Exception as e:
+            await report_status(f"WikiTree connection failed: {str(e)}")
             return {'status': 'error', 'error_message': str(e)}
 
 async def get_person(name_or_id: str, fields: Optional[List[str]] = None) -> dict:

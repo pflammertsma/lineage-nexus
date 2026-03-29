@@ -1,7 +1,6 @@
-import React from 'react';
-import { Plus, MessageSquare, Clock, Settings, User } from 'lucide-react';
+import { Plus, MessageSquare, Clock, Settings, User, Trash2 } from 'lucide-react';
 
-const Sidebar = ({ sessions, activeSessionId, onNewChat, onSelectSession }) => {
+const Sidebar = ({ sessions, activeSessionId, onNewChat, onSelectSession, onDeleteSession }) => {
   return (
     <aside className="w-64 border-r border-border bg-surface flex flex-col h-screen sticky top-0">
       <div className="p-4 border-b border-border">
@@ -24,18 +23,32 @@ const Sidebar = ({ sessions, activeSessionId, onNewChat, onSelectSession }) => {
           </div>
         ) : (
           sessions.map(session => (
-            <button
+            <div
               key={session.id}
-              onClick={() => onSelectSession(session.id)}
-              className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors ${
+              className={`group flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors cursor-pointer ${
                 activeSessionId === session.id 
                   ? 'bg-accent-soft text-accent' 
                   : 'hover:bg-card'
               }`}
             >
-              <MessageSquare size={16} className="shrink-0 opacity-60" />
-              <span className="truncate text-left">{session.title}</span>
-            </button>
+              <button 
+                onClick={() => onSelectSession(session.id)}
+                className="flex-1 flex items-center gap-3 overflow-hidden"
+              >
+                <MessageSquare size={16} className="shrink-0 opacity-60" />
+                <span className="truncate text-left">{session.title}</span>
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteSession(session.id);
+                }}
+                className="opacity-0 group-hover:opacity-100 hover:text-red-500 transition-all p-1"
+                title="Delete session"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
           ))
         )}
       </nav>

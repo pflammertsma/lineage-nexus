@@ -241,6 +241,16 @@ function App() {
                 sessions={sessions}
                 activeSessionId={activeSessionId}
                 onSelectSession={(id) => setActiveSessionId(id)}
+                onDeleteSession={(id) => {
+                  setSessions(prev => {
+                    const updated = prev.filter(s => s.id !== id);
+                    if (activeSessionId === id) {
+                      setActiveSessionId(null);
+                      setMessages([]);
+                    }
+                    return updated;
+                  });
+                }}
                 onNewChat={() => {
                   setActiveSessionId(null);
                   setMessages([]);
