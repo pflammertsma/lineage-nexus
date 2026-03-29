@@ -82,14 +82,30 @@ async def chat(
             history_dicts = [{"role": msg.role, "content": msg.content} for msg in request.history]
             
             async for update in orchestrator.chat(message=request.message, history=history_dicts):
-                yield f"data: {json.dumps(update)}\n\n"
+                chunk = f"data: {json.dumps(update)}\n\n"
+                yield chunk + (" " * 1024)
                 
         except Exception as e:
-            import traceback
-            print(traceback.format_exc())
-            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+            from google.genai.errors import ClientError
+            error_msg = str(e)
+            if isinstance(e, ClientError) and e.code == 400 and 'API key not valid' in str(e.message):
+                error_msg = "Invalid Gemini API Key. Please update your key in Settings."
+            else:
+                import traceback
+                print(traceback.format_exc())
+            
+            chunk = f"data: {json.dumps({'error': error_msg})}\n\n"
+            yield chunk + (" " * 1024)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(), 
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive"
+        }
+    )
 
 if __name__ == "__main__":
     import uvicorn

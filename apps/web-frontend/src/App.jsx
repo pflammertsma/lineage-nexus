@@ -63,10 +63,11 @@ function App() {
     }
 
     let sessionId = activeSessionId;
-    let newMessages = [...messages, { role: 'user', content: query }];
+    const isRetry = messages.length > 0 && messages[messages.length - 1].content === query && messages[messages.length - 1].role === 'user';
+    let newMessages = isRetry ? messages : [...messages, { role: 'user', content: query }];
     
     // Create new session if none is active
-    if (!sessionId) {
+    if (!sessionId && !isRetry) {
       sessionId = Math.random().toString(36).substr(2, 9);
       const newSession = {
         id: sessionId,
@@ -77,9 +78,9 @@ function App() {
       setActiveSessionId(sessionId);
     }
 
-    setMessages(newMessages);
+    if (!isRetry) setMessages(newMessages);
     setLoading(true);
-    setStatus("Orchestrating tools...");
+    setStatus("Analyzing ancestry...");
 
     const apiKey = localStorage.getItem('google_api_key');
     if (!apiKey) {

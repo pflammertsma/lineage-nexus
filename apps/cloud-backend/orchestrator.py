@@ -59,6 +59,7 @@ class ResearchOrchestrator:
         turn_count = 0
         
         print(f"[{get_ts()}] DEBUG: Starting research orchestration for query: '{message}'")
+        yield {"status": "Formulating research plan..."}
         
         while turn_count < max_turns:
             turn_count += 1
@@ -91,6 +92,7 @@ class ResearchOrchestrator:
                 
                 tool_func = tool_map.get(fc.name)
                 if tool_func:
+                    yield {"status": f"Accessing records via {fc.name}..."}
                     try:
                         result = await tool_func(**fc.args)
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"result": result}))
