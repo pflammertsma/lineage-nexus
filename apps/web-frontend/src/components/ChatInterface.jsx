@@ -8,37 +8,39 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
   const language = match ? match[1] : '';
   const isWikitext = language === 'wiki' || language === 'wikitext';
 
-  // Render block code
-  if (!inline && match) {
+  // Render block code (triple backticks with language or explicitly not inline)
+  if (!inline && (match || String(children).includes('\n'))) {
     const textToCopy = String(children).replace(/\n$/, '');
     return (
       <div className="relative group rounded-xl border border-border/50 bg-card overflow-hidden my-6 shadow-sm">
-        <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/50">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-secondary/60">
-            {isWikitext ? 'Wikitext' : language}
-          </span>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText(textToCopy);
-              setCopied(true);
-              setTimeout(() => setCopied(false), 2000);
-            }}
-            className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-secondary/40 hover:text-accent transition-colors focus:outline-none"
-            title="Copy code"
-          >
-            {copied ? (
-              <>
-                <Check size={14} className="text-green-500" />
-                <span className="text-green-500">Copied</span>
-              </>
-            ) : (
-              <>
-                <Copy size={14} />
-                <span>Copy</span>
-              </>
-            )}
-          </button>
-        </div>
+        {language && (
+          <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/50">
+            <span className="text-[10px] font-bold uppercase tracking-widest text-secondary/60">
+              {isWikitext ? 'Wikitext' : language}
+            </span>
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(textToCopy);
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+              }}
+              className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-secondary/40 hover:text-accent transition-colors focus:outline-none"
+              title="Copy code"
+            >
+              {copied ? (
+                <>
+                  <Check size={14} className="text-green-500" />
+                  <span className="text-green-500">Copied</span>
+                </>
+              ) : (
+                <>
+                  <Copy size={14} />
+                  <span>Copy</span>
+                </>
+              )}
+            </button>
+          </div>
+        )}
         <div className="p-4 overflow-x-auto">
           <pre className="text-xs font-mono text-primary/80 leading-relaxed whitespace-pre-wrap">
             <code className={className} {...props}>
@@ -50,17 +52,14 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
     );
   }
 
-  // Render inline code or block code without language
-  if (!inline) {
-    return (
-      <pre className="text-xs font-mono bg-card border border-border/50 rounded-xl p-4 overflow-x-auto whitespace-pre-wrap leading-relaxed my-4 text-primary/80">
-        <code className={className} {...props}>{children}</code>
-      </pre>
-    );
-  }
-
+  // Render inline code (single backticks)
+  const isInline = inline || !String(children).includes('\n');
+  
   return (
-    <code className="bg-muted px-1.5 py-0.5 rounded-md text-xs font-mono text-primary/90 border border-border/50" {...props}>
+    <code 
+      className={`bg-primary/5 text-primary/90 px-1.5 py-0.5 rounded-md text-[0.85em] font-mono border border-primary/10 mx-0.5 ${isInline ? '' : 'block p-4 my-4'}`} 
+      {...props}
+    >
       {children}
     </code>
   );

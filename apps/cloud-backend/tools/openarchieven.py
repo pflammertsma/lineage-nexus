@@ -1,10 +1,15 @@
 import httpx
 import re
 import copy
+import asyncio
 from datetime import datetime
 from typing import Dict, Any, Optional
 
 MAX_RESULTS = 30
+
+# Module-level cache to prevent redundant API spam
+_SEARCH_CACHE: Dict[str, Any] = {}
+_CACHE_LOCK = asyncio.Lock()
 
 OPEN_ARCHIVES_INSTRUCTIONS = r"""
 You are an expert at searching `openarchieven.nl`. Follow these strict technical rules:
@@ -175,10 +180,19 @@ async def open_archives_search(
     if query.count("&") > 2:
         return {"status": "error", "error_message": "Query cannot contain more than two '&' symbols."}
 
-    base_url = "https://api.openarchieven.nl/1.1/records/search.json"
-
     from tools.utils import report_status
+    
+    # Cache key based on all relevant search parameters
+    cache_key = f"{query}|{eventplace}|{eventtype}|{relationtype}|{page}|{multi_page_search}"
+    async with _CACHE_LOCK:
+        if cache_key in _SEARCH_CACHE:
+            cached_result = _SEARCH_CACHE[cache_key]
+            await report_status(f"(CACHED) Recalled {len(cached_result.get('records', []))} records for '{query}'...")
+            return cached_result
+    
     await report_status(f"Searching archives for query: '{query}'...")
+    
+    base_url = "https://api.openarchieven.nl/1.1/records/search.json"
     
     async with httpx.AsyncClient() as client:
         try:
@@ -218,7 +232,12 @@ async def open_archives_search(
                 "results_remaining": max(0, total_found - len(records) - start_offset),
                 "records": records
             }
-            return reformat_results(result, multi_page_search)
+            final_result = reformat_results(result, multi_page_search)
+            
+            # Save to cache before returning
+            async with _CACHE_LOCK:
+                _SEARCH_CACHE[cache_key] = final_result
+            return final_result
             
         except Exception as e:
             return {"status": "error", "error_message": f"API request failed: {str(e)}"}
