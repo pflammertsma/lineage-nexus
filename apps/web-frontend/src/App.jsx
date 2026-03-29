@@ -165,8 +165,10 @@ function App() {
             const jsonStr = trimmed.slice(6);
             const data = JSON.parse(jsonStr);
             console.log(`[SSE ${new Date().toLocaleTimeString()}] Data:`, data);
+            
             if (data.status) {
               setStatus(data.status);
+              setCurrentLogs(prev => [...prev, data.status]);
             }
             if (data.response) {
               setMessages(prev => {
@@ -175,14 +177,21 @@ function App() {
                 return updated;
               });
               setStatus(null);
+              setCurrentLogs([]);
             }
             if (data.error) {
               setMessages(prev => {
-                const updated = [...prev, { role: 'error', content: data.error, retry: data.retry }];
+                const logsHeader = currentLogs.length > 0 ? `\n\n**Interrupted Research Log:**\n${currentLogs.map(l => `- ${l}`).join('\n')}` : '';
+                const updated = [...prev, { 
+                  role: 'error', 
+                  content: `${data.error}${logsHeader}`, 
+                  retry: data.retry 
+                }];
                 setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
                 return updated;
               });
               setStatus(null);
+              setCurrentLogs([]);
             }
           } catch (e) {
             console.error("Failed to parse SSE line:", trimmed, e);
@@ -190,16 +199,23 @@ function App() {
         }
       }
     } catch (error) {
+      if (error.name === 'AbortError') {
+        console.log("Search request aborted by user");
+        return;
+      }
       console.error("Search failed:", error);
       setMessages(prev => {
-        const updated = [...prev, { role: 'error', content: `Search failed: ${error.message}`, retry: true }];
+        const logsHeader = currentLogs.length > 0 ? `\n\n**Attempted Steps:**\n${currentLogs.map(l => `- ${l}`).join('\n')}` : '';
+        const updated = [...prev, { role: 'error', content: `Search failed: ${error.message}${logsHeader}`, retry: true }];
         setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
         return updated;
       });
+      setStatus(null);
+      setCurrentLogs([]);
       notify(`Failed to orchestrate research. ${error.message}`, "error");
     } finally {
       setLoading(false);
-      setStatus(null);
+      stopRef.current = null;
     }
   };
 
