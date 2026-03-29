@@ -15,10 +15,10 @@ The current system is an **ADK Multi-Agent System** designed for local execution
 
 ## 🧠 Agent Architecture (Cloud Native)
 
-The next-generation platform utilizes a **Unified Research Orchestrator** powered by Gemini 2.0. While the legacy ADK version used distinct file-based agents, the new cloud-native version uses **Dynamic Role Delegation**:
+The next-generation platform utilizes a **Unified Research Orchestrator** powered by the Gemini family of models. While the legacy ADK version used distinct file-based agents, the new cloud-native version uses **Dynamic Role Simulation**:
 
 - **Unified Intelligence**: A single `ResearchOrchestrator` handles the entire research loop, maintaining deep context across multiple tool-calling turns.
-- **Prompt-Based Specialization**: Action buttons in the UI (Research, Biography, Fetch) inject specialized instructions that steer the model into specific personas (Researcher vs. Formatter).
+- **Role Simulation**: Action buttons in the UI (Research, Biography, Fetch) inject specialized instructions that simulate distinct expert personas (Researcher vs. Formatter) within a single orchestration sequence.
 - **Function Calling**: The orchestrator has native access to the `OpenArchieven` toolset, allowing it to perform autonomous searches, analyze results, and reformulate queries in real-time.
 - **SSE Streaming**: Progress is streamed via Server-Sent Events (SSE), providing a live "Research Log" of the agent's internal reasoning and tool execution.
 

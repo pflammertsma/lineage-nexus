@@ -10,7 +10,7 @@
 ## ✅ Completed Milestones
 - [x] **"Modern Heritage" Design**: implemented the parchment/slate aesthetic across the entire React workbench.
 - [x] **Real-time Research Logs**: hooked up SSE streaming so the agent's internal tool-calling turns appear live in the UI.
-- [x] **Unified Orchestrator**: Migrated from local ADK agents to a cloud-native FastAPI logic with Gemini 2.0 Flash/Pro support.
+- [x] **Unified Orchestrator**: Migrated from local ADK agents to a cloud-native FastAPI logic with Gemini Flash/Pro support.
 - [x] **Branding & Identity**: replaced "Orchestrator" with **Lineage Nexus** and established the branching network theme.
 - [x] **Smart Scroll & UX**: implemented auto-scrolling, gradient masking, and document-style report layouts.
 - [x] **Session Persistence (L1)**: implemented robust `localStorage` for messages and session history.

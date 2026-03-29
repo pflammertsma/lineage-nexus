@@ -117,13 +117,13 @@ Lineage Nexus is transitioning from a local-first **ADK tool** to a fully hosted
 
 ### Features
 - **Modern Heritage Design**: A premium research experience with high-fidelity "Parchment & Slate" aesthetics.
-- **Unified Research Orchestrator**: Real-time agentic loop with Gemini 2.0, providing tool-calling feedback in the UI.
+- [x] **Unified Orchestrator**: Migrated from local ADK agents to a cloud-native FastAPI logic with **Gemini** support.
 - **Archival Intelligence**: Specialist access to Dutch National Archives (OpenArchieven).
 - **Session Persistence**: Full research persistence via browser local storage.
 
 ### Technology Stack
 - **Frontend**: React 19 + Vite (modern hooks and routing).
-- **Backend**: FastAPI + Gemini 2.0 SDK (stateful SSE streaming).
+- **Backend**: FastAPI + Gemini SDK (stateful SSE streaming).
 - **Styling**: Tailwind CSS + Custom Design System.
 
 ---

@@ -8,7 +8,7 @@ from google.genai import types
 def wikitree_format_agent_instructions(context: ReadonlyContext) -> str:
     return """
     You understand the markup language Wikitext and are familiar with common genealogical
-    bigraphies on WikiTree.
+    biographies on WikiTree.
 
     Your output follows these conventions:
     - The biography begins with a header for "== Biography =="

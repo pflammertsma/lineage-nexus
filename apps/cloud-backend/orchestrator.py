@@ -7,32 +7,27 @@ from google.genai import types
 # Import tools
 from tools.openarchieven import open_archives_search, open_archives_get_record
 from tools.wikitree import search_profiles, get_full_profile, get_person_info, get_relatives_info
+from tools.biography import format_wikitree_biography
 
 def get_ts():
     return datetime.now().strftime("%H:%M:%S")
 
 SYSTEM_INSTRUCTION = """
-You are the Lineage Nexus Heritage Research Orchestrator. Your role is to conduct professional
+You are the **Lineage Nexus Heritage Research Orchestrator**. Your primary role is to conduct professional
 genealogical research in the Netherlands using archival and WikiTree tools.
 
-RESEARCH PROTOCOL:
-1.  IDENTIFY: Extract names, dates, and locations from user queries.
-2.  SEARCH: Use `open_archives_search` for records or `search_profiles` to find existing WikiTree IDs.
-3.  READ: Use `open_archives_get_record` or `get_full_profile` to fetch detailed data for records/IDs found.
-4.  ANALYZE: Infer birth years, relationships, and fill knowledge gaps.
-5.  FORMAT: Present information in a clear, archival structure.
+### RESEARCH PROTOCOL
+1. **IDENTIFY**: Extract names, dates, and locations from user queries.
+2. **SEARCH**: Use `open_archives_search` for records or `search_profiles` for WikiTree IDs.
+3. **READ**: Use `open_archives_get_record` or `get_full_profile` to fetch detailed data.
+4. **ANALYZE**: Correlate data across multiple records to resolve ambiguities.
+5. **FORMAT**: When you have sufficient data and the user wants a profile, you MUST invoke the `format_wikitree_biography` tool.
 
-GUIDELINES:
-- Be factual and cite your sources (OpenArchieven or WikiTree IDs).
+### GUIDELINES
+- Be factual and cite your sources.
 - Handle Dutch patronymics (before 1811) with care.
-- If a user provides an OpenArchieven URL, read it immediately.
 - If a specific individual is found, use that as the primary research subject.
-- Assume the ultimate goal is ensuring a complete lineage for a WikiTree profile.
-
-TOOL USAGE:
-- `open_archives_search`: Best for finding birth, marriage, and death records.
-- `search_profiles`: Use this to see if the person already has a WikiTree presence.
-- `get_full_profile`: Fetches bio, siblings, spouses, and parents for a WikiTree ID.
+- **NEVER** attempt to format the final biography yourself. Always delegate to the `format_wikitree_biography` tool, as it holds the critical formatting standards.
 """
 
 class ResearchOrchestrator:
@@ -51,8 +46,25 @@ class ResearchOrchestrator:
         contents.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
 
         # Tool mapping
-        tools = [open_archives_search, open_archives_get_record, search_profiles, get_full_profile, get_person_info, get_relatives_info]
+        tools = [
+            open_archives_search, 
+            open_archives_get_record, 
+            search_profiles, 
+            get_full_profile, 
+            get_person_info, 
+            get_relatives_info
+        ]
+        
+        # We define the formatting tool dynamically to give it access to the client
+        async def format_biography(research_data: str) -> str:
+            """Converts complex research artifacts into a high-fidelity WikiTree biography using specialized instructions."""
+            return await format_wikitree_biography(self.client, self.model_name, research_data)
+
         tool_map = {f.__name__: f for f in tools}
+        tool_map["format_biography"] = format_biography
+        
+        # Add the shim to the tools list for the model to see
+        all_tools = tools + [format_biography]
 
         current_history = contents
         max_turns = 10
@@ -68,7 +80,7 @@ class ResearchOrchestrator:
                 contents=current_history,
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_INSTRUCTION,
-                    tools=tools,
+                    tools=all_tools,
                     temperature=0.0
                 )
             )

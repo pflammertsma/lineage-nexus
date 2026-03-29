@@ -121,7 +121,7 @@ function App() {
         body: JSON.stringify({
           message: query,
           history: messages,
-          model: 'gemini-2.0-flash'
+          model: 'gemini-flash-latest'
         }),
       });
 
