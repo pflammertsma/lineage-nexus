@@ -26,7 +26,7 @@ const ChatInterface = ({ messages, isLoading }) => {
               >
                 <div 
                   className="prose text-sm leading-relaxed whitespace-pre-wrap"
-                  dangerouslySetInnerHTML={{ __html: msg.content.replace(/\n/g, '<br/>') }}
+                  dangerouslySetInnerHTML={{ __html: (msg.content || '').replace(/\n/g, '<br/>') }}
                 />
               </div>
             </div>

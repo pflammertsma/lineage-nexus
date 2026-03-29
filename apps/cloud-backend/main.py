@@ -15,7 +15,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
-    model: str = "gemini-2.0-flash-exp"  # Default to latest if not specified
+    model: str = "gemini-flash-latest"  # Use stable Gemini 2.0 Flash
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -84,7 +84,7 @@ async def chat(
         history_dicts = [{"role": msg.role, "content": msg.content} for msg in request.history]
         
         # Perform the chat (this handles tool calling)
-        response = orchestrator.chat(message=request.message, history=history_dicts)
+        response = await orchestrator.chat(message=request.message, history=history_dicts)
         
         # If response was actually sync (google-genai) we might need to await if we use aio
         # For now we'll assume a standard synchronous call for tool-calling loop (can be complex otherwise)
@@ -92,8 +92,8 @@ async def chat(
         
         # Extract the final answer or tool calls
         return {
-            "response": response.text,
-            "usage": response.usage_metadata.to_json() if response.usage_metadata else {},
+            "response": response.text or "",
+            "usage": response.usage_metadata.model_dump() if response.usage_metadata else {},
             "model": request.model
         }
         

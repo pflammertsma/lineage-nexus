@@ -32,7 +32,7 @@ TOOL USAGE:
 """
 
 class ResearchOrchestrator:
-    def __init__(self, client: genai.Client, model_name: str = "gemini-2.0-flash-exp"):
+    def __init__(self, client: genai.Client, model_name: str = "gemini-flash-latest"):
         self.client = client
         self.model_name = model_name
 
@@ -66,11 +66,11 @@ class ResearchOrchestrator:
             system_instruction=SYSTEM_INSTRUCTION,
             tools=tools,
             temperature=0.2,
-            # We use tool_config to set it to AUTO (default)
+            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False)
         )
 
-        # Standard non-streaming for now, can proceed to streaming later
-        response = self.client.models.generate_content(
+        # Use the asynchronous aio client
+        response = await self.client.aio.models.generate_content(
             model=self.model_name,
             contents=contents,
             config=config
