@@ -286,4 +286,8 @@ async def get_profile(profile_id: str) -> dict:
     if 'Siblings' in person_data and isinstance(person_data['Siblings'], dict):
         new_person['Siblings'] = [parse_relative(s) for s in person_data['Siblings'].values()]
 
+    # Final report with name confirmation
+    full_name = f"{person_data.get('FirstName', '')} {person_data.get('LastNameAtBirth', '')}".strip() or profile_id
+    await report_status(f"Successfully loaded research context for: {full_name}")
+    
     return {'status': 'ok', 'person': new_person}
