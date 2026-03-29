@@ -13,6 +13,7 @@ function App() {
   const [notifications, setNotifications] = useState([]);
   const [configOpen, setConfigOpen] = useState(false);
   const [pendingQuery, setPendingQuery] = useState(null);
+  const [status, setStatus] = useState(null);
 
   const notify = (msg, type = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -25,6 +26,7 @@ function App() {
 
   const handleSearch = async (query) => {
     setLoading(true);
+    setStatus("Orchestrating tools...");
     const userMsg = { role: 'user', content: query };
     setMessages(prev => [...prev, userMsg]);
 
@@ -52,13 +54,36 @@ function App() {
 
       if (!response.ok) throw new Error(`Backend error: ${response.statusText}`);
 
-      const data = await response.json();
-      setMessages(prev => [...prev, { role: 'model', content: data.response }]);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+            if (data.status) setStatus(data.status);
+            if (data.response) {
+              setMessages(prev => [...prev, { role: 'model', content: data.response }]);
+              setStatus(null);
+            }
+            if (data.error) throw new Error(data.error);
+          }
+        }
+      }
     } catch (error) {
       console.error("Search failed:", error);
       notify(`Failed to orchestrate research. ${error.message}`, "error");
     } finally {
       setLoading(false);
+      setStatus(null);
     }
   };
 
@@ -85,7 +110,7 @@ function App() {
       </div>
       <main className="flex-1">
         <Hero onSearch={handleSearch} onConfig={() => setConfigOpen(true)} />
-        <ChatInterface messages={messages} isLoading={loading} />
+        <ChatInterface messages={messages} isLoading={loading} status={status} />
         <FeatureGrid />
         {configOpen && (
           <ApiKeyModal

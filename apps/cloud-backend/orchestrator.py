@@ -44,48 +44,49 @@ class ResearchOrchestrator:
                 role=turn["role"],
                 parts=[types.Part.from_text(text=turn["content"])]
             ))
+        contents.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
+
+        # Tool mapping
+        tools = [open_archives_search, open_archives_get_record, search_profiles, get_full_profile, get_person_info, get_relatives_info]
+        tool_map = {f.__name__: f for f in tools}
+
+        current_history = contents
+        max_turns = 10
+        turn_count = 0
         
-        # Add the current user message
-        contents.append(types.Content(
-            role="user",
-            parts=[types.Part.from_text(text=message)]
-        ))
+        while turn_count < max_turns:
+            turn_count += 1
+            response = await self.client.aio.models.generate_content(
+                model=self.model_name,
+                contents=current_history,
+                config=types.GenerateContentConfig(
+                    system_instruction=SYSTEM_INSTRUCTION,
+                    tools=tools,
+                    temperature=0.0
+                )
+            )
 
-        # Enable tools
-        tools = [
-            open_archives_search,
-            open_archives_get_record,
-            search_profiles,
-            get_full_profile,
-            get_person_info,
-            get_relatives_info
-        ]
+            current_history.append(response.candidates[0].content)
+            function_calls = [p.function_call for p in response.candidates[0].content.parts if p.function_call]
+            
+            if not function_calls:
+                yield {
+                    "response": response.text or "",
+                    "usage": response.usage_metadata.model_dump() if response.usage_metadata else {}
+                }
+                return
 
-        # Use automatic function calling (generate_content with tools)
-        config = types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTION,
-            tools=tools,
-            temperature=0.2,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False)
-        )
-
-        # Use a chat session for automatic multi-turn tool calling
-        chat = self.client.aio.chats.create(
-            model=self.model_name,
-            config=config,
-            history=contents[:-1]  # The previous history
-        )
-
-        print(f"DEBUG: Starting research orchestration for query: '{message}'")
-        
-        # Send the latest message in the chat session
-        response = await chat.send_message(message)
-
-        # Log details about the response parts
-        print(f"DEBUG: Received final response. Content length: {len(response.text) if response.text else 0}")
-        if not response.text:
-            print("WARNING: Final response text is empty. Checking parts...")
-            for part in response.candidates[0].content.parts:
-                print(f"  - Part: {part}")
-
-        return response
+            tool_parts = []
+            for fc in function_calls:
+                status = f"Searching: {fc.name} (args: {fc.args})"
+                yield {"status": status}
+                
+                tool_func = tool_map.get(fc.name)
+                if tool_func:
+                    try:
+                        result = await tool_func(**fc.args)
+                        tool_parts.append(types.Part.from_function_response(name=fc.name, response={"result": result}))
+                    except Exception as e:
+                        tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": str(e)}))
+            
+            current_history.append(types.Content(role="user", parts=tool_parts))

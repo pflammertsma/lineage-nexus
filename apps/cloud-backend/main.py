@@ -62,6 +62,9 @@ async def root():
         "version": "0.1.0"
     }
 
+from fastapi.responses import StreamingResponse
+import json
+
 @app.post("/api/v1/chat")
 async def chat(
     request: ChatRequest,
@@ -70,37 +73,23 @@ async def chat(
     if not x_gemini_api_key:
         raise HTTPException(status_code=401, detail="X-Gemini-API-Key header required (BYOK)")
     
-    try:
-        # Initializing client for this request (Stateless)
-        client = genai.Client(api_key=x_gemini_api_key)
-        
-        # In a real tool, we might use client.aio for async
-        # For simplicity in this first build, we run synchronous and wrap it or just use aio
-        # Let's import the orchestrator and execute
-        from orchestrator import ResearchOrchestrator
-        orchestrator = ResearchOrchestrator(client=client, model_name=request.model)
-        
-        # Convert history format
-        history_dicts = [{"role": msg.role, "content": msg.content} for msg in request.history]
-        
-        # Perform the chat (this handles tool calling)
-        response = await orchestrator.chat(message=request.message, history=history_dicts)
-        
-        # If response was actually sync (google-genai) we might need to await if we use aio
-        # For now we'll assume a standard synchronous call for tool-calling loop (can be complex otherwise)
-        # But we'll try to stick to basic response for now.
-        
-        # Extract the final answer or tool calls
-        return {
-            "response": response.text or "",
-            "usage": response.usage_metadata.model_dump() if response.usage_metadata else {},
-            "model": request.model
-        }
-        
-    except Exception as e:
-        import traceback
-        print(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
+    async def event_generator():
+        try:
+            client = genai.Client(api_key=x_gemini_api_key)
+            from orchestrator import ResearchOrchestrator
+            orchestrator = ResearchOrchestrator(client=client, model_name=request.model)
+            
+            history_dicts = [{"role": msg.role, "content": msg.content} for msg in request.history]
+            
+            async for update in orchestrator.chat(message=request.message, history=history_dicts):
+                yield f"data: {json.dumps(update)}\n\n"
+                
+        except Exception as e:
+            import traceback
+            print(traceback.format_exc())
+            yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 if __name__ == "__main__":
     import uvicorn

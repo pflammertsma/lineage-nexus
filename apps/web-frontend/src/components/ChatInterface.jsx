@@ -37,7 +37,7 @@ const ChatInterface = ({ messages, isLoading }) => {
               <div className="animate-pulse w-2 h-2 rounded-full bg-accent-primary"></div>
               <div className="animate-pulse w-2 h-2 rounded-full bg-accent-primary" style={{ animationDelay: '0.2s' }}></div>
               <div className="animate-pulse w-2 h-2 rounded-full bg-accent-primary" style={{ animationDelay: '0.4s' }}></div>
-              <span className="text-xs font-bold uppercase tracking-widest">Orchestrating tools...</span>
+              <span className="text-xs font-bold uppercase tracking-widest">{status || 'Orchestrating...'}</span>
             </div>
           )}
         </div>
