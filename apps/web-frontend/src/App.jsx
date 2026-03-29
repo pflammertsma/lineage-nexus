@@ -76,6 +76,7 @@ function App() {
   };
 
   const [apiKey, setApiKey] = useState(localStorage.getItem('GOOGLE_GENAI_API_KEY') || '');
+  const [currentLogs, setCurrentLogs] = useState([]);
   const stopRef = useRef(null);
 
   const handleStop = () => {
@@ -170,10 +171,14 @@ function App() {
               setStatus(data.status);
               setCurrentLogs(prev => [...prev, data.status]);
             }
+            if (data.title) {
+              console.log(`[SSE ${new Date().toLocaleTimeString()}] Updating session title to: "${data.title}"`);
+              setSessions(sList => sList.map(s => s.id === activeSessionId ? { ...s, title: data.title } : s));
+            }
             if (data.response) {
               setMessages(prev => {
                 const updated = [...prev, { role: 'model', content: data.response }];
-                setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
+                setSessions(sList => sList.map(s => s.id === activeSessionId ? { ...s, messages: updated } : s));
                 return updated;
               });
               setStatus(null);
@@ -187,7 +192,7 @@ function App() {
                   content: `${data.error}${logsHeader}`, 
                   retry: data.retry 
                 }];
-                setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
+                setSessions(sList => sList.map(s => s.id === activeSessionId ? { ...s, messages: updated } : s));
                 return updated;
               });
               setStatus(null);

@@ -82,6 +82,29 @@ class ResearchOrchestrator:
             try:
                 final_result = await research_task
                 yield final_result
+                
+                # Post-research step: Generate a meaningful title if needed
+                print(f"[{get_ts()}] STATUS: Generating research session title...")
+                try:
+                    # Compile a summary of history for title context
+                    title_context = f"User Request: {message}\n"
+                    if "response" in final_result:
+                        title_context += f"Findings: {final_result['response'][:500]}..."
+                    
+                    title_response = await self.client.aio.models.generate_content(
+                        model=self.model_name,
+                        contents=[types.Content(role="user", parts=[types.Part.from_text(text=f"Based on the following genealogical research, generate a very short, professional 2-5 word title for this session. Respond ONLY with the title text.\n\nContext:\n{title_context}")])],
+                        config=types.GenerateContentConfig(temperature=0.0)
+                    )
+                    
+                    if title_response.candidates and title_response.candidates[0].content.parts:
+                        title_text = "".join([p.text for p in title_response.candidates[0].content.parts if p.text])
+                        if title_text:
+                            clean_title = title_text.strip().replace('"', '').replace('*', '')
+                            yield {"title": clean_title}
+                except Exception as e:
+                    print(f"[{get_ts()}] DEBUG: Title generation failed (non-critical): {e}")
+
             except Exception as e:
                 import traceback
                 print(f"[{get_ts()}] CRITICAL: Research task failed:\n{traceback.format_exc()}")
@@ -144,9 +167,12 @@ class ResearchOrchestrator:
             current_history.append(current_candidate.content)
             function_calls = [p.function_call for p in current_candidate.content.parts if p.function_call]
             
+            # Extract just the text parts safely
+            response_text = "".join([p.text for p in current_candidate.content.parts if p.text])
+            
             if not function_calls:
                 return {
-                    "response": response.text or "I have completed my research.",
+                    "response": response_text or "I have completed my research.",
                     "usage": response.usage_metadata.model_dump() if response.usage_metadata else {}
                 }
 
