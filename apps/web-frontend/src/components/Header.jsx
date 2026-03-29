@@ -1,23 +1,31 @@
 import React from 'react';
 import logo from '../assets/logo.svg';
 
-const Header = () => {
+const Header = ({ isLoggedIn, onSignIn }) => {
   return (
-    <header className="h-[80px] bg-surface border-b border-border sticky top-0 z-[1000]">
+    <header className="h-[70px] bg-surface border-b border-border sticky top-0 z-[1000]">
       <div className="container h-full flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="" className="w-8 h-8" />
-          <span className="text-xl font-extrabold tracking-tight text-accent">Lineage Nexus</span>
+        <div className="flex items-center gap-3 select-none">
+          <img src={logo} alt="" className="w-7 h-7 pointer-events-none" />
+          <span className="text-lg font-extrabold tracking-tight text-accent">Lineage Nexus</span>
         </div>
-        
-        <nav className="hidden md:flex gap-8 items-center">
-          <a href="#features" className="text-sm font-semibold hover:text-accent transition-colors">Platform</a>
-          <a href="#about" className="text-sm font-semibold hover:text-accent transition-colors">Privacy</a>
-          <a href="#" className="text-sm font-semibold hover:text-accent transition-colors">Documentation</a>
-        </nav>
+
+        {/* Only show marketing links on landing page */}
+        {!isLoggedIn && (
+          <nav className="hidden md:flex gap-8 items-center opacity-60">
+            <a href="#features" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Platform</a>
+            <a href="#about" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Privacy</a>
+            <a href="#" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Docs</a>
+          </nav>
+        )}
 
         <div className="flex items-center gap-4">
-          <button className="btn btn-primary">Launch Research</button>
+          <button
+            onClick={onSignIn}
+            className={`btn ${isLoggedIn ? 'btn-secondary opacity-60 hover:opacity-100' : 'btn-primary'} px-5 py-2 text-xs`}
+          >
+            {isLoggedIn ? 'Sign Out' : 'Sign In'}
+          </button>
         </div>
       </div>
     </header>
