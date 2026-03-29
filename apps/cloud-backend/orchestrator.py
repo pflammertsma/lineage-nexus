@@ -69,11 +69,23 @@ class ResearchOrchestrator:
             automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=False)
         )
 
-        # Use the asynchronous aio client
-        response = await self.client.aio.models.generate_content(
+        # Use a chat session for automatic multi-turn tool calling
+        chat = self.client.aio.chats.create(
             model=self.model_name,
-            contents=contents,
-            config=config
+            config=config,
+            history=contents[:-1]  # The previous history
         )
+
+        print(f"DEBUG: Starting research orchestration for query: '{message}'")
+        
+        # Send the latest message in the chat session
+        response = await chat.send_message(message)
+
+        # Log details about the response parts
+        print(f"DEBUG: Received final response. Content length: {len(response.text) if response.text else 0}")
+        if not response.text:
+            print("WARNING: Final response text is empty. Checking parts...")
+            for part in response.candidates[0].content.parts:
+                print(f"  - Part: {part}")
 
         return response
