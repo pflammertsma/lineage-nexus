@@ -54,6 +54,8 @@ class ResearchOrchestrator:
         max_turns = 10
         turn_count = 0
         
+        print(f"DEBUG: Starting research orchestration for query: '{message}'")
+        
         while turn_count < max_turns:
             turn_count += 1
             response = await self.client.aio.models.generate_content(
@@ -70,6 +72,7 @@ class ResearchOrchestrator:
             function_calls = [p.function_call for p in response.candidates[0].content.parts if p.function_call]
             
             if not function_calls:
+                print(f"DEBUG: Received final response. Content: {response.text[:100]}...")
                 yield {
                     "response": response.text or "",
                     "usage": response.usage_metadata.model_dump() if response.usage_metadata else {}
@@ -79,6 +82,7 @@ class ResearchOrchestrator:
             tool_parts = []
             for fc in function_calls:
                 status = f"Searching: {fc.name} (args: {fc.args})"
+                print(f"DEBUG: [Turn {turn_count}] {status}")
                 yield {"status": status}
                 
                 tool_func = tool_map.get(fc.name)

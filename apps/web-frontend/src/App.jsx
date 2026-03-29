@@ -14,6 +14,7 @@ function App() {
   const [configOpen, setConfigOpen] = useState(false);
   const [pendingQuery, setPendingQuery] = useState(null);
   const [status, setStatus] = useState(null);
+  console.log("DEBUG: Render status =", status);
 
   const notify = (msg, type = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -67,14 +68,27 @@ function App() {
         buffer = lines.pop();
 
         for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const data = JSON.parse(line.slice(6));
-            if (data.status) setStatus(data.status);
+          const trimmed = line.trim();
+          if (!trimmed || !trimmed.startsWith('data: ')) continue;
+          
+          try {
+            const jsonStr = trimmed.slice(6);
+            console.log("SSE chunk:", jsonStr);
+            const data = JSON.parse(jsonStr);
+            
+            if (data.status) {
+              console.log("Updating status to:", data.status);
+              setStatus(data.status);
+            }
+            
             if (data.response) {
               setMessages(prev => [...prev, { role: 'model', content: data.response }]);
               setStatus(null);
             }
+            
             if (data.error) throw new Error(data.error);
+          } catch (e) {
+            console.error("Failed to parse SSE line:", trimmed, e);
           }
         }
       }
