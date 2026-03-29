@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { Send, Search, FileText, Download, Mic } from 'lucide-react';
 
-const ChatInput = ({ onSearch, isLoading, status }) => {
+const ChatInput = ({ onSearch, onStop, isLoading, status }) => {
   const textareaRef = useRef(null);
 
   const handleSubmit = (e) => {
@@ -75,14 +75,23 @@ const ChatInput = ({ onSearch, isLoading, status }) => {
               </div>
 
               <div className="flex items-center gap-3">
-                <button
-                  type="submit"
-                  disabled={isLoading}
-                  className={`w-10 h-10 flex items-center justify-center rounded-full transition-all ${isLoading ? 'opacity-20 cursor-wait' : 'bg-accent text-white shadow-lg shadow-accent/40 cursor-pointer hover:opacity-90 hover:-translate-y-px'
-                    }`}
-                >
-                  <Send size={18} />
-                </button>
+                {isLoading ? (
+                  <button
+                    type="button"
+                    onClick={onStop}
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 cursor-pointer hover:bg-rose-500/20 transition-all animate-pulse"
+                    title="Stop research"
+                  >
+                    <div className="w-3 h-3 bg-rose-500 rounded-sm"></div>
+                  </button>
+                ) : (
+                  <button
+                    type="submit"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/40 cursor-pointer hover:opacity-90 hover:-translate-y-px transition-all"
+                  >
+                    <Send size={18} />
+                  </button>
+                )}
               </div>
             </div>
           </div>

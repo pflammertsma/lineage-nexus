@@ -75,7 +75,21 @@ function App() {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
+  const [apiKey, setApiKey] = useState(localStorage.getItem('GOOGLE_GENAI_API_KEY') || '');
+  const stopRef = useRef(null);
+
+  const handleStop = () => {
+    if (stopRef.current) {
+      stopRef.current.abort();
+      stopRef.current = null;
+      setLoading(false);
+      setStatus(null);
+    }
+  };
+
   const handleSearch = async (query) => {
+    if (!query.trim()) return;
+    if (loading) return;
     // If not logged in, log them in first
     if (!isLoggedIn) {
       setIsLoggedIn(true);
@@ -112,12 +126,16 @@ function App() {
     }
 
     try {
+      const controller = new AbortController();
+      stopRef.current = controller;
+      
       const response = await fetch('http://localhost:8080/api/v1/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'X-Gemini-API-Key': apiKey,
         },
+        signal: controller.signal,
         body: JSON.stringify({
           message: query,
           history: messages,
@@ -284,6 +302,7 @@ function App() {
                   <div className="w-full max-w-[800px] px-8 pointer-events-auto bg-surface">
                     <ChatInput
                       onSearch={handleSearch}
+                      onStop={handleStop}
                       isLoading={loading}
                       status={status}
                     />
