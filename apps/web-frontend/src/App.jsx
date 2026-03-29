@@ -148,7 +148,6 @@ function App() {
             const data = JSON.parse(jsonStr);
             console.log(`[SSE ${new Date().toLocaleTimeString()}] Data:`, data);
             if (data.status) {
-              console.log("Setting Status:", data.status);
               setStatus(data.status);
             }
             if (data.response) {
@@ -159,7 +158,14 @@ function App() {
               });
               setStatus(null);
             }
-            if (data.error) throw new Error(data.error);
+            if (data.error) {
+              setMessages(prev => {
+                const updated = [...prev, { role: 'error', content: data.error, retry: data.retry }];
+                setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
+                return updated;
+              });
+              setStatus(null);
+            }
           } catch (e) {
             console.error("Failed to parse SSE line:", trimmed, e);
           }
@@ -167,6 +173,11 @@ function App() {
       }
     } catch (error) {
       console.error("Search failed:", error);
+      setMessages(prev => {
+        const updated = [...prev, { role: 'error', content: `Search failed: ${error.message}`, retry: true }];
+        setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
+        return updated;
+      });
       notify(`Failed to orchestrate research. ${error.message}`, "error");
     } finally {
       setLoading(false);
@@ -254,6 +265,7 @@ function App() {
                       messages={messages}
                       isLoading={loading}
                       status={status}
+                      onRetry={handleSearch}
                     />
                     <div className="h-64 shrink-0"></div>
                   </div>

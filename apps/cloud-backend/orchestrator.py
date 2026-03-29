@@ -3,7 +3,7 @@ import asyncio
 from google import genai
 from google.genai import types
 from tools.openarchieven import open_archives_search, open_archives_get_record, OPEN_ARCHIVES_INSTRUCTIONS
-from tools.wikitree import search_profiles, get_full_profile, get_person_info, get_relatives_info, WIKITREE_INSTRUCTIONS
+from tools.wikitree import search_profiles, get_profile, get_person, get_relatives, WIKITREE_INSTRUCTIONS
 from tools.biography import format_wikitree_biography
 from tools.utils import get_ts
 
@@ -75,30 +75,37 @@ class ResearchOrchestrator:
                 msg = await status_queue.get()
                 yield {"status": msg}
                 
-            final_result = await research_task
-            yield final_result
+            try:
+                final_result = await research_task
+                yield final_result
+            except Exception as e:
+                import traceback
+                print(f"[{get_ts()}] CRITICAL: Research task failed:\n{traceback.format_exc()}")
+                yield {"error": str(e), "retry": True}
             
         finally:
             unregister_status_queue()
 
-    async def _conduct_research(self, message: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _conduct_research(self, message: str, history: List[Dict[str, Any]]) -> Dict[Dict[str, Any], Any]:
         """Internal research logic that reports status via 'report_status'."""
         from tools.utils import report_status
         await report_status("Formulating research plan...")
         
-        current_history = [types.Content(role=msg["role"], parts=[types.Part.from_text(text=msg["content"])]) for msg in history]
+        # Filter history to only include 'user' and 'model' roles (Gemini requirement)
+        valid_history = [msg for msg in history if msg["role"] in ["user", "model"]]
+        current_history = [types.Content(role=msg["role"], parts=[types.Part.from_text(text=msg["content"])]) for msg in valid_history]
         current_history.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
         
         turn_count = 0
-        max_turns = 4
+        max_turns = 10
         
         all_tools = [
             open_archives_search, 
             open_archives_get_record, 
             search_profiles, 
-            get_full_profile, 
-            get_person_info, 
-            get_relatives_info
+            get_person, 
+            get_relatives,
+            get_profile
         ]
         
         tool_map = {f.__name__: f for f in all_tools}

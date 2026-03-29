@@ -171,7 +171,7 @@ async def search_profiles(
         except Exception as e:
             return {'status': 'error', 'error_message': str(e)}
 
-async def get_person_info(name_or_id: str, fields: Optional[List[str]] = None) -> dict:
+async def get_person(name_or_id: str, fields: Optional[List[str]] = None) -> dict:
     params = {
         "action": "getPerson",
         "key": name_or_id,
@@ -194,7 +194,7 @@ async def get_person_info(name_or_id: str, fields: Optional[List[str]] = None) -
         except Exception as e:
             return {'status': 'error', 'error_message': str(e)}
 
-async def get_relatives_info(name: str, fields: Optional[List[str]] = None) -> dict:
+async def get_relatives(name: str, fields: Optional[List[str]] = None) -> dict:
     params = {
         "action": "getRelatives",
         "keys": name,
@@ -226,10 +226,10 @@ async def get_relatives_info(name: str, fields: Optional[List[str]] = None) -> d
         except Exception as e:
             return {'status': 'error', 'error_message': str(e)}
 
-async def get_full_profile(profile_id: str) -> dict:
+async def get_profile(profile_id: str) -> dict:
     from tools.utils import report_status
     await report_status(f"Fetching full research context for WikiTree profile: {profile_id}...")
-    data = await get_relatives_info(profile_id, fields=PROFILE_FIELDS)
+    data = await get_relatives(profile_id, fields=PROFILE_FIELDS)
     if data.get('status') != 'ok':
         return data
     

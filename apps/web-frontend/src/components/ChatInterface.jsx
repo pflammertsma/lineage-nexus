@@ -65,60 +65,88 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
   );
 };
 
-const ChatInterface = ({ messages, isLoading, status }) => {
+const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
   if (messages.length === 0) return null;
 
   return (
     <section className="bg-surface section-divider">
       <div className="container" style={{ maxWidth: '800px' }}>
         <div className="flex flex-col gap-8">
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}
-            >
-              <div className="flex items-center gap-2 mb-2 px-1 opacity-40 select-none">
-                {msg.role !== 'user' && (
-                  <>
-                    <Network size={12} />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">Lineage Nexus</span>
-                  </>
-                )}
-              </div>
+          {messages.map((msg, idx) => {
+            if (msg.role === 'error') {
+              return (
+                <div key={idx} className="flex flex-col items-center justify-center p-8 bg-red-50/10 border border-red-500/20 rounded-2xl animate-in fade-in slide-in-from-bottom-2">
+                  <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+                    <span className="text-red-400 font-bold text-xl">!</span>
+                  </div>
+                  <h3 className="text-rose-200/90 text-[10px] font-bold uppercase tracking-[0.2em] mb-2">Research Interrupted</h3>
+                  <p className="text-rose-100/60 text-sm text-center max-w-[400px] mb-6 font-serif italic leading-relaxed">
+                    {msg.content}
+                  </p>
+                  {msg.retry && (
+                    <button
+                      onClick={() => {
+                        // Find the last user message to retry
+                        const lastUser = [...messages].reverse().find(m => m.role === 'user');
+                        if (lastUser && onRetry) onRetry(lastUser.content);
+                      }}
+                      className="btn btn-primary bg-red-600 hover:bg-red-700 h-10 px-8 text-xs font-bold uppercase tracking-widest shadow-lg shadow-red-900/10"
+                    >
+                      Retry Search
+                    </button>
+                  )}
+                </div>
+              );
+            }
 
+            return (
               <div
-                className={`relative transition-all ${msg.role === 'user'
-                  ? 'bg-accent text-white px-6 py-4 rounded-2xl shadow-sm border-accent shadow-accent/10 rounded-tr-none ml-auto max-w-[85%]'
-                  : 'w-full pt-2'
-                  }`}
+                key={idx}
+                className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}
               >
-                <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-primary/95'} space-y-4 markdown-content`}>
-                  <ReactMarkdown
-                    components={{
-                      code: CodeBlock,
-                      h1: ({node, ...props}) => <h1 className="text-lg font-bold text-primary mb-4 mt-8" {...props} />,
-                      h2: ({node, ...props}) => <h2 className="text-base font-bold text-primary mb-3 mt-6" {...props} />,
-                      h3: ({node, ...props}) => <h3 className="text-sm font-bold text-primary mb-2 mt-4" {...props} />,
-                      strong: ({node, ...props}) => <strong className="font-bold text-primary/90" {...props} />,
-                      a: ({node, ...props}) => (
-                        <a 
-                          className="text-accent underline underline-offset-4 hover:opacity-80 transition-opacity" 
-                          target="_blank" 
-                          rel="noopener noreferrer" 
-                          {...props} 
-                        />
-                      ),
-                      ul: ({node, ...props}) => <ul className="list-disc pl-5 space-y-2 my-4" {...props} />,
-                      ol: ({node, ...props}) => <ol className="list-decimal pl-5 space-y-2 my-4" {...props} />,
-                      li: ({node, ...props}) => <li className="pl-1" {...props} />,
-                    }}
-                  >
-                    {msg.content || ""}
-                  </ReactMarkdown>
+                <div className="flex items-center gap-2 mb-2 px-1 opacity-40 select-none">
+                  {msg.role !== 'user' && (
+                    <>
+                      <Network size={12} />
+                      <span className="text-[10px] font-bold uppercase tracking-widest">Lineage Nexus</span>
+                    </>
+                  )}
+                </div>
+
+                <div
+                  className={`relative transition-all ${msg.role === 'user'
+                    ? 'bg-accent text-white px-6 py-4 rounded-2xl shadow-sm border-accent shadow-accent/10 rounded-tr-none ml-auto max-w-[85%]'
+                    : 'w-full pt-2'
+                    }`}
+                >
+                  <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-primary/95'} space-y-4 markdown-content`}>
+                    <ReactMarkdown
+                      components={{
+                        code: CodeBlock,
+                        h1: ({ node, ...props }) => <h1 className="text-lg font-bold text-primary mb-4 mt-8" {...props} />,
+                        h2: ({ node, ...props }) => <h2 className="text-base font-bold text-primary mb-3 mt-6" {...props} />,
+                        h3: ({ node, ...props }) => <h3 className="text-sm font-bold text-primary mb-2 mt-4" {...props} />,
+                        strong: ({ node, ...props }) => <strong className="font-bold text-primary/90" {...props} />,
+                        a: ({ node, ...props }) => (
+                          <a
+                            className="text-accent underline underline-offset-4 hover:opacity-80 transition-opacity"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            {...props}
+                          />
+                        ),
+                        ul: ({ node, ...props }) => <ul className="list-disc pl-5 space-y-2 my-4" {...props} />,
+                        ol: ({ node, ...props }) => <ol className="list-decimal pl-5 space-y-2 my-4" {...props} />,
+                        li: ({ node, ...props }) => <li className="pl-1" {...props} />,
+                      }}
+                    >
+                      {msg.content || ""}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {/* Thinking / Status Indicator */}
           {isLoading && (
