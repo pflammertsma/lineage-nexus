@@ -147,7 +147,7 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
                         strong: ({ node, ...props }) => <strong className="font-bold text-primary/90" {...props} />,
                         a: ({ node, ...props }) => (
                           <a
-                            className="text-accent underline underline-offset-4 hover:opacity-80 transition-opacity"
+                            className={`${msg.role === 'user' ? 'text-white underline font-bold' : 'text-accent'} underline underline-offset-4 hover:opacity-80 transition-opacity`}
                             target="_blank"
                             rel="noopener noreferrer"
                             {...props}
