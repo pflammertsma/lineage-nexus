@@ -27,12 +27,11 @@ const ChatInput = ({ onSearch, isLoading, status }) => {
   };
 
   return (
-    <div className="border-t border-border bg-gradient-to-t from-surface to-transparent pt-8 pb-4 sticky bottom-0">
-      <div className="container" style={{ maxWidth: '800px' }}>
-        <form
-          onSubmit={handleSubmit}
-          className="relative group transition-all duration-300"
-        >
+    <div className="w-full">
+      <form
+        onSubmit={handleSubmit}
+        className="relative group transition-all duration-300 w-full"
+      >
           <div className="absolute inset-0 bg-accent-primary opacity-0 group-focus-within:opacity-5 blur-xl transition-opacity pointer-events-none rounded-2xl"></div>
 
           <div className="relative bg-card border border-border group-focus-within:border-accent rounded-2xl overflow-hidden shadow-2xl transition-all">
@@ -75,7 +74,6 @@ const ChatInput = ({ onSearch, isLoading, status }) => {
         <p className="mt-4 text-[10px] text-center opacity-30 tracking-tight">
           Lineage Nexus uses Gemini to search archives. Results may vary depending on results from sourced archives.
         </p>
-      </div>
     </div>
   );
 };

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
@@ -17,6 +17,7 @@ function App() {
   const [configOpen, setConfigOpen] = useState(false);
   const [pendingQuery, setPendingQuery] = useState(null);
   const [status, setStatus] = useState(null);
+  const chatContainerRef = useRef(null);
   const [isLoggedIn, setIsLoggedIn] = useState(() => {
     return localStorage.getItem('lineage_is_logged_in') === 'true';
   });
@@ -54,6 +55,16 @@ function App() {
       setPendingQuery(null);
     }
   }, [isLoggedIn, pendingQuery, messages.length]);
+
+  // Auto-scroll to bottom of chat
+  useEffect(() => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
+  }, [messages, status]);
 
   const notify = (msg, type = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -228,17 +239,17 @@ function App() {
                     </p>
                   </div>
                 ) : (
-                  <div className="h-full overflow-y-auto">
+                  <div className="h-full overflow-y-auto pb-4" ref={chatContainerRef}>
                     <ChatInterface 
                       messages={messages} 
                       isLoading={loading} 
                       status={status}
                     />
-                    <div className="h-40 shrink-0"></div>
+                    <div className="h-64 shrink-0"></div>
                   </div>
                 )}
-                <div className="absolute bottom-0 left-0 right-0 p-8 pt-0 pointer-events-none">
-                  <div className="max-w-[800px] mx-auto pointer-events-auto">
+                <div className="absolute bottom-0 left-0 right-0 pointer-events-none bg-gradient-to-t from-surface via-surface/95 to-transparent pt-32 pb-8 flex justify-center">
+                  <div className="w-full max-w-[800px] px-8 pointer-events-auto">
                     <ChatInput 
                       onSearch={handleSearch} 
                       isLoading={loading}

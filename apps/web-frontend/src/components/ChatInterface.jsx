@@ -29,12 +29,12 @@ const ChatInterface = ({ messages, isLoading }) => {
               </div>
 
               <div
-                className={`relative px-6 py-4 rounded-2xl border transition-all shadow-sm max-w-[85%] ${msg.role === 'user'
-                    ? 'bg-accent text-white border-accent shadow-accent/10 rounded-tr-none'
-                    : 'bg-card border-border rounded-tl-none'
+                className={`relative transition-all ${msg.role === 'user'
+                    ? 'bg-accent text-white px-6 py-4 rounded-2xl shadow-sm border-accent shadow-accent/10 rounded-tr-none ml-auto max-w-[85%]'
+                    : 'w-full pt-2'
                   }`}
               >
-                <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-primary/90'} space-y-4 markdown-content`}>
+                <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-primary/95'} space-y-4 markdown-content`}>
                   <ReactMarkdown>
                     {msg.content || ""}
                   </ReactMarkdown>
