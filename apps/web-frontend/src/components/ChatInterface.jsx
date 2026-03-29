@@ -1,28 +1,23 @@
 import React from 'react';
-import { User, Shield } from 'lucide-react';
+import { User, Network } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 
-const ChatInterface = ({ messages, isLoading }) => {
+const ChatInterface = ({ messages, isLoading, status }) => {
   if (messages.length === 0) return null;
 
   return (
-    <section className="py-4 bg-surface section-divider">
+    <section className="bg-surface section-divider">
       <div className="container" style={{ maxWidth: '800px' }}>
         <div className="flex flex-col gap-8">
           {messages.map((msg, idx) => (
             <div
               key={idx}
-              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} mb-8 animate-in fade-in slide-in-from-bottom-2 duration-300`}
+              className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}
             >
               <div className="flex items-center gap-2 mb-2 px-1 opacity-40 select-none">
-                {msg.role === 'user' ? (
+                {msg.role !== 'user' && (
                   <>
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-right">Researcher</span>
-                    <User size={12} />
-                  </>
-                ) : (
-                  <>
-                    <Shield size={12} />
+                    <Network size={12} />
                     <span className="text-[10px] font-bold uppercase tracking-widest">Lineage Nexus</span>
                   </>
                 )}
@@ -30,8 +25,8 @@ const ChatInterface = ({ messages, isLoading }) => {
 
               <div
                 className={`relative transition-all ${msg.role === 'user'
-                    ? 'bg-accent text-white px-6 py-4 rounded-2xl shadow-sm border-accent shadow-accent/10 rounded-tr-none ml-auto max-w-[85%]'
-                    : 'w-full pt-2'
+                  ? 'bg-accent text-white px-6 py-4 rounded-2xl shadow-sm border-accent shadow-accent/10 rounded-tr-none ml-auto max-w-[85%]'
+                  : 'w-full pt-2'
                   }`}
               >
                 <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-primary/95'} space-y-4 markdown-content`}>

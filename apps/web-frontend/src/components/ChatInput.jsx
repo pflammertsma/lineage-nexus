@@ -1,28 +1,30 @@
 import React, { useRef, useEffect } from 'react';
-import { Send, Globe, Search, PlusCircle, Mic } from 'lucide-react';
+import { Send, Search, FileText, Download, Mic } from 'lucide-react';
 
 const ChatInput = ({ onSearch, isLoading, status }) => {
   const textareaRef = useRef(null);
 
-  useEffect(() => {
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`;
-    }
-  }, [textareaRef.current?.value]);
-
   const handleSubmit = (e) => {
     e.preventDefault();
-    const query = textareaRef.current.value.trim();
-    if (query && !isLoading) {
-      onSearch(query);
-      textareaRef.current.value = '';
-    }
+    if (isLoading || !textareaRef.current.value.trim()) return;
+    
+    onSearch(textareaRef.current.value.trim());
+    textareaRef.current.value = '';
+    textareaRef.current.dispatchEvent(new Event('input', { bubbles: true })); // trigger auto-resize
   };
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
       handleSubmit(e);
+    }
+  };
+
+  const handleActionClick = (prompt) => {
+    if (textareaRef.current) {
+      textareaRef.current.value = prompt;
+      textareaRef.current.dispatchEvent(new Event('input', { bubbles: true }));
+      textareaRef.current.focus();
     }
   };
 
@@ -37,23 +39,39 @@ const ChatInput = ({ onSearch, isLoading, status }) => {
           <div className="relative bg-card border border-border group-focus-within:border-accent rounded-2xl overflow-hidden shadow-2xl transition-all">
             <textarea
               ref={textareaRef}
-              rows={1}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about your ancestors..."
+              placeholder={status || "Ask about your ancestors..."}
               disabled={isLoading}
               className="w-full bg-transparent px-6 py-4 pr-16 focus:outline-none text-sm leading-relaxed resize-none min-h-[56px] transition-all"
             />
 
             <div className="flex items-center justify-between px-6 py-3 border-t border-border/50 bg-card/50">
               <div className="flex items-center gap-4">
-                <button type="button" className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity">
-                  <PlusCircle size={16} />
-                  <span>Tools</span>
+                <button 
+                  type="button" 
+                  onClick={() => handleActionClick("Use the researcher agent to perform research. Look for any relevant genealogical records.")}
+                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
+                >
+                  <Search size={14} />
+                  <span>Research</span>
                 </button>
                 <div className="h-4 w-[1px] bg-border/50 mx-1"></div>
-                <button type="button" className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity text-accent">
-                  <Globe size={16} />
-                  <span>Research Deep</span>
+                <button 
+                  type="button" 
+                  onClick={() => handleActionClick("Use the formatter agent to format a biography that includes as much relevant details about the profile we've been talking about, including references and only links to known profiles.")}
+                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
+                >
+                  <FileText size={14} />
+                  <span>Biography</span>
+                </button>
+                <div className="h-4 w-[1px] bg-border/50 mx-1"></div>
+                <button 
+                  type="button" 
+                  onClick={() => handleActionClick("Read [ENTER-WIKITREE-ID] from WikiTree, fetching it as the data may have changed if you have read it previously.")}
+                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
+                >
+                  <Download size={14} />
+                  <span>Fetch Profile</span>
                 </button>
               </div>
 

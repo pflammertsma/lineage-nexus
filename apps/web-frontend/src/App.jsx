@@ -24,7 +24,7 @@ function App() {
   const [activeSessionId, setActiveSessionId] = useState(() => {
     return localStorage.getItem('lineage_active_session_id');
   });
-  
+
   // Real sessions from localStorage
   const [sessions, setSessions] = useState(() => {
     const saved = localStorage.getItem('lineage_sessions');
@@ -84,7 +84,7 @@ function App() {
     let sessionId = activeSessionId;
     const isRetry = messages.length > 0 && messages[messages.length - 1].content === query && messages[messages.length - 1].role === 'user';
     let newMessages = isRetry ? messages : [...messages, { role: 'user', content: query }];
-    
+
     // Create new session if none is active
     if (!sessionId && !isRetry) {
       sessionId = Math.random().toString(36).substr(2, 9);
@@ -95,6 +95,8 @@ function App() {
       };
       setSessions(prev => [newSession, ...prev]);
       setActiveSessionId(sessionId);
+    } else if (!isRetry) {
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, messages: newMessages } : s));
     }
 
     if (!isRetry) setMessages(newMessages);
@@ -132,7 +134,7 @@ function App() {
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
-        
+
         buffer += decoder.decode(value, { stream: true });
         const lines = buffer.split('\n');
         buffer = lines.pop();
@@ -140,13 +142,17 @@ function App() {
         for (const line of lines) {
           const trimmed = line.trim();
           if (!trimmed || !trimmed.startsWith('data: ')) continue;
-          
+
           try {
             const jsonStr = trimmed.slice(6);
             const data = JSON.parse(jsonStr);
             if (data.status) setStatus(data.status);
             if (data.response) {
-              setMessages(prev => [...prev, { role: 'model', content: data.response }]);
+              setMessages(prev => {
+                const updated = [...prev, { role: 'model', content: data.response }];
+                setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
+                return updated;
+              });
               setStatus(null);
             }
             if (data.error) throw new Error(data.error);
@@ -176,11 +182,11 @@ function App() {
 
   return (
     <div className="min-h-screen bg-background text-primary">
-      <Header 
-        isLoggedIn={isLoggedIn} 
+      <Header
+        isLoggedIn={isLoggedIn}
         onSignIn={handleSignIn}
       />
-      
+
       <div className="toast-container overflow-visible z-50">
         {notifications.map(n => (
           <Notification
@@ -212,11 +218,11 @@ function App() {
             </main>
           )
         } />
-        
+
         <Route path="/chat" element={
           !isLoggedIn ? <Navigate to="/" replace /> : (
             <div className="flex h-[calc(100vh-70px)] overflow-hidden">
-              <Sidebar 
+              <Sidebar
                 sessions={sessions}
                 activeSessionId={activeSessionId}
                 onSelectSession={(id) => setActiveSessionId(id)}
@@ -240,18 +246,18 @@ function App() {
                   </div>
                 ) : (
                   <div className="h-full overflow-y-auto pb-4" ref={chatContainerRef}>
-                    <ChatInterface 
-                      messages={messages} 
-                      isLoading={loading} 
+                    <ChatInterface
+                      messages={messages}
+                      isLoading={loading}
                       status={status}
                     />
                     <div className="h-64 shrink-0"></div>
                   </div>
                 )}
                 <div className="absolute bottom-0 left-0 right-0 pointer-events-none bg-gradient-to-t from-surface via-surface/95 to-transparent pt-32 pb-8 flex justify-center">
-                  <div className="w-full max-w-[800px] px-8 pointer-events-auto">
-                    <ChatInput 
-                      onSearch={handleSearch} 
+                  <div className="w-full max-w-[800px] px-8 pointer-events-auto bg-surface">
+                    <ChatInput
+                      onSearch={handleSearch}
                       isLoading={loading}
                       status={status}
                     />
