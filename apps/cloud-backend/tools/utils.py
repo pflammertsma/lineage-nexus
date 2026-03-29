@@ -8,15 +8,17 @@ _status_registry: Dict[int, asyncio.Queue] = {}
 def get_ts():
     return datetime.now().strftime("%H:%M:%S")
 
-def register_status_queue(queue: asyncio.Queue):
-    """Registers a queue for the current task's status updates."""
-    task_id = id(asyncio.current_task())
-    _status_registry[task_id] = queue
+def register_status_queue(queue: asyncio.Queue, task: Optional[asyncio.Task] = None):
+    """Registers a queue for a specific task's status updates (defaults to current task)."""
+    target = task or asyncio.current_task()
+    if target:
+        _status_registry[id(target)] = queue
 
-def unregister_status_queue():
-    """Removes the queue for the current task."""
-    task_id = id(asyncio.current_task())
-    _status_registry.pop(task_id, None)
+def unregister_status_queue(task: Optional[asyncio.Task] = None):
+    """Removes the queue for a specified task (defaults to current task)."""
+    target = task or asyncio.current_task()
+    if target:
+        _status_registry.pop(id(target), None)
 
 async def report_status(message: str):
     """Reports a status message back to the frontend via the orchestrator's queue."""

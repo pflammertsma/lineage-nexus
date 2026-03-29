@@ -2,6 +2,127 @@ import httpx
 import json
 from typing import Dict, Any, List, Optional
 
+WIKITREE_INSTRUCTIONS = r"""
+Before doing anything, you must ensure that you have some basic information about the profile
+you were asked to find. You must therefore first invoke the `get_profile` function to fetch
+basic information about the person.
+
+For example, if you are simply provided with the WikiTree ID "Slijt-6", you must use the
+`get_profile` function as follows:
+
+    get_profile({"Name": "Slijt-6", "fields": ["Name", "FirstName", "LastNameAtBirth", "BirthDate", "DeathDate", "Father", "Mother", "Bio"]})
+
+You will not even be able to understand what a person's name is without this information.
+
+These are all the known fields for requests and responses in the WikiTree API:
+
+| Field                   | Description                                                       |
+|-------------------------|-------------------------------------------------------------------|
+| Id                      | The user ID, which is a numeric identifier                        |
+| Name                    | The WikiTree ID, with spaces replaced by underscores as in an URL |
+| FirstName               | First Name                                                        |
+| MiddleName              | Middle Name                                                       |
+| MiddleInitial           | First letter of Middle Name                                       |
+| LastNameAtBirth         | Last name at birth, used for WikiTree ID                          |
+| LastNameCurrent         | Current last name                                                 |
+| Nicknames               | Nicknames                                                         |
+| LastNameOther           | Other last names                                                  |
+| RealName                | The "Preferred" first name of the profile                         |
+| Prefix                  | Prefix                                                            |
+| Suffix                  | Suffix                                                            |
+| BirthDate               | The date of birth, YYYY-MM-DD. Month and Day may be zeros.        |
+| DeathDate               | The date of death, YYYY-MM-DD. Month and Day may be zeros.        |
+| BirthLocation           | Birth location                                                    |
+| DeathLocation           | Death location                                                    |
+| BirthDateDecade         | Date of birth rounded to a decade, e.g. 1960s                     |
+| DeathDateDecade         | Date of death rounded to a decade, e.g. 1960s                     |
+| Gender                  | Male or Female                                                    |
+| IsLiving                | 1 if the person is considered "living", 0 otherwise               |
+| Father                  | The `Id` of the father. 0 if empty. Null if private.              |
+| Mother                  | The `Id` of the mother. 0 if empty. Null if private.              |
+| HasChildren             | 1 if the profile has at least one child                           |
+| NoChildren              | 1 if the "No more children" box is checked                        |
+| IsRedirect              | 1 if the profile is a redirection to another profile              |
+| DataStatus              | Array of "guess", "certain", etc. flags for the data fields.      |
+| PhotoData               | Detailed info for the primary photo. Implies the Photo field.     |
+| Connected               | 1 if connected to the global family tree, 0 if unconnected        |
+| Bio                     | The biography text (not included by default, see bioFormat param) |
+| IsMember                | True/1 if the profile is an active WikiTree member, else false/0  |
+| EditCount               | The contribution count of the user/profile.                       |
+
+Take careful note that `Id` is a numeric identifier used between records, whereas `Name` is the
+WikiTree ID, which is alphanumeric and used primarily for URLs.
+
+Whenever querying the WikiTree API, you must include the list of fields you want to retrieve.
+For example, to retrieve the WikiTree ID, and basic information about a person, you would
+include these fields:
+    fields: ["Name", "FirstName", "LastNameAtBirth", "BirthDate", "DeathDate"]
+
+You must always prefer using `Name` to reference profiles. These are the WikiTree IDs. For
+example, `Slijt-6` is the WikiTree ID profile in the URL https://www.wikitree.com/wiki/Slijt-6.
+
+The most relevant fields for genealogical profiles are:
+- Name (this is the WikiTree ID)
+- FirstName
+- LastNameAtBirth
+- Gender
+- BirthDate
+- DeathDate
+- Mother
+- Father
+- Bio
+
+Note: In dates, month and day may be zeros if they are unknown. For example, 1842-03-00 means
+"March, 1842" where the exact date is unknown.
+
+The following functions are available to you:
+- `search_profiles`: Search for profiles in order to find their WikiTree IDs.
+- `get_person_info`: Resolve the WikiTree ID (`Name`) of a profile by its `Id`.
+- `get_profile`: Retrieve a profile by WikiTree ID (`Name`).
+- `get_relatives_info`: Retrieve the relatives of a profile.
+
+SEARCHING FOR PROFILES
+----------------------
+
+Invoke `search_profiles` with a JSON dictionary containing keys matching the following
+parameters:
+- Search parameters within any number of the following fields:
+    - `FirstName`: First Name
+    - `LastName`: Last Name
+    - `BirthDate`: Birth Date (YYYY-MM-DD)
+    - `DeathDate`: Death Date (YYYY-MM-DD)
+    - `RealName`: Real/Preferred Name
+    - `LastNameCurrent`: Current Last Name
+    - `BirthLocation`: Birth Location
+    - `DeathLocation`: Death Location
+    - `Gender`: Gender (Male, Female)
+    - `fatherFirstName`: Father's First Name
+    - `fatherLastName`: Father's Last Name
+    - `motherFirstName`: Mother's First Name
+    - `motherLastName`: Mother's Last Name
+    - `limit`: Number of results to return (1-100, default 10)
+    - `fields`: Comma-delimited list of profile data fields to retrieve.
+- `limit`: The maximum number of results to return (default is 10, max is 100)
+- `fields`: A list of fields that you want to retrieve from the API from the table above. 
+
+Here's an example of how to invoke `search_profiles` to search for a profile for "Migchiel Slijt":
+```
+search_profiles({
+    "FirstName": "Migchiel",
+    "LastName": "Slijt",
+    "fields": ["Name", "FirstName", "LastNameAtBirth", "BirthDate", "DeathDate"]
+})
+```
+
+WikiTree is NOT a source of truth. Profiles may be inaccurate, incomplete or outright wrong.
+You mustn't assume that the profile data is accurate unless explicitly instructed or you have
+validated data against records from the researcher agent.
+
+Whenever you are asked to read a profile or are provided a WikiTree URL, assume that the data
+from that source has changed and you must read its contents again. Generally assume that
+profiles are constantly being updated and should be read from WikiTree again periodically.
+"""
+
 WIKITREE_API_URL = "https://api.wikitree.com/api.php"
 
 PROFILE_FIELDS = [
@@ -18,6 +139,10 @@ async def search_profiles(
     limit: int = 10,
     fields: Optional[List[str]] = None
 ) -> dict:
+    """
+    Search for existing WikiTree profiles by name, dates, or other fields.
+    Crucial: ALWAYS include 'Bio' and 'Name' in requested fields list.
+    """
     params = {
         "action": "searchPerson",
         "FirstName": first_name,
