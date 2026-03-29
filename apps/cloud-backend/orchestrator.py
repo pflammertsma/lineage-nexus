@@ -21,7 +21,8 @@ genealogical research in the Netherlands using archival and WikiTree tools.
 ### SEARCH INTELLIGENCE (Strict Rules)
 - **STRICT CALL LIMIT**: **NEVER** make more than **2** search calls in a single turn. Wait for results before refining.
 - **FUZZY LOGIC (&~&)**: The `&~&` operator is **already fuzzy**. Do NOT make parallel calls for minor spelling variations (e.g., `Klases` vs `Klazes`) if using `&~&`. One broad fuzzy call is enough.
-- **ZERO RESULT PROTOCOL**: If a search returns 0 results, **DO NOT** refine it with years/locations. BROADEN it instead (e.g., remove the year range or use wildcards).
+- **CHRONOLOGY**: **NEVER** search for years before 1500 or after the current year. Most Dutch registers begin in the late 1500s.
+- **ZERO RESULT PROTOCOL**: If a search returns 0 results, **DO NOT** refine it with different years. BROADEN it instead by **REMOVING** the year range or location. **NEVER** iterate backwards through history in sliding windows (e.g., 1700, then 1600, then 1500).
 - **WIKITREE FIRST**: Always check WikiTree first to resolve known profile info before starting archive searches.
 
 ### GUIDELINES
@@ -29,6 +30,9 @@ genealogical research in the Netherlands using archival and WikiTree tools.
 - **NEVER** format the final biography without using the `format_biography` tool.
 - Use archival records to validate WikiTree claims.
 """
+
+MAX_SEARCH_PER_TURN = 2
+MAX_RESEARCH_TURNS = 6
 
 # Assemble the full instruction set from modular skill components
 SYSTEM_INSTRUCTION = ROOT_STRATEGY + "\n" + OPEN_ARCHIVES_INSTRUCTIONS + "\n" + WIKITREE_INSTRUCTIONS
@@ -97,7 +101,6 @@ class ResearchOrchestrator:
         current_history.append(types.Content(role="user", parts=[types.Part.from_text(text=message)]))
         
         turn_count = 0
-        max_turns = 4
         
         all_tools = [
             open_archives_search, 
@@ -111,14 +114,19 @@ class ResearchOrchestrator:
         tool_map = {f.__name__: f for f in all_tools}
         
         # Specialist shim for biography formatting
-        async def format_biography(research_data: str, user_instructions: str = None) -> str:
-            """Converts complex research artifacts into a high-fidelity WikiTree biography."""
+        async def format_biography(research_data: str = "No research data provided", user_instructions: str = "Follow standard formatting") -> str:
+            """
+            Takes ALL raw genealogical research data gathered during previous turns (JSON, notes, records) 
+            and converts it into a high-fidelity WikiTree biography. Use this ONLY as the final step.
+            """
             return await format_wikitree_biography(self.client, self.model_name, research_data, user_instructions)
         
-        all_tools.append(format_biography)
+        tool_map = {f.__name__: f for f in all_tools}
         tool_map["format_biography"] = format_biography
+        all_tools.append(format_biography)
 
-        while turn_count < max_turns:
+        seen_queries = set()
+        while turn_count < MAX_RESEARCH_TURNS:
             turn_count += 1
             await report_status(f"Consulting lineage engine (Turn {turn_count})...")
             
@@ -132,32 +140,57 @@ class ResearchOrchestrator:
                 )
             )
 
-            current_history.append(response.candidates[0].content)
-            function_calls = [p.function_call for p in response.candidates[0].content.parts if p.function_call]
+            current_candidate = response.candidates[0]
+            current_history.append(current_candidate.content)
+            function_calls = [p.function_call for p in current_candidate.content.parts if p.function_call]
             
             if not function_calls:
                 return {
-                    "response": response.text or "",
+                    "response": response.text or "I have completed my research.",
                     "usage": response.usage_metadata.model_dump() if response.usage_metadata else {}
                 }
 
             await report_status(f"Invoking {len(function_calls)} tools...")
 
+            # Enforce strict research limit per turn to prevent shotgunning
+            search_calls = [fc for fc in function_calls if fc.name in ["open_archives_search", "search_profiles"]]
+            other_calls = [fc for fc in function_calls if fc.name not in ["open_archives_search", "search_profiles"]]
+            
+            # Prioritize 'get_profile' over searches in the same turn if both are present
+            if any(fc.name == "get_profile" for fc in other_calls) and search_calls:
+                await report_status("Prioritizing WikiTree context over new archival searches...")
+                search_calls = [] # Do not perform searches if we're also reading a profile for the first time
+            
+            # Cap research calls
+            if len(search_calls) > MAX_SEARCH_PER_TURN:
+                await report_status(f"Throttling research calls (Max {MAX_SEARCH_PER_TURN} per turn). {len(search_calls) - MAX_SEARCH_PER_TURN} redundant searches skipped.")
+                search_calls = search_calls[:MAX_SEARCH_PER_TURN]
+
+            active_calls = other_calls + search_calls
             tool_parts = []
-            for fc in function_calls:
+            for fc in active_calls:
+                # Deduplication check for search calls
+                if fc.name in ["open_archives_search", "search_profiles"]:
+                    q_key = str(fc.args)
+                    if q_key in seen_queries:
+                        tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": "Redundant query. Broaden your search or try a different source."}))
+                        continue
+                    seen_queries.add(q_key)
+
                 await report_status(f"Invoking {fc.name}...")
                 
                 tool_func = tool_map.get(fc.name)
                 if tool_func:
                     try:
-                        # For tools, we need to ensure they are also registered (unless done in create_task)
-                        # but here we just call them directly as part of this research task.
                         result = await tool_func(**fc.args)
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"result": result}))
                     except Exception as e:
                         print(f"[{get_ts()}] ERROR: Tool {fc.name} failed: {e}")
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": str(e)}))
+                else:
+                    tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": f"Tool '{fc.name}' not found."}))
             
+            # Use the tool mapping results to generate the next response
             current_history.append(types.Content(role="user", parts=tool_parts))
             
         # If we hit the turn limit, force a final summary response
