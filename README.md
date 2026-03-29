@@ -111,33 +111,48 @@ adk api_server --log_level DEBUG
 **3. Run the Streamlit App**
 
 In a second terminal, navigate to the project's root directory and run the Plotly Dash:
-```
-python apps/lineage_app.py
-```
+## 🌐 Next-Generation Platform (Cloud Native)
 
-This will open a new tab in your browser with the custom chat interface.
-
-## Lineage Nexus Web Platform
-
-We are currently building a fully-hosted version of Lineage Nexus at [https://lineage.nexus](https://lineage.nexus). This version features a modern React-based frontend and a state-of-the-art "Modern Heritage" design system.
+Lineage Nexus is transitioning from a local-first **ADK tool** to a fully hosted web platform at **[https://lineage.nexus](https://lineage.nexus)**.
 
 ### Features
-*   **Archival Agent**: Orchestrates research across Dutch national and regional archives.
-*   **WikiTree Integration**: Generates professional profiles and biographies.
-*   **Local Security**: Uses a "Bring-Your-Own-Key" model, storing user API keys only in the browser's local storage.
+- **Modern Heritage Design**: A premium research experience with high-fidelity "Parchment & Slate" aesthetics.
+- **Unified Research Orchestrator**: Real-time agentic loop with Gemini 2.0, providing tool-calling feedback in the UI.
+- **Archival Intelligence**: Specialist access to Dutch National Archives (OpenArchieven).
+- **Session Persistence**: Full research persistence via browser local storage.
 
-### Development (Local)
+### Technology Stack
+- **Frontend**: React 19 + Vite (modern hooks and routing).
+- **Backend**: FastAPI + Gemini 2.0 SDK (stateful SSE streaming).
+- **Styling**: Tailwind CSS + Custom Design System.
 
-To run the web frontend locally:
-1. Navigate to `apps/web-frontend`.
-2. Install dependencies: `pnpm install`
-3. Run the dev server: `pnpm dev`
+---
 
-## Accessing Lineage Nexus publicly through the web (Legacy ADK)
+## 🛠️ Development
 
-The legacy ADK implementation is not publicly available on the web. It must be hosted on your own machine by following the instructions above. This is due to the potential for abuse of a public Gemini token, the costs involved with providing it for general queries, and overloading the APIs accessed for research.
+### Web Frontend
+To run the modern workbench locally:
+```bash
+cd apps/web-frontend
+pnpm install
+pnpm dev
+```
 
-However, the next-generation platform is being deployed at **[https://lineage.nexus](https://lineage.nexus)** using Google Cloud Run and Docker.
+### Cloud Backend
+To run the FastAPI research server:
+```bash
+cd apps/cloud-backend
+# Set up a virtual env and install requirements
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
+```
+
+---
+
+## 🪵 Legacy ADK Implementation (Deprecated)
+The project began as an **Agent Development Kit (ADK)** research toolkit. To run the legacy CLI and Dash interfaces, see the instructions below.
 
 ## License
 

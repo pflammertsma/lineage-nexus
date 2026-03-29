@@ -58,7 +58,7 @@ const ChatInput = ({ onSearch, isLoading, status }) => {
                 <div className="h-4 w-[1px] bg-border/50 mx-1"></div>
                 <button 
                   type="button" 
-                  onClick={() => handleActionClick("Use the formatter agent to format a biography that includes as much relevant details about the profile we've been talking about, including references and only links to known profiles.")}
+                  onClick={() => handleActionClick("Use the formatter agent to format a biography that includes as much relevant details about the profile we've been talking about, including references and only links to known profiles. Provide the final biography in a code block with language 'wiki' so it can be easily copied to WikiTree.")}
                   className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
                 >
                   <FileText size={14} />

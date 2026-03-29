@@ -77,7 +77,7 @@ class ResearchOrchestrator:
             function_calls = [p.function_call for p in response.candidates[0].content.parts if p.function_call]
             
             if not function_calls:
-                print(f"[{get_ts()}] DEBUG: Received final response.")
+                print(f"[{get_ts()}] DEBUG: Received final response. Text: {response.text}")
                 yield {
                     "response": response.text or "",
                     "usage": response.usage_metadata.model_dump() if response.usage_metadata else {}

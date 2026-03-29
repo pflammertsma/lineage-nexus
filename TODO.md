@@ -1,22 +1,23 @@
-# TODOs
+# Lineage Nexus Development Roadmap
 
-Instructions:
+## 🎯 Current Priorities (Next Session)
+- [ ] **WikiTree Integration (Phase 2)**: Port the legacy `WikiTreeProfileAgent` tools to the unified cloud backend.
+- [ ] **Holocaust Records**: Implement the `HolocaustAgent` toolset (ITS/Arolsen Archives, USHMM) to support deeper historical research.
+- [ ] **Authentication**: Transition from simulated login to real **Firebase Auth** (Identity Platform).
+- [ ] **Cloud Persistence**: Migrate `localStorage` sessions to **Firestore** to enable cross-device research syncing.
+- [ ] **Wikitext Wizard**: refine the 'Biography' output to include specific WikiTree citation templates (e.g., `<ref>` tags).
 
-- Update AFTER finishing a task. Always read the file first as it may have changed in the meantime. Then mark the task as completed, providing the completion date in parentheses.
-- ONLY focus on one task at a time, asking for feedback before proceeding with another. NEVER attempt to work through the entire list.
-
-## 🚀 Active Tasks
-
-- [ ] **Functional Migration**: Replace the Python ADK framework with a bespoke, stateless integration using the Gemini API directly (`google-genai`) to ensure total ownership and Bring-Your-Own-Key compatibility. Use a recent model, depending on the application needs: `gemini-flash-lite-latest`, `gemini-flash-latest` or `gemini-pro-latest`.
-  - [x] **1. Architecture & Scaffold:** Scaffolded Python FastAPI application in `apps/cloud-backend`. (2026-03-28)
-  - [x] **2. API Integration:** Implemented `X-Gemini-API-Key` header handling and dynamic client initialization in `main.py`. (2026-03-28)
-  - [x] **3. Tool Refactoring:** Ported OpenArchieven and WikiTree core logic to standalone async functions in `apps/cloud-backend/tools/`. (2026-03-28)
-  - [x] **4. Orchestration:** Developed `orchestrator.py` which manages LLM calls with automated function calling for archival research. (2026-03-28)
-  - [x] **5. Containerization:** Created Dockerfile for API with Cloud Run support. (2026-03-28)
-
+## ✅ Completed Milestones
+- [x] **"Modern Heritage" Design**: implemented the parchment/slate aesthetic across the entire React workbench.
+- [x] **Real-time Research Logs**: hooked up SSE streaming so the agent's internal tool-calling turns appear live in the UI.
+- [x] **Unified Orchestrator**: Migrated from local ADK agents to a cloud-native FastAPI logic with Gemini 2.0 Flash/Pro support.
+- [x] **Branding & Identity**: replaced "Orchestrator" with **Lineage Nexus** and established the branching network theme.
+- [x] **Smart Scroll & UX**: implemented auto-scrolling, gradient masking, and document-style report layouts.
+- [x] **Session Persistence (L1)**: implemented robust `localStorage` for messages and session history.
+- [x] **Automated Actions**: ported Researcher, Formatter, and Profile Fetch prompts to quick-action buttons.
+- [x] **Functional Migration**: Replaced the Python ADK framework with a bespoke, stateless integration using the Gemini API directly. (2026-03-28)
 - [x] **Search Implementation**: Wired up the "Hero" search input in the Vite frontend to trigger actual archival queries via the new FastAPI backend. (2026-03-28)
 
-- [ ] **UI/UX Refinement**: Continue polishing the "Modern Heritage" design, focusing on header responsiveness and better interactive feedback.
 - [ ] **Deployment**: Prepare the `Dockerfile` and Cloud Run configurations for the final rollout to [lineage.nexus](https://lineage.nexus).
 
 ## ✅ Completed Tasks

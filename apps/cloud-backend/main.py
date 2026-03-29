@@ -15,7 +15,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     message: str
     history: List[ChatMessage] = []
-    model: str = "gemini-flash-latest"
+    model: str = "gemini-2.0-flash"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

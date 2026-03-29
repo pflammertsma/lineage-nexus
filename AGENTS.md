@@ -13,14 +13,17 @@ The current system is an **ADK Multi-Agent System** designed for local execution
 - **Framework**: Built using [Google's ADK](https://google.github.io/adk-docs/).
 - **Interfaces**: Accessible via `adk web` (default) or `python apps/lineage_app.py` (Streamlit).
 
-## 🚀 Next-Generation Web Platform (Fully Hosted)
+## 🧠 Agent Architecture (Cloud Native)
 
-We are currently building the next evolution of Lineage Nexus:
-- **Frontend**: A modern **React** application (Vite-based) located in `apps/web-frontend`.
-  - **Design System**: "Modern Heritage" featuring Parchment/Slate tones and grid-based precision.
-  - **Shared UI**: Centralized `index.css` utility system for consistent spacing and dimensions.
-- **Hosting**: Deployed via **Docker** to **Google Cloud Run** at [lineage.nexus](https://lineage.nexus).
-- **Architecture**:
-  - **Stateless Agents**: Migrating ADK logic to a cloud-hosted environment.
-  - **Security**: "Bring-Your-Own-Key" model using browser local storage for user AI keys.
-  - **Aesthetic**: Premium researcher experience with refined typography and professional layout.
+The next-generation platform utilizes a **Unified Research Orchestrator** powered by Gemini 2.0. While the legacy ADK version used distinct file-based agents, the new cloud-native version uses **Dynamic Role Delegation**:
+
+- **Unified Intelligence**: A single `ResearchOrchestrator` handles the entire research loop, maintaining deep context across multiple tool-calling turns.
+- **Prompt-Based Specialization**: Action buttons in the UI (Research, Biography, Fetch) inject specialized instructions that steer the model into specific personas (Researcher vs. Formatter).
+- **Function Calling**: The orchestrator has native access to the `OpenArchieven` toolset, allowing it to perform autonomous searches, analyze results, and reformulate queries in real-time.
+- **SSE Streaming**: Progress is streamed via Server-Sent Events (SSE), providing a live "Research Log" of the agent's internal reasoning and tool execution.
+
+### Next Steps for Multi-Agency
+As we move towards production, we will evolve this into a true multi-agent system by:
+1.  **Tool Partitioning**: Moving WikiTree and Archival tools into isolated "Skill" sets.
+2.  **Stateful Memory**: Transitioning from `localStorage` to a centralized session database.
+3.  **Authentication**: Integrating Firebase Auth to manage cross-device research profiles.
