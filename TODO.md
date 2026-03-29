@@ -1,33 +1,27 @@
 # Lineage Nexus Development Roadmap
 
 ## 🎯 Current Priorities (Next Session)
-- [ ] **WikiTree Integration (Phase 2)**: Port the legacy `WikiTreeProfileAgent` tools to the unified cloud backend.
-- [ ] **Holocaust Records**: Implement the `HolocaustAgent` toolset (ITS/Arolsen Archives, USHMM) to support deeper historical research.
-- [ ] **Authentication**: Transition from simulated login to real **Firebase Auth** (Identity Platform).
-- [ ] **Cloud Persistence**: Migrate `localStorage` sessions to **Firestore** to enable cross-device research syncing.
-- [ ] **Wikitext Wizard**: refine the 'Biography' output to include specific WikiTree citation templates (e.g., `<ref>` tags).
+- [ ] **Chat title**: generate a title for the chat based on the current conversation and update the chat title periodically in the UI.
+- [ ] **Relationship graph**: generate a relationship graph component to show the relationships between the people in the conversation.
+- [ ] **Firebase Auth Integration**: transition from simulated login to real **Firebase Identity Platform**.
+- [ ] **Cloud Persistence (L2)**: migrate `localStorage` to **Firestore** for Cross-Device Session Sync.
+- [ ] **Holocaust Records**: implement the `HolocaustAgent` toolset (ITS/Arolsen Archives, USHMM).
+- [ ] **Wikitext Wizard**: refine 'Biography' output to include specific WikiTree citation templates (e.g., `<ref>` tags).
+- [ ] **Dynamic Resource Tuning**: add a UI slider to adjust `MAX_SEARCH_PER_TURN` for advanced research sessions.
+- [ ] **Auto-Focus Logic**: improve the `SYSTEM_INSTRUCTION` to strictly prioritize reading existing WikiTree context before any archival queries.
 
 ## ✅ Completed Milestones
-- [x] **"Modern Heritage" Design**: implemented the parchment/slate aesthetic across the entire React workbench.
-- [x] **Real-time Research Logs**: hooked up SSE streaming so the agent's internal tool-calling turns appear live in the UI.
-- [x] **Unified Orchestrator**: Migrated from local ADK agents to a cloud-native FastAPI logic with Gemini Flash/Pro support.
-- [x] **Branding & Identity**: replaced "Orchestrator" with **Lineage Nexus** and established the branching network theme.
-- [x] **Smart Scroll & UX**: implemented auto-scrolling, gradient masking, and document-style report layouts.
-- [x] **Session Persistence (L1)**: implemented robust `localStorage` for messages and session history.
-- [x] **Automated Actions**: ported Researcher, Formatter, and Profile Fetch prompts to quick-action buttons.
-- [x] **Functional Migration**: Replaced the Python ADK framework with a bespoke, stateless integration using the Gemini API directly. (2026-03-28)
-- [x] **Search Implementation**: Wired up the "Hero" search input in the Vite frontend to trigger actual archival queries via the new FastAPI backend. (2026-03-28)
-
-- [ ] **Deployment**: Prepare the `Dockerfile` and Cloud Run configurations for the final rollout to [lineage.nexus](https://lineage.nexus).
-
-## ✅ Completed Tasks
-
-- [x] **Project Rebranding**: Renamed project to Lineage Nexus and updated all docs. (2026-03-28)
-- [x] **Web Frontend Initialization**: Scaffolded React/Vite app with pnpm. (2026-03-28)
-- [x] **Design System Implementation**: Built "Modern Heritage" utility system in `index.css`. (2026-03-28)
-- [x] **Core Components**: Implemented Header, Hero, FeatureGrid, and ApiKeyModal with unified styling. (2026-03-28)
-- [x] **Asset Integration**: Moved logo to standardized asset path and refined brand presence. (2026-03-28)
-- [x] **TODO File Creation**: (2026-03-28)
+- [x] **Disciplined Orchestrator**: implemented strict turn limits, search de-duplication, and "BCE Hallucination" guardrails.
+- [x] **Persistent Research Logs**: transformed transient "thoughts" into readable artifacts using SSE buffer retention.
+- [x] **Interrupt-Driven UI**: added a "Stop Agent" kill-switch using `AbortController` and pulse-animated input states.
+- [x] **GFM Table Support**: integrated `remark-gfm` to ensure complex genealogical family structures are professional and legible.
+- [x] **WikiTree API Compliance**: satisfied the mandatory `appId` requirement and improved communicative status reporting.
+- [x] **Session Management**: fully implemented session history deletion and state synchronization.
+- [x] **UX & Legibility**: resolved high-contrast legibility issues for links in user bubbles and error messages.
+- [x] **"Modern Heritage" Design**: scaffolded React/Vite app with parchment/slate aesthetic.
+- [x] **Real-time Research Logs**: hooked up SSE streaming for live tool-calling turns.
+- [x] **Branding & Identity**: established the **Lineage Nexus** branching network theme and official logo assets.
+- [x] **Smart Scroll & UX**: implemented auto-scrolling, gradient masking, and document-style reports.
 
 # Appendix, ignore and do not remove
 
