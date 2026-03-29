@@ -12,6 +12,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [configOpen, setConfigOpen] = useState(false);
+  const [pendingQuery, setPendingQuery] = useState(null);
 
   const notify = (msg, type = 'info') => {
     const id = Math.random().toString(36).substr(2, 9);
@@ -29,7 +30,8 @@ function App() {
 
     const apiKey = localStorage.getItem('google_api_key');
     if (!apiKey) {
-      notify("Please configure your Google AI Studio API Key first.", "error");
+      setPendingQuery(query);
+      setConfigOpen(true);
       setLoading(false);
       return;
     }
@@ -49,7 +51,7 @@ function App() {
       });
 
       if (!response.ok) throw new Error(`Backend error: ${response.statusText}`);
-      
+
       const data = await response.json();
       setMessages(prev => [...prev, { role: 'model', content: data.response }]);
     } catch (error) {
@@ -60,17 +62,24 @@ function App() {
     }
   };
 
+  const handleKeySaveSuccess = () => {
+    if (pendingQuery) {
+      handleSearch(pendingQuery);
+      setPendingQuery(null);
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col">
       <Header />
       <div className="toast-container">
         {notifications.map(n => (
-          <Notification 
-            key={n.id} 
-            id={n.id} 
-            message={n.msg} 
-            type={n.type} 
-            onClose={removeNotification} 
+          <Notification
+            key={n.id}
+            id={n.id}
+            message={n.msg}
+            type={n.type}
+            onClose={removeNotification}
           />
         ))}
       </div>
@@ -78,7 +87,13 @@ function App() {
         <Hero onSearch={handleSearch} onConfig={() => setConfigOpen(true)} />
         <ChatInterface messages={messages} isLoading={loading} />
         <FeatureGrid />
-        {configOpen && <ApiKeyModal notify={notify} onClose={() => setConfigOpen(false)} />}
+        {configOpen && (
+          <ApiKeyModal
+            notify={notify}
+            onClose={() => setConfigOpen(false)}
+            onSave={handleKeySaveSuccess}
+          />
+        )}
       </main>
       <footer className="py-16 bg-surface section-divider">
         <div className="container">
