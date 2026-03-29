@@ -1,6 +1,70 @@
 import React from 'react';
-import { User, Network } from 'lucide-react';
+import { User, Network, Check, Copy } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+
+const CodeBlock = ({ node, inline, className, children, ...props }) => {
+  const [copied, setCopied] = React.useState(false);
+  const match = /language-(\w+)/.exec(className || '');
+  const language = match ? match[1] : '';
+  const isWikitext = language === 'wiki' || language === 'wikitext';
+
+  // Render block code
+  if (!inline && match) {
+    const textToCopy = String(children).replace(/\n$/, '');
+    return (
+      <div className="relative group rounded-xl border border-border/50 bg-card overflow-hidden my-6 shadow-sm">
+        <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/50">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-secondary/60">
+            {isWikitext ? 'Wikitext' : language}
+          </span>
+          <button
+            onClick={() => {
+              navigator.clipboard.writeText(textToCopy);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-secondary/40 hover:text-accent transition-colors focus:outline-none"
+            title="Copy code"
+          >
+            {copied ? (
+              <>
+                <Check size={14} className="text-green-500" />
+                <span className="text-green-500">Copied</span>
+              </>
+            ) : (
+              <>
+                <Copy size={14} />
+                <span>Copy</span>
+              </>
+            )}
+          </button>
+        </div>
+        <div className="p-4 overflow-x-auto">
+          <pre className="text-xs font-mono text-primary/80 leading-relaxed whitespace-pre-wrap">
+            <code className={className} {...props}>
+              {children}
+            </code>
+          </pre>
+        </div>
+      </div>
+    );
+  }
+
+  // Render inline code or block code without language
+  if (!inline) {
+    return (
+      <pre className="text-xs font-mono bg-card border border-border/50 rounded-xl p-4 overflow-x-auto whitespace-pre-wrap leading-relaxed my-4 text-primary/80">
+        <code className={className} {...props}>{children}</code>
+      </pre>
+    );
+  }
+
+  return (
+    <code className="bg-muted px-1.5 py-0.5 rounded-md text-xs font-mono text-primary/90 border border-border/50" {...props}>
+      {children}
+    </code>
+  );
+};
 
 const ChatInterface = ({ messages, isLoading, status }) => {
   if (messages.length === 0) return null;
@@ -30,7 +94,26 @@ const ChatInterface = ({ messages, isLoading, status }) => {
                   }`}
               >
                 <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-primary/95'} space-y-4 markdown-content`}>
-                  <ReactMarkdown>
+                  <ReactMarkdown
+                    components={{
+                      code: CodeBlock,
+                      h1: ({node, ...props}) => <h1 className="text-lg font-bold text-primary mb-4 mt-8" {...props} />,
+                      h2: ({node, ...props}) => <h2 className="text-base font-bold text-primary mb-3 mt-6" {...props} />,
+                      h3: ({node, ...props}) => <h3 className="text-sm font-bold text-primary mb-2 mt-4" {...props} />,
+                      strong: ({node, ...props}) => <strong className="font-bold text-primary/90" {...props} />,
+                      a: ({node, ...props}) => (
+                        <a 
+                          className="text-accent underline underline-offset-4 hover:opacity-80 transition-opacity" 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          {...props} 
+                        />
+                      ),
+                      ul: ({node, ...props}) => <ul className="list-disc pl-5 space-y-2 my-4" {...props} />,
+                      ol: ({node, ...props}) => <ol className="list-decimal pl-5 space-y-2 my-4" {...props} />,
+                      li: ({node, ...props}) => <li className="pl-1" {...props} />,
+                    }}
+                  >
                     {msg.content || ""}
                   </ReactMarkdown>
                 </div>
