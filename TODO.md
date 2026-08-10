@@ -1,12 +1,75 @@
 # Lineage Nexus Development Roadmap
 
 ## 🎯 Current Priorities (Next Session)
-- [ ] **Activate sync**: create the Firebase project, enable the Google auth provider, fill `apps/web-frontend/.env` from `.env.example`, and `firebase deploy --only firestore:rules`. The code is in place but has never run against a live project — see "Unverified" below.
+- [ ] **Deploy for the first time**: see the Deployment section below. Nothing is released yet and the frontend has no hosting target at all.
 - [ ] **Relationship graph**: generate a relationship graph component to show the relationships between the people in the conversation.
 - [ ] **Holocaust Records**: implement the `HolocaustAgent` toolset (ITS/Arolsen Archives, USHMM). Legacy prompts and API clients are in `adk-app/agent/holocaust.py` and `adk-app/api/` for reference.
 - [ ] **Wikitext Wizard**: refine 'Biography' output to include specific WikiTree citation templates (e.g., `<ref>` tags).
 - [ ] **Dynamic Resource Tuning**: add a UI slider to adjust `MAX_SEARCH_PER_TURN` for advanced research sessions.
 - [ ] **Auto-Focus Logic**: improve the `SYSTEM_INSTRUCTION` to strictly prioritize reading existing WikiTree context before any archival queries.
+
+## 🚀 Deployment
+
+Neither app has ever been deployed. Substitute your own values for every
+`<placeholder>` below — nothing here is tied to a particular account or project.
+
+### Prerequisites
+- One Google Cloud project for the app, with **Firebase added to that same project**, so Cloud Run, Auth and Firestore share a project and billing account.
+- `gcloud` and `firebase` CLIs installed and authenticated.
+- ⚠️ **Check the active project first.** `pnpm deploy` targets whatever `gcloud config get-value project` returns and will silently deploy into an unrelated project:
+  ```bash
+  gcloud config set project <your-gcp-project-id>
+  ```
+
+### 1. Firebase console (one-time, manual)
+- [ ] Add Firebase to the GCP project.
+- [ ] **Authentication → Sign-in method**: enable the **Google** provider.
+- [ ] **Authentication → Settings → Authorized domains**: add the production domain (and any preview domains). Sign-in fails on unlisted domains.
+- [ ] **Firestore**: create the database, in a region close to users.
+
+### 2. Backend → Cloud Run
+```bash
+gcloud config set project <your-gcp-project-id>
+pnpm deploy
+```
+- [ ] First run prompts to enable the Cloud Run and Cloud Build APIs.
+- [ ] Note the service URL it prints — it becomes `VITE_API_BASE_URL`.
+- [ ] Lock down CORS (it defaults to `*`) and raise the request timeout, because SSE research turns are long-lived:
+  ```bash
+  gcloud run services update lineage-nexus-api --region <region> \
+    --set-env-vars ALLOWED_ORIGINS=https://<your-domain> --timeout=900
+  ```
+  The default 300s timeout is not enough: a turn can span several paced archive
+  searches (~15s each) plus quota waits (~47s each), and the connection must stay
+  open throughout or the stream is cut mid-research.
+- No secrets are needed on the service — BYOK means the Gemini key arrives per-request from the browser.
+
+### 3. Frontend config
+- [ ] Copy `apps/web-frontend/.env.example` to `.env` and fill in `VITE_API_BASE_URL` (the Cloud Run URL) plus the `VITE_FIREBASE_*` values from **Project settings → Your apps**.
+- These are compiled into the bundle at build time, so changing them requires a rebuild. That is expected: Firebase web config is a public client identifier, and `firestore.rules` is what actually enforces access.
+
+### 4. Firestore rules
+```bash
+firebase deploy --only firestore:rules
+```
+- [ ] Required. Until this runs, default rules deny every read and write, and sync fails silently.
+
+### 5. Frontend hosting — still to be scaffolded
+- [ ] No `firebase.json` or `.firebaserc` exists yet; this is the main outstanding gap. Firebase Hosting is the natural fit (same project, custom domain, SPA rewrites).
+- [ ] Needs a hosting config pointing at `apps/web-frontend/dist`, a rewrite of all routes to `/index.html` (the app uses client-side routing, so deep links 404 without it), and a `deploy:web` script.
+
+### 6. Post-deploy verification
+These paths have never executed — see "Unverified" below.
+- [ ] Google sign-in, end to end.
+- [ ] Consent dialog appears once per account; declining leaves sync off.
+- [ ] Two-device sync: a session created on one device appears on the other.
+- [ ] Deleting one conversation removes it on both devices.
+- [ ] "Delete everything" empties the Firestore subcollection.
+- [ ] SSE streaming survives Cloud Run — verify no proxy buffering and no mid-turn disconnects.
+
+### Operational caveats
+- The backend keeps **in-process** state only: the OpenArchieven LRU cache and the global rate-limit clock. With more than one Cloud Run instance these are per-instance, so the archive pacing is no longer globally correct and cache hits drop. Consider `--max-instances=1` initially, or move both to shared storage.
+- Cold starts discard those caches entirely.
 
 ## ⚠️ Unverified
 - **The Firebase path has never executed.** Google sign-in, the Firestore mirror, `onSnapshot` merges and cloud deletion are all written but untested — there is no project to run them against. What *is* verified: the merge rules (10 unit tests), and that the app runs correctly local-only with Firebase unconfigured. Exercise sign-in, a two-device sync, and delete-all against a real project before trusting it.
