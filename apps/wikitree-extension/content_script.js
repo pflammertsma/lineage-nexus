@@ -281,8 +281,8 @@
     }
 
     let vitalsCount = 0;
-    if (parsed.vitals && Object.keys(parsed.vitals).length > 0) {
-      vitalsCount = fillVitalsFields(parsed.vitals);
+    if (parsed.vitals || parsed.rawWikitext) {
+      vitalsCount = fillVitalsFields(parsed.vitals || {}, parsed.rawWikitext || '');
     }
 
     const textarea = document.querySelector('#wpTextbox1') ||
@@ -368,7 +368,7 @@
   };
 
   // Helper to fill vitals fields
-  const fillVitalsFields = (vitals) => {
+  const fillVitalsFields = (vitals = {}, rawWikitext = '') => {
     let filledCount = 0;
 
     const fieldMap = {
@@ -425,7 +425,178 @@
       }
     }
 
+    // Language selection: Set to Dutch if Dutch individual
+    const isDutch = vitals.isDutch || (rawWikitext && /Netherlands Sticker|Nederlanders|Nederland|Friesland|Groningen|Drenthe|Overijssel|Gelderland|Utrecht|Noord-Holland|Zuid-Holland|Zeeland|Noord-Brabant|Limburg|Flevoland/i.test(rawWikitext + ' ' + (vitals.birthLocation || '')));
+    if (isDutch) {
+      const langSelect = document.querySelector('#mLanguage') || document.querySelector('select[name="mLanguage"]');
+      if (langSelect) {
+        for (let i = 0; i < langSelect.options.length; i++) {
+          const opt = langSelect.options[i];
+          const text = opt.text.toLowerCase();
+          const val = opt.value.toLowerCase();
+          if (text.includes('dutch') || text.includes('nederlands') || val === 'nl' || val === 'dutch') {
+            langSelect.selectedIndex = i;
+            langSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            filledCount++;
+            break;
+          }
+        }
+      }
+    }
+
+    // Died Young: Tick "No spouses" and "No children" if {{Died Young}} is present
+    const isDiedYoung = vitals.diedYoung || (rawWikitext && /\{\{\s*Died\s+Young/i.test(rawWikitext));
+    if (isDiedYoung) {
+      const noSpousesCheckbox = document.querySelector('#mNoSpouses') ||
+                               document.querySelector('input[name="mNoSpouses"]') ||
+                               document.querySelector('input[id*="NoSpouse"]');
+      if (noSpousesCheckbox && !noSpousesCheckbox.checked) {
+        noSpousesCheckbox.checked = true;
+        noSpousesCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+        noSpousesCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
+        filledCount++;
+      }
+
+      const noChildrenCheckbox = document.querySelector('#mNoChildren') ||
+                                document.querySelector('input[name="mNoChildren"]') ||
+                                document.querySelector('input[id*="NoChildren"]');
+      if (noChildrenCheckbox && !noChildrenCheckbox.checked) {
+        noChildrenCheckbox.checked = true;
+        noChildrenCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
+        noChildrenCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
+        filledCount++;
+      }
+    }
+
+    // Auto-select Date & Location Certainty Radio Buttons
+    if (vitals.birthDate) setDateRadioStatus('Birth', vitals.birthDate);
+    if (vitals.birthLocation) setLocationRadioStatus('Birth', vitals.birthLocation);
+    if (vitals.deathDate) setDateRadioStatus('Death', vitals.deathDate);
+    if (vitals.deathLocation) setLocationRadioStatus('Death', vitals.deathLocation);
+    if (vitals.marriageDate) setDateRadioStatus('Marriage', vitals.marriageDate);
+    if (vitals.marriageEndDate) setDateRadioStatus('MarriageEnd', vitals.marriageEndDate);
+    if (vitals.marriageLocation) setLocationRadioStatus('Marriage', vitals.marriageLocation);
+
     return filledCount;
+  };
+
+  // Helper to select Date Status Radio (certain/exact vs guess/uncertain vs before vs after)
+  const setDateRadioStatus = (prefix, dateVal) => {
+    if (!dateVal) return;
+    const cleanDate = dateVal.trim();
+    if (!cleanDate) return;
+
+    const nameSelectors = [
+      `input[name="${prefix}DateStatus"]`,
+      `input[name="${prefix}Date_status"]`,
+      `input[name="m${prefix}DateStatus"]`,
+      `input[name="m${prefix}Date_status"]`
+    ];
+
+    let radios = [];
+    for (const sel of nameSelectors) {
+      radios = Array.from(document.querySelectorAll(sel));
+      if (radios.length > 0) break;
+    }
+
+    if (radios.length === 0) {
+      const dateInput = document.querySelector(`#${prefix}Date`) || document.querySelector(`#m${prefix}Date`);
+      if (dateInput) {
+        const container = dateInput.closest('.form-group, tr, div, td, p') || dateInput.parentElement;
+        if (container) {
+          radios = Array.from(container.querySelectorAll('input[type="radio"]'));
+        }
+      }
+    }
+
+    if (radios.length === 0) return;
+
+    let targetType = 'exact';
+    if (/about|abt|est|estimated|circa|c\.|~/i.test(cleanDate)) {
+      targetType = 'estimate';
+    } else if (/before|bef/i.test(cleanDate)) {
+      targetType = 'before';
+    } else if (/after|aft/i.test(cleanDate)) {
+      targetType = 'after';
+    }
+
+    for (const radio of radios) {
+      const val = (radio.value || '').toLowerCase();
+      const id = (radio.id || '').toLowerCase();
+      const labelText = (radio.labels && radio.labels[0] ? radio.labels[0].innerText : radio.parentElement?.innerText || '').toLowerCase();
+
+      let isMatch = false;
+      if (targetType === 'exact') {
+        isMatch = val === 'exact' || val === 'certain' || val === '2' || id.includes('exact') || id.includes('certain') || labelText.includes('exact') || labelText.includes('certain');
+      } else if (targetType === 'estimate') {
+        isMatch = val === 'guess' || val === 'estimate' || val === 'estimated' || val === 'uncertain' || val === '1' || id.includes('guess') || id.includes('estimate') || labelText.includes('estimate') || labelText.includes('uncertain');
+      } else if (targetType === 'before') {
+        isMatch = val === 'before' || val === '3' || id.includes('before') || labelText.includes('before');
+      } else if (targetType === 'after') {
+        isMatch = val === 'after' || val === '4' || id.includes('after') || labelText.includes('after');
+      }
+
+      if (isMatch) {
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+        radio.dispatchEvent(new Event('click', { bubbles: true }));
+        break;
+      }
+    }
+  };
+
+  // Helper to select Location Status Radio (certain vs uncertain)
+  const setLocationRadioStatus = (prefix, locationVal) => {
+    if (!locationVal) return;
+    const cleanLoc = locationVal.trim();
+    if (!cleanLoc) return;
+
+    const nameSelectors = [
+      `input[name="${prefix}LocationStatus"]`,
+      `input[name="${prefix}Location_status"]`,
+      `input[name="m${prefix}LocationStatus"]`,
+      `input[name="m${prefix}Location_status"]`
+    ];
+
+    let radios = [];
+    for (const sel of nameSelectors) {
+      radios = Array.from(document.querySelectorAll(sel));
+      if (radios.length > 0) break;
+    }
+
+    if (radios.length === 0) {
+      const locInput = document.querySelector(`#${prefix}Location`) || document.querySelector(`#m${prefix}Location`);
+      if (locInput) {
+        const container = locInput.closest('.form-group, tr, div, td, p') || locInput.parentElement;
+        if (container) {
+          radios = Array.from(container.querySelectorAll('input[type="radio"]'));
+        }
+      }
+    }
+
+    if (radios.length === 0) return;
+
+    const targetCertainty = /uncertain|\?/i.test(cleanLoc) ? 'uncertain' : 'certain';
+
+    for (const radio of radios) {
+      const val = (radio.value || '').toLowerCase();
+      const id = (radio.id || '').toLowerCase();
+      const labelText = (radio.labels && radio.labels[0] ? radio.labels[0].innerText : radio.parentElement?.innerText || '').toLowerCase();
+
+      let isMatch = false;
+      if (targetCertainty === 'certain') {
+        isMatch = val === 'certain' || val === '2' || id.includes('certain') || (labelText.includes('certain') && !labelText.includes('uncertain'));
+      } else {
+        isMatch = val === 'uncertain' || val === '1' || id.includes('uncertain') || labelText.includes('uncertain');
+      }
+
+      if (isMatch) {
+        radio.checked = true;
+        radio.dispatchEvent(new Event('change', { bubbles: true }));
+        radio.dispatchEvent(new Event('click', { bubbles: true }));
+        break;
+      }
+    }
   };
 
   // Run injection safely after DOMContentLoaded if loading
