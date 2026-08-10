@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Network, Check, Copy, History, Sparkles } from 'lucide-react';
+import { User, Network, Check, Copy, History, Sparkles, AlertCircle, RotateCcw, ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -184,6 +184,92 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
   );
 };
 
+const ErrorMessageCard = ({ msg, onRetry, lastUserQuery }) => {
+  const content = msg.content || '';
+  
+  let mainSummary = content;
+  let researchLogsText = '';
+  let technicalDetailText = '';
+
+  if (content.includes('Interrupted Research Log:')) {
+    const parts = content.split(/Interrupted Research Log:|Attempted Steps:/i);
+    mainSummary = parts[0].trim();
+    researchLogsText = parts[1] ? parts[1].trim() : '';
+  } else if (content.includes('Attempted Steps:')) {
+    const parts = content.split('Attempted Steps:');
+    mainSummary = parts[0].trim();
+    researchLogsText = parts[1] ? parts[1].trim() : '';
+  }
+
+  let userFriendlyText = mainSummary;
+  if (mainSummary.includes('503') || mainSummary.includes('UNAVAILABLE')) {
+    userFriendlyText = 'The model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again in a few moments.';
+    technicalDetailText = mainSummary;
+  } else if (mainSummary.includes('429') || mainSummary.includes('RESOURCE_EXHAUSTED')) {
+    userFriendlyText = 'Gemini API Quota Exceeded. You have reached the rate limit for free-tier requests. Please wait ~1 minute before retrying.';
+    technicalDetailText = mainSummary;
+  }
+
+  return (
+    <div className="p-5 bg-red-950/20 border border-red-500/25 rounded-xl shadow-lg animate-in fade-in slide-in-from-bottom-2">
+      <div className="flex items-start gap-3.5">
+        <div className="w-8 h-8 rounded-lg bg-red-500/15 border border-red-500/30 flex items-center justify-center shrink-0 mt-0.5">
+          <AlertCircle size={18} className="text-red-400" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-3 mb-1.5">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-red-300">
+              Research Interrupted
+            </h4>
+            {msg.retry && (
+              <button
+                onClick={() => onRetry && lastUserQuery && onRetry(lastUserQuery)}
+                className="flex items-center gap-1.5 px-3 py-1 bg-red-600/80 hover:bg-red-600 text-white rounded-lg text-xs font-semibold shadow-sm transition-all cursor-pointer hover:shadow-red-900/30"
+              >
+                <RotateCcw size={12} />
+                <span>Retry</span>
+              </button>
+            )}
+          </div>
+
+          <p className="text-sm text-red-100/90 leading-relaxed font-medium mb-3">
+            {userFriendlyText}
+          </p>
+
+          {(technicalDetailText || researchLogsText) && (
+            <details className="group mt-2 border border-red-500/20 rounded-lg bg-black/40 overflow-hidden">
+              <summary className="px-3 py-2 text-xs font-mono text-red-300/80 hover:text-red-200 cursor-pointer flex items-center justify-between select-none group-open:bg-red-950/40 border-b border-transparent group-open:border-red-500/20 transition-colors">
+                <span className="font-semibold">Show Technical Details & Debug Log</span>
+                <ChevronDown size={14} className="group-open:rotate-180 transition-transform text-red-400" />
+              </summary>
+              <div className="p-3 text-xs font-mono text-rose-200/70 space-y-3 max-h-60 overflow-y-auto">
+                {technicalDetailText && (
+                  <div>
+                    <div className="text-[10px] uppercase font-bold text-red-400/80 mb-1">Error Code / Payload</div>
+                    <pre className="p-2.5 bg-black/50 rounded border border-red-900/30 whitespace-pre-wrap break-all text-[11px] text-red-200/90">
+                      {technicalDetailText}
+                    </pre>
+                  </div>
+                )}
+                {researchLogsText && (
+                  <div>
+                    <div className="text-[10px] uppercase font-bold text-red-400/80 mb-1">Interrupted Research Steps</div>
+                    <div className="p-2.5 bg-black/50 rounded border border-red-900/30 text-[11px] markdown-content text-rose-200/90">
+                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {researchLogsText}
+                      </ReactMarkdown>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </details>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
   const [copiedIdx, setCopiedIdx] = useState(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
@@ -211,6 +297,8 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
     setVisibleCount((prev) => prev + PAGE_INCREMENT);
   };
 
+  const lastUserQuery = [...messages].reverse().find(m => m.role === 'user')?.content;
+
   return (
     <section className="bg-surface section-divider">
       <div className="container" style={{ maxWidth: '800px' }}>
@@ -235,28 +323,12 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
             const realIdx = hiddenCount + idx;
             if (msg.role === 'error') {
               return (
-                <div key={realIdx} className="flex flex-col items-center justify-center p-8 bg-red-500/5 border border-red-500/20 rounded-2xl animate-in fade-in slide-in-from-bottom-2">
-                  <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/30">
-                    <span className="text-red-400 font-bold text-xl">!</span>
-                  </div>
-                  <h3 className="text-rose-200/90 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Research Interrupted</h3>
-                  <div className="text-rose-100/80 text-sm text-center max-w-[550px] mb-6 leading-relaxed markdown-content">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                      {msg.content}
-                    </ReactMarkdown>
-                  </div>
-                  {msg.retry && (
-                    <button
-                      onClick={() => {
-                        const lastUser = [...messages].reverse().find(m => m.role === 'user');
-                        if (lastUser && onRetry) onRetry(lastUser.content);
-                      }}
-                      className="btn btn-primary bg-red-600 hover:bg-red-700 h-10 px-8 text-xs font-bold uppercase tracking-widest shadow-lg shadow-red-900/10 cursor-pointer"
-                    >
-                      Retry Search
-                    </button>
-                  )}
-                </div>
+                <ErrorMessageCard
+                  key={realIdx}
+                  msg={msg}
+                  onRetry={onRetry}
+                  lastUserQuery={lastUserQuery}
+                />
               );
             }
 
