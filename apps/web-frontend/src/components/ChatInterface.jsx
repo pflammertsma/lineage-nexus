@@ -1,7 +1,10 @@
-import React, { useState } from 'react';
-import { User, Network, Check, Copy } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Network, Check, Copy, History } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+
+const INITIAL_VISIBLE_COUNT = 15;
+const PAGE_INCREMENT = 15;
 
 const CodeBlock = ({ node, inline, className, children, ...props }) => {
   const [copied, setCopied] = useState(false);
@@ -72,6 +75,14 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
 
 const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
   const [copiedIdx, setCopiedIdx] = useState(null);
+  const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
+
+  // Auto-reset when messages array resets
+  useEffect(() => {
+    if (messages.length <= INITIAL_VISIBLE_COUNT) {
+      setVisibleCount(INITIAL_VISIBLE_COUNT);
+    }
+  }, [messages.length]);
 
   const handleCopy = (text, idx) => {
     navigator.clipboard.writeText(text);
@@ -81,14 +92,39 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
 
   if (messages.length === 0) return null;
 
+  const totalMessages = messages.length;
+  const hiddenCount = Math.max(0, totalMessages - visibleCount);
+  const displayedMessages = hiddenCount > 0 ? messages.slice(hiddenCount) : messages;
+
+  const handleLoadEarlier = () => {
+    setVisibleCount((prev) => prev + PAGE_INCREMENT);
+  };
+
   return (
     <section className="bg-surface section-divider">
       <div className="container" style={{ maxWidth: '800px' }}>
+        {/* Paginated Trimming: Load Earlier Messages Banner */}
+        {hiddenCount > 0 && (
+          <div className="flex justify-center mb-6">
+            <button
+              onClick={handleLoadEarlier}
+              className="flex items-center gap-2 px-4 py-2 bg-card border border-border/80 rounded-full text-xs font-semibold text-secondary/80 hover:text-primary hover:border-accent shadow-sm transition-all cursor-pointer group"
+            >
+              <History size={14} className="group-hover:rotate-[-45deg] transition-transform" />
+              <span>Load earlier messages</span>
+              <span className="bg-muted px-2 py-0.5 rounded-full text-[10px] font-mono text-secondary">
+                {hiddenCount} remaining
+              </span>
+            </button>
+          </div>
+        )}
+
         <div className="flex flex-col gap-8">
-          {messages.map((msg, idx) => {
+          {displayedMessages.map((msg, idx) => {
+            const realIdx = hiddenCount + idx;
             if (msg.role === 'error') {
               return (
-                <div key={idx} className="flex flex-col items-center justify-center p-8 bg-red-500/5 border border-red-500/20 rounded-2xl animate-in fade-in slide-in-from-bottom-2">
+                <div key={realIdx} className="flex flex-col items-center justify-center p-8 bg-red-500/5 border border-red-500/20 rounded-2xl animate-in fade-in slide-in-from-bottom-2">
                   <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/30">
                     <span className="text-red-400 font-bold text-xl">!</span>
                   </div>
@@ -115,7 +151,7 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
 
             return (
               <div
-                key={idx}
+                key={realIdx}
                 className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300 group`}
               >
                 <div className="w-full flex items-center justify-between mb-2 px-1 opacity-40 select-none">
@@ -130,12 +166,12 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
                   
                   {msg.role !== 'user' && (
                     <button 
-                      onClick={() => handleCopy(msg.content, idx)}
+                      onClick={() => handleCopy(msg.content, realIdx)}
                       className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5 hover:text-accent"
                     >
-                      {copiedIdx === idx ? <Check size={10} /> : <Copy size={10} />}
+                      {copiedIdx === realIdx ? <Check size={10} /> : <Copy size={10} />}
                       <span className="text-[9px] font-bold uppercase tracking-tighter">
-                        {copiedIdx === idx ? 'Copied' : 'Copy'}
+                        {copiedIdx === realIdx ? 'Copied' : 'Copy'}
                       </span>
                     </button>
                   )}
