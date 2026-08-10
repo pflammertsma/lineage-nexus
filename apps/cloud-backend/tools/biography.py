@@ -411,14 +411,17 @@ it, even if it's just to add sources.
 
 async def format_wikitree_biography(client, model_name, research_data, user_instructions=None):
     """Invokes a specialized sub-agent to format research data into a high-fidelity WikiTree biography."""
-    from tools.utils import report_status
+    from tools.utils import report_status, generate_with_quota_retry
     await report_status("Engaging specialized biography formatter agent...")
-    
+
     prompt = f"Format this research data into a WikiTree biography: {research_data}"
     if user_instructions:
         prompt += f"\n\n[USER SPECIFIC INSTRUCTIONS]\n{user_instructions}"
-        
-    response = await client.aio.models.generate_content(
+
+    # Worth waiting out a quota limit here: by this point the research is done
+    # and losing the turn would discard all of it.
+    response = await generate_with_quota_retry(
+        client,
         model=model_name,
         contents=[types.Content(role="user", parts=[types.Part.from_text(text=prompt)])],
         config=types.GenerateContentConfig(

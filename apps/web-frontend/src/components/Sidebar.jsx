@@ -1,6 +1,29 @@
 import { Plus, MessageSquare, Clock, Settings, User, Trash2 } from 'lucide-react';
 
-const Sidebar = ({ sessions, activeSessionId, onNewChat, onSelectSession, onDeleteSession, onOpenSettings }) => {
+const initialsFor = (name, email) => {
+  const source = (name || email || '').trim();
+  if (!source) return '·';
+  const parts = source.split(/[\s@.]+/).filter(Boolean);
+  return (parts.length > 1 ? parts[0][0] + parts[1][0] : source.slice(0, 2)).toUpperCase();
+};
+
+const Sidebar = ({
+  sessions,
+  activeSessionId,
+  onNewChat,
+  onSelectSession,
+  onDeleteSession,
+  onOpenSettings,
+  displayName,
+  email,
+  syncEnabled = false,
+  syncState = 'idle',
+}) => {
+  const initials = initialsFor(displayName, email);
+  const syncLabel = !syncEnabled
+    ? 'This device only'
+    : { syncing: 'Syncing…', synced: 'Synced', error: 'Sync error' }[syncState] || 'Sync on';
+
   return (
     <aside className="w-64 border-r border-border bg-surface flex flex-col h-screen sticky top-0">
       <div className="p-4 border-b border-border">
@@ -63,12 +86,12 @@ const Sidebar = ({ sessions, activeSessionId, onNewChat, onSelectSession, onDele
           <span>Settings</span>
         </button>
         <div className="pt-2 flex items-center gap-3 px-3">
-          <div className="w-8 h-8 rounded-full bg-accent-primary flex items-center justify-center text-white font-bold text-xs">
-            PL
+          <div className="w-8 h-8 rounded-full bg-accent-primary flex items-center justify-center text-on-accent-primary font-bold text-xs shrink-0">
+            {initials}
           </div>
           <div className="flex flex-col min-w-0">
-            <span className="text-xs font-bold truncate">Paul Lammertsma</span>
-            <span className="text-[10px] opacity-40 truncate">Professional Plan</span>
+            <span className="text-xs font-bold truncate">{displayName || 'Signed in'}</span>
+            <span className="text-[10px] opacity-40 truncate">{syncLabel}</span>
           </div>
         </div>
       </div>

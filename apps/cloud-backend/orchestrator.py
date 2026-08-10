@@ -5,7 +5,7 @@ from google.genai import types
 from tools.openarchieven import open_archives_search, open_archives_get_record, OPEN_ARCHIVES_INSTRUCTIONS
 from tools.wikitree import search_profiles, get_profile, get_person, get_relatives, WIKITREE_INSTRUCTIONS
 from tools.biography import format_wikitree_biography
-from tools.utils import get_ts
+from tools.utils import get_ts, generate_with_quota_retry
 
 ROOT_STRATEGY = """
 You are the **Lineage Nexus Heritage Research Orchestrator**. Your primary role is to conduct professional
@@ -91,6 +91,9 @@ class ResearchOrchestrator:
                     if "response" in final_result:
                         title_context += f"Findings: {final_result['response'][:500]}..."
                     
+                    # Intentionally not quota-retried: the research is already
+                    # delivered and a title is cosmetic. Waiting here would
+                    # spend the quota we are trying to conserve.
                     title_response = await self.client.aio.models.generate_content(
                         model=self.model_name,
                         contents=[types.Content(role="user", parts=[types.Part.from_text(text=f"Based on the following genealogical research, generate a very short, professional 2-5 word title for this session. Respond ONLY with the title text.\n\nContext:\n{title_context}")])],
@@ -150,7 +153,8 @@ class ResearchOrchestrator:
             turn_count += 1
             await report_status(f"Consulting lineage engine (Turn {turn_count})...")
             
-            response = await self.client.aio.models.generate_content(
+            response = await generate_with_quota_retry(
+                self.client,
                 model=self.model_name,
                 contents=current_history,
                 config=types.GenerateContentConfig(
@@ -218,7 +222,8 @@ class ResearchOrchestrator:
             
         # If we hit the turn limit, force a final summary response
         await report_status("Synthesizing final research report...")
-        final_response = await self.client.aio.models.generate_content(
+        final_response = await generate_with_quota_retry(
+            self.client,
             model=self.model_name,
             contents=current_history + [types.Content(role="user", parts=[types.Part.from_text(text="I've reached my maximum research turns. Summarize everything found so far and explain the logical links between the identified individuals.")])],
             config=types.GenerateContentConfig(

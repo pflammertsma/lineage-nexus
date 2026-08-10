@@ -10,11 +10,21 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
   
   if (!inline && (match || content.includes('\n'))) {
     const language = match ? match[1] : '';
+    // The wikitext biography is the artefact this whole product exists to
+    // produce, so it carries the brand's gold. Everything else stays neutral —
+    // gold means "finished, sourced, ready to publish", not "code".
+    const isBiography = language === 'wiki';
     return (
-      <div className="relative group/code rounded-xl border border-border/50 bg-card overflow-hidden my-6 shadow-sm">
-        <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/50">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-secondary/60">
-            {language || 'Code'}
+      <div className={`relative group/code rounded-xl border bg-card overflow-hidden my-6 shadow-sm ${
+        isBiography ? 'border-highlight/40' : 'border-border/50'
+      }`}>
+        <div className={`flex items-center justify-between px-4 py-2.5 border-b ${
+          isBiography ? 'bg-highlight-soft border-highlight/30' : 'bg-muted/30 border-border/50'
+        }`}>
+          <span className={`text-[10px] font-bold uppercase tracking-widest ${
+            isBiography ? 'text-highlight' : 'text-secondary/60'
+          }`}>
+            {isBiography ? 'WikiTree biography' : (language || 'Code')}
           </span>
           <button
             onClick={() => {
@@ -22,7 +32,9 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
               setCopied(true);
               setTimeout(() => setCopied(false), 2000);
             }}
-            className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-secondary/40 hover:text-accent transition-colors focus:outline-none"
+            className={`flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest transition-colors focus:outline-none ${
+              isBiography ? 'text-highlight/70 hover:text-highlight' : 'text-secondary/40 hover:text-accent'
+            }`}
           >
             {copied ? (
               <>
@@ -126,11 +138,13 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
 
                 <div
                   className={`relative transition-all ${msg.role === 'user'
-                    ? 'bg-accent text-white px-6 py-4 rounded-2xl shadow-sm border-accent shadow-accent/10 rounded-tr-none ml-auto max-w-[85%]'
+                    ? 'bg-accent text-on-accent px-6 py-4 rounded-2xl shadow-sm border-accent shadow-accent/10 rounded-tr-none ml-auto max-w-[85%]'
                     : 'w-full pt-2'
                     }`}
                 >
-                  <div className={`text-sm leading-relaxed ${msg.role === 'user' ? 'text-white' : 'text-primary/95'} space-y-4 markdown-content`}>
+                  <div className={`space-y-4 markdown-content ${msg.role === 'user'
+                    ? 'text-sm leading-relaxed text-on-accent'
+                    : 'text-primary/95 agent-prose'}`}>
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
@@ -149,7 +163,7 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
                         strong: ({ node, ...props }) => <strong className="font-bold text-primary/90" {...props} />,
                         a: ({ node, ...props }) => (
                           <a
-                            className={`${msg.role === 'user' ? 'text-white underline font-bold' : 'text-accent'} underline underline-offset-4 hover:opacity-80 transition-opacity`}
+                            className={`${msg.role === 'user' ? 'text-on-accent underline font-bold' : 'text-accent'} underline underline-offset-4 hover:opacity-80 transition-opacity`}
                             target="_blank"
                             rel="noopener noreferrer"
                             {...props}

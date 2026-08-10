@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Lineage Nexus — research sessions are private to the account that created them.
+//
+// Deploy with:  firebase deploy --only firestore:rules
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // A signed-in user may read and write only their own document tree. There is
+    // no shared or public research data, so nothing is readable across accounts.
+    match /users/{userId} {
+      allow read, write, delete: if request.auth != null && request.auth.uid == userId;
+
+      match /sessions/{sessionId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+
+        // Writes must carry the shape the client expects, so a malformed or
+        // oversized document cannot be planted in someone's history.
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly(['id', 'title', 'messages', 'updatedAt'])
+          && request.resource.data.id is string
+          && request.resource.data.title is string
+          && request.resource.data.title.size() <= 200
+          && request.resource.data.messages is list
+          && request.resource.data.updatedAt is number;
+      }
+    }
+
+    // Anything not matched above is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

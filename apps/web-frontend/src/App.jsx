@@ -4,15 +4,21 @@ import Header from './components/Header';
 import Hero from './components/Hero';
 import FeatureGrid from './components/FeatureGrid';
 import Sidebar from './components/Sidebar';
-import ApiKeyModal from './components/ApiKeyModal';
+import SettingsModal from './components/SettingsModal';
+import SyncConsentModal from './components/SyncConsentModal';
 import ChatInterface from './components/ChatInterface';
 import ChatInput from './components/ChatInput';
 import Notification from './components/Notification';
 import { API_BASE_URL, API_KEY_STORAGE } from './config';
+import useTheme from './useTheme';
+import useAuth from './useAuth';
+import useSyncedSessions, { readSyncConsent, writeSyncConsent } from './useSyncedSessions';
 import './index.css';
 
 function App() {
   const navigate = useNavigate();
+  const { preference: themePreference, cycleTheme } = useTheme();
+  const auth = useAuth();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -20,25 +26,44 @@ function App() {
   const [pendingQuery, setPendingQuery] = useState(null);
   const [status, setStatus] = useState(null);
   const chatContainerRef = useRef(null);
-  const [isLoggedIn, setIsLoggedIn] = useState(() => {
-    return localStorage.getItem('lineage_is_logged_in') === 'true';
-  });
+  const isLoggedIn = auth.isSignedIn;
   const [activeSessionId, setActiveSessionId] = useState(() => {
     return localStorage.getItem('lineage_active_session_id');
   });
 
-  // Real sessions from localStorage
-  const [sessions, setSessions] = useState(() => {
-    const saved = localStorage.getItem('lineage_sessions');
-    return saved ? JSON.parse(saved) : [];
-  });
+  // null = never asked, so the consent dialog is shown once per account.
+  const [syncConsent, setSyncConsent] = useState(() => readSyncConsent(auth.uid));
+  useEffect(() => setSyncConsent(readSyncConsent(auth.uid)), [auth.uid]);
 
-  // Sync state to localStorage
+  const {
+    sessions,
+    setSessions,
+    deleteSession,
+    deleteAllData,
+    syncState,
+    storageError,
+  } = useSyncedSessions({ uid: auth.uid, syncEnabled: syncConsent === true });
+
+  const needsSyncDecision = auth.canSync && auth.isSignedIn && auth.uid && syncConsent === null;
+
+  const decideSync = (enabled) => {
+    writeSyncConsent(auth.uid, enabled);
+    setSyncConsent(enabled);
+    notify(
+      enabled ? 'Sync is on. Your research is available on any device you sign in to.'
+              : 'Sync is off. Research stays on this device.',
+      enabled ? 'success' : 'info'
+    );
+  };
+
+  // Surface a full localStorage rather than failing silently on the next write.
   useEffect(() => {
-    localStorage.setItem('lineage_sessions', JSON.stringify(sessions));
-    localStorage.setItem('lineage_is_logged_in', isLoggedIn);
+    if (storageError) notify(storageError, 'error');
+  }, [storageError]);
+
+  useEffect(() => {
     localStorage.setItem('lineage_active_session_id', activeSessionId || '');
-  }, [sessions, isLoggedIn, activeSessionId]);
+  }, [activeSessionId]);
 
   // Load messages for the active session. `sessions` is deliberately not a dependency: this
   // should only fire when the user switches sessions, not on every message written into one.
@@ -95,9 +120,12 @@ function App() {
   const handleSearch = async (query) => {
     if (!query.trim()) return;
     if (loading) return;
-    // If not logged in, log them in first
+    // Sign-in is now a real auth round-trip, so it cannot be forced from here.
+    // The landing page signs in before routing to /chat.
     if (!isLoggedIn) {
-      setIsLoggedIn(true);
+      setPendingQuery(query);
+      await auth.signIn();
+      return;
     }
 
     let sessionId = activeSessionId;
@@ -246,21 +274,29 @@ function App() {
     }
   };
 
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
     if (isLoggedIn) {
-      setIsLoggedIn(false);
+      await auth.signOut();
+      setActiveSessionId(null);
+      setMessages([]);
       navigate('/');
     } else {
-      setIsLoggedIn(true);
+      await auth.signIn();
       navigate('/chat');
     }
   };
+
+  useEffect(() => {
+    if (auth.error) notify(auth.error, 'error');
+  }, [auth.error]);
 
   return (
     <div className="min-h-screen bg-background text-primary">
       <Header
         isLoggedIn={isLoggedIn}
         onSignIn={handleSignIn}
+        themePreference={themePreference}
+        onCycleTheme={cycleTheme}
       />
 
       <div className="toast-container overflow-visible z-50">
@@ -281,8 +317,7 @@ function App() {
             <main className="overflow-y-auto">
               <Hero onSearch={(q) => {
                 setPendingQuery(q);
-                setIsLoggedIn(true);
-                navigate('/chat');
+                auth.signIn().then(() => navigate('/chat'));
               }} onConfig={() => setConfigOpen(true)} />
               <FeatureGrid />
               <footer className="py-16 bg-card border-t border-border">
@@ -303,20 +338,23 @@ function App() {
                 activeSessionId={activeSessionId}
                 onSelectSession={(id) => setActiveSessionId(id)}
                 onDeleteSession={(id) => {
-                  setSessions(prev => {
-                    const updated = prev.filter(s => s.id !== id);
-                    if (activeSessionId === id) {
-                      setActiveSessionId(null);
-                      setMessages([]);
-                    }
-                    return updated;
-                  });
+                  // Removes the local copy and the cloud document, so deleting a
+                  // conversation on one device deletes it everywhere.
+                  if (activeSessionId === id) {
+                    setActiveSessionId(null);
+                    setMessages([]);
+                  }
+                  deleteSession(id);
                 }}
                 onNewChat={() => {
                   setActiveSessionId(null);
                   setMessages([]);
                 }}
                 onOpenSettings={() => setConfigOpen(true)}
+                displayName={auth.displayName}
+                email={auth.email}
+                syncEnabled={syncConsent === true}
+                syncState={syncState}
               />
               <main className="flex-1 overflow-hidden relative bg-surface">
                 {messages.length === 0 ? (
@@ -325,7 +363,7 @@ function App() {
                       <img src="/logo.svg" alt="Lineage Nexus Logo" className="w-full h-full object-contain pointer-events-none drop-shadow-2xl" />
                     </div>
                     <h2 className="text-4xl font-serif mb-4 tracking-tight">
-                      Good afternoon, Paul.
+                      {auth.displayName ? `Welcome, ${auth.displayName.split(' ')[0]}.` : 'Welcome.'}
                     </h2>
                     <p className="text-xl font-serif text-secondary/60 italic max-w-[500px]">
                       Where should we start your research?
@@ -359,13 +397,35 @@ function App() {
       </Routes>
 
       {configOpen && (
-        <ApiKeyModal
+        <SettingsModal
           notify={notify}
           onClose={() => setConfigOpen(false)}
           onSave={() => {
             if (pendingQuery) handleSearch(pendingQuery);
             setPendingQuery(null);
           }}
+          canSync={auth.canSync}
+          isSignedIn={auth.isSignedIn}
+          syncEnabled={syncConsent === true}
+          onToggleSync={decideSync}
+          syncState={syncState}
+          sessionCount={sessions.length}
+          onDeleteAllData={async (scope) => {
+            await deleteAllData(scope);
+            // Clear the open conversation too, otherwise deleted research stays
+            // on screen until the next navigation.
+            setActiveSessionId(null);
+            setMessages([]);
+          }}
+        />
+      )}
+
+      {needsSyncDecision && (
+        <SyncConsentModal
+          sessionCount={sessions.length}
+          accountEmail={auth.email}
+          onAccept={() => decideSync(true)}
+          onDecline={() => decideSync(false)}
         />
       )}
     </div>

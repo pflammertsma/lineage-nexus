@@ -1,19 +1,39 @@
 @import "tailwindcss";
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap');
 
+/* ---------------------------------------------------------------------------
+   Brand palette — sampled directly from logo.svg:
+     #134074  navy  the circle field and every stroke  -> brand ground
+     #4A90E2  blue  the tree and the three figures     -> interactive accent
+     #C8A464  gold  the two stars                      -> discovery / sourced
+   Role assignment differs per mode for contrast reasons: #4A90E2 only reaches
+   ~3.2:1 on a light ground, so navy carries text in light mode and the logo
+   blue takes over on dark. Gold never carries text on light (~2.2:1) — there
+   it is a border, mark or label in its darkened form (--color-highlight).
+--------------------------------------------------------------------------- */
 @theme {
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
-  
-  --color-background: #F9F8F6;
-  --color-surface: #FFFFFF;
-  --color-primary: #1A1C21;
-  --color-secondary: #5F646D;
-  --color-accent: #2563EB;
-  --color-accent-soft: #EFF6FF;
-  --color-border: #E5E7EB;
-  --color-border-strong: #D1D5DB;
-  
+  --font-serif: 'Lora', Georgia, 'Times New Roman', serif;
+
+  /* Parchment — light mode */
+  --color-background: #F2EDE3;
+  --color-surface: #FAF7F1;
+  --color-card: #FFFFFF;
+  --color-muted: #EFE9DC;
+  --color-primary: #12223A;
+  --color-secondary: #5A6577;
+  --color-accent: #134074;
+  --color-on-accent: #FFFFFF;
+  --color-accent-primary: #4A90E2;
+  /* The logo blue is constant across modes, so its foreground is too. */
+  --color-on-accent-primary: #08203C;
+  --color-accent-soft: #E8EFF8;
+  --color-highlight: #8A6D2F;
+  --color-highlight-soft: #F3EADA;
+  --color-border: #E4DDD0;
+  --color-border-strong: #C9BFA9;
+
   --spacing-1: 4px;
   --spacing-2: 8px;
   --spacing-3: 12px;
@@ -29,17 +49,28 @@
   --radius-lg: 16px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-background: #0F1115;
-    --color-surface: #1B1E26;
-    --color-primary: #F3F4F6;
-    --color-secondary: #9CA3AF;
-    --color-accent: #3B82F6;
-    --color-accent-soft: rgba(59, 130, 246, 0.1);
-    --color-border: #2D323E;
-    --color-border-strong: #3D4452;
-  }
+/* Slate — dark mode. Surfaces are navy-tinted rather than neutral grey so the
+   logo's circle sits in the same family as the app chrome.
+
+   Keyed off data-theme rather than prefers-color-scheme: the inline script in
+   index.html resolves the stored preference (light/dark/system) against the OS
+   setting and stamps the attribute before first paint, so a user choice can
+   override the system and nothing flashes on load. */
+:root[data-theme="dark"] {
+  --color-background: #08111E;
+  --color-surface: #0D1A2B;
+  --color-card: #132339;
+  --color-muted: #1B2E48;
+  --color-primary: #E9EFF7;
+  --color-secondary: #93A6BF;
+  --color-accent: #4A90E2;
+  --color-on-accent: #08203C;
+  --color-accent-primary: #4A90E2;
+  --color-accent-soft: rgba(74, 144, 226, 0.14);
+  --color-highlight: #C8A464;
+  --color-highlight-soft: rgba(200, 164, 100, 0.12);
+  --color-border: #1E3350;
+  --color-border-strong: #2B4467;
 }
 
 @layer base {
@@ -59,7 +90,7 @@
   }
 
   .btn-primary { @apply bg-primary text-surface; }
-  .btn-accent { @apply bg-accent text-white; }
+  .btn-accent { @apply bg-accent text-on-accent; }
 
   .input-field {
     @apply h-[var(--h-control)] px-4 rounded-md border border-border-strong bg-surface text-primary text-[16px] w-full focus:outline-none focus:border-accent focus:ring-4 focus:ring-accent-soft;
@@ -71,8 +102,8 @@
 
   .divider { @apply border-t border-border; }
 
-  h1 { @apply text-[64px] font-extrabold tracking-tight leading-[1.1]; }
-  h2 { @apply text-[32px] font-bold tracking-tight; }
+  h1 { @apply font-serif text-[64px] font-semibold tracking-tight leading-[1.1]; }
+  h2 { @apply font-serif text-[32px] font-semibold tracking-tight; }
   h3 { @apply text-[20px] font-semibold; }
 
   .hero-sub { @apply text-[20px] leading-relaxed max-w-[640px] mx-auto text-secondary; }
@@ -92,10 +123,17 @@
   .toast-error { @apply border-l-4 border-l-[#EF4444]; }
   .toast-info { @apply border-l-4 border-l-accent; }
   
-  .markdown-content h1, .markdown-content h2, .markdown-content h3 { @apply text-base font-bold mb-4 mt-6 first:mt-0 leading-tight border-none; }
+  .markdown-content h1, .markdown-content h2, .markdown-content h3 { @apply font-serif text-base font-semibold mb-4 mt-6 first:mt-0 leading-tight border-none; }
   .markdown-content p { @apply mb-4 last:mb-0; }
   .markdown-content ul, .markdown-content ol { @apply pl-6 mb-4 space-y-2; list-style-type: disc; }
-  .markdown-content strong { @apply font-bold text-accent; }
+  /* Emphasis stays in the running text colour — accent-coloured bold turned
+     every other phrase into a false link. */
+  .markdown-content strong { @apply font-semibold text-primary; }
+
+  /* The agent speaks in serif, the interface in sans. Typography is what makes
+     this read as a research instrument rather than a generic chat app. */
+  .agent-prose { @apply font-serif text-[15px] leading-[1.75]; }
+  .agent-prose code, .agent-prose pre { @apply font-sans; }
 }
 
 @keyframes slide-in {

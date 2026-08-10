@@ -87,7 +87,7 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
                 ) : (
                   <button
                     type="submit"
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-accent text-white shadow-lg shadow-accent/40 cursor-pointer hover:opacity-90 hover:-translate-y-px transition-all"
+                    className="w-10 h-10 flex items-center justify-center rounded-full bg-accent text-on-accent shadow-lg shadow-accent/40 cursor-pointer hover:opacity-90 hover:-translate-y-px transition-all"
                   >
                     <Send size={18} />
                   </button>

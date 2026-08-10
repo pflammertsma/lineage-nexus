@@ -1,7 +1,16 @@
 import React from 'react';
+import { Sun, Moon, Monitor } from 'lucide-react';
 import logo from '../assets/logo.svg';
 
-const Header = ({ isLoggedIn, onSignIn }) => {
+const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
+const THEME_LABEL = {
+  light: 'Light theme',
+  dark: 'Dark theme',
+  system: 'Match system theme',
+};
+
+const Header = ({ isLoggedIn, onSignIn, themePreference = 'system', onCycleTheme }) => {
+  const ThemeIcon = THEME_ICON[themePreference] || Monitor;
   return (
     <header className="h-[70px] bg-surface border-b border-border sticky top-0 z-[1000]">
       <div className="container h-full flex items-center justify-between">
@@ -19,7 +28,15 @@ const Header = ({ isLoggedIn, onSignIn }) => {
           </nav>
         )}
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={onCycleTheme}
+            title={THEME_LABEL[themePreference]}
+            aria-label={THEME_LABEL[themePreference]}
+            className="w-9 h-9 flex items-center justify-center rounded-md text-secondary hover:text-accent hover:bg-card border border-transparent hover:border-border transition-colors cursor-pointer"
+          >
+            <ThemeIcon size={16} />
+          </button>
           <button
             onClick={onSignIn}
             className={`btn ${isLoggedIn ? 'btn-secondary opacity-60 hover:opacity-100' : 'btn-primary'} px-5 py-2 text-xs`}
