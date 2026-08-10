@@ -1,8 +1,30 @@
-import React, { useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Send, Search, FileText, Download, ShieldAlert } from 'lucide-react';
+import ActionPopovers from './ActionPopovers';
 
 const ChatInput = ({ onSearch, onStop, isLoading }) => {
   const textareaRef = useRef(null);
+  const containerRef = useRef(null);
+  const [activePopover, setActivePopover] = useState(null);
+
+  // Close popover on Outside Click or Escape key
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setActivePopover(null);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setActivePopover(null);
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -10,7 +32,8 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
     
     onSearch(textareaRef.current.value.trim());
     textareaRef.current.value = '';
-    textareaRef.current.dispatchEvent(new Event('input', { bubbles: true })); // trigger auto-resize
+    textareaRef.current.dispatchEvent(new Event('input', { bubbles: true }));
+    setActivePopover(null);
   };
 
   const handleKeyDown = (e) => {
@@ -20,95 +43,107 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
     }
   };
 
-  const handleActionClick = (prompt) => {
-    if (textareaRef.current) {
-      textareaRef.current.value = prompt;
-      textareaRef.current.dispatchEvent(new Event('input', { bubbles: true }));
-      textareaRef.current.focus();
-    }
+  const togglePopover = (type) => {
+    setActivePopover((prev) => (prev === type ? null : type));
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full relative" ref={containerRef}>
+      {/* Extracted Interactive Action Popovers */}
+      <ActionPopovers
+        activePopover={activePopover}
+        onClose={() => setActivePopover(null)}
+        onSearch={onSearch}
+      />
+
+      {/* Main Input Form */}
       <form
         onSubmit={handleSubmit}
         className="relative group transition-all duration-300 w-full"
       >
-          <div className="absolute inset-0 bg-accent-primary opacity-0 group-focus-within:opacity-5 blur-xl transition-opacity pointer-events-none rounded-2xl"></div>
+        <div className="absolute inset-0 bg-accent-primary opacity-0 group-focus-within:opacity-5 blur-xl transition-opacity pointer-events-none rounded-2xl"></div>
 
-          <div className="relative bg-card border border-border group-focus-within:border-accent rounded-2xl overflow-hidden shadow-2xl transition-all">
-            <textarea
-              ref={textareaRef}
-              onKeyDown={handleKeyDown}
-              placeholder="Ask about your ancestors…"
-              className="w-full bg-transparent px-6 py-4 pr-16 focus:outline-none text-sm leading-relaxed resize-none min-h-[56px] transition-all"
-            />
+        <div className="relative bg-card border border-border group-focus-within:border-accent rounded-2xl overflow-hidden shadow-2xl transition-all">
+          <textarea
+            ref={textareaRef}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask about your ancestors…"
+            className="w-full bg-transparent px-6 py-4 pr-16 focus:outline-none text-sm leading-relaxed resize-none min-h-[56px] transition-all"
+          />
 
-            <div className="flex items-center justify-between px-6 py-3 border-t border-border/50 bg-card/50">
-              <div className="flex items-center gap-4">
-                <button 
-                  type="button" 
-                  onClick={() => handleActionClick("Use the researcher agent to perform research. Look for any relevant genealogical records.")}
-                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
-                >
-                  <Search size={14} />
-                  <span>Research</span>
-                </button>
-                <div className="h-4 w-[1px] bg-border/50 mx-1"></div>
-                <button 
-                  type="button" 
-                  onClick={() => handleActionClick("Search Holocaust records in Joods Monument and Oorlogsbronnen for [ENTER-NAME]")}
-                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
-                >
-                  <ShieldAlert size={14} />
-                  <span>Holocaust</span>
-                </button>
-                <div className="h-4 w-[1px] bg-border/50 mx-1"></div>
-                <button 
-                  type="button" 
-                  onClick={() => handleActionClick("Use the formatter agent to format a biography that includes as much relevant details about the profile we've been talking about, including references and only links to known profiles. Provide the final biography in a code block with language 'wiki' so it can be easily copied to WikiTree.")}
-                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
-                >
-                  <FileText size={14} />
-                  <span>Biography</span>
-                </button>
-                <div className="h-4 w-[1px] bg-border/50 mx-1"></div>
-                <button 
-                  type="button" 
-                  onClick={() => handleActionClick("Read [ENTER-WIKITREE-ID] from WikiTree, fetching it as the data may have changed if you have read it previously.")}
-                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
-                >
-                  <Download size={14} />
-                  <span>Fetch Profile</span>
-                </button>
-              </div>
+          <div className="flex items-center justify-between px-6 py-3 border-t border-border/50 bg-card/50">
+            <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-0.5 no-scrollbar">
+              <button 
+                type="button" 
+                onClick={() => togglePopover('research')}
+                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-1 rounded-lg ${
+                  activePopover === 'research' ? 'bg-accent/20 text-accent opacity-100' : 'opacity-50 hover:opacity-100'
+                }`}
+              >
+                <Search size={14} />
+                <span>Research</span>
+              </button>
+              <div className="h-4 w-[1px] bg-border/50 shrink-0"></div>
+              <button 
+                type="button" 
+                onClick={() => togglePopover('holocaust')}
+                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-1 rounded-lg ${
+                  activePopover === 'holocaust' ? 'bg-rose-500/20 text-rose-400 opacity-100' : 'opacity-50 hover:opacity-100 hover:text-rose-400'
+                }`}
+              >
+                <ShieldAlert size={14} />
+                <span>Holocaust</span>
+              </button>
+              <div className="h-4 w-[1px] bg-border/50 shrink-0"></div>
+              <button 
+                type="button" 
+                onClick={() => togglePopover('biography')}
+                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-1 rounded-lg ${
+                  activePopover === 'biography' ? 'bg-accent/20 text-accent opacity-100' : 'opacity-50 hover:opacity-100'
+                }`}
+              >
+                <FileText size={14} />
+                <span>Biography</span>
+              </button>
+              <div className="h-4 w-[1px] bg-border/50 shrink-0"></div>
+              <button 
+                type="button" 
+                onClick={() => togglePopover('fetch_profile')}
+                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-1 rounded-lg ${
+                  activePopover === 'fetch_profile' ? 'bg-accent/20 text-accent opacity-100' : 'opacity-50 hover:opacity-100'
+                }`}
+              >
+                <Download size={14} />
+                <span>Fetch Profile</span>
+              </button>
+            </div>
 
-              <div className="flex items-center gap-3">
-                {isLoading ? (
-                  <button
-                    type="button"
-                    onClick={onStop}
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 cursor-pointer hover:bg-rose-500/20 transition-all animate-pulse"
-                    title="Stop research"
-                  >
-                    <div className="w-3 h-3 bg-rose-500 rounded-sm"></div>
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    className="w-10 h-10 flex items-center justify-center rounded-full bg-accent text-on-accent shadow-lg shadow-accent/40 cursor-pointer hover:opacity-90 hover:-translate-y-px transition-all"
-                  >
-                    <Send size={18} />
-                  </button>
-                )}
-              </div>
+            <div className="flex items-center gap-3 shrink-0">
+              {isLoading ? (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-rose-500/10 border border-rose-500/20 text-rose-400 cursor-pointer hover:bg-rose-500/20 transition-all animate-pulse"
+                  title="Stop research"
+                >
+                  <div className="w-3 h-3 bg-rose-500 rounded-sm"></div>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-accent text-on-accent shadow-lg shadow-accent/40 cursor-pointer hover:opacity-90 hover:-translate-y-px transition-all"
+                >
+                  <Send size={18} />
+                </button>
+              )}
             </div>
           </div>
-        </form>
+        </div>
+      </form>
 
-        <p className="mt-4 text-[10px] text-center opacity-30 tracking-tight">
-          Lineage Nexus uses Gemini to search archives. Results may vary depending on results from sourced archives.
-        </p>
+      <p className="mt-4 text-[10px] text-center opacity-30 tracking-tight">
+        Lineage Nexus uses Gemini to search archives. Results may vary depending on results from sourced archives.
+      </p>
     </div>
   );
 };
