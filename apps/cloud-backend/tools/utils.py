@@ -86,6 +86,6 @@ async def generate_with_quota_retry(client, **kwargs) -> Any:
             delay = min(parse_retry_delay(e) + 1.0, QUOTA_MAX_WAIT_SECONDS)
             await report_status(
                 f"Gemini quota reached. Research context is held; resuming in "
-                f"{int(delay)}s (attempt {attempt} of {QUOTA_MAX_RETRIES})..."
+                f"{int(delay)}s (attempt {attempt} of {QUOTA_MAX_RETRIES})…"
             )
             await asyncio.sleep(delay)

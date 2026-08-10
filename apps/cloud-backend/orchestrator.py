@@ -68,7 +68,7 @@ class ResearchOrchestrator:
                     
                     # Heartbeat if we haven't yielded in a while (e.g., during model inference)
                     if time.time() - last_yield_time > 30.0:
-                        yield {"status": "Still analyzing research artifacts..."}
+                        yield {"status": "Still analyzing research artifacts…"}
                         last_yield_time = time.time()
                         
                 except Exception: pass
@@ -119,7 +119,7 @@ class ResearchOrchestrator:
     async def _conduct_research(self, message: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Internal research logic that reports status via 'report_status'."""
         from tools.utils import report_status
-        await report_status("Formulating research plan...")
+        await report_status("Formulating research plan…")
         
         # Filter history to only include 'user' and 'model' roles (Gemini requirement)
         valid_history = [msg for msg in history if msg["role"] in ["user", "model"]]
@@ -151,7 +151,7 @@ class ResearchOrchestrator:
         seen_queries = set()
         while turn_count < MAX_RESEARCH_TURNS:
             turn_count += 1
-            await report_status(f"Consulting lineage engine (Turn {turn_count})...")
+            await report_status(f"Consulting lineage engine (Turn {turn_count})…")
             
             response = await generate_with_quota_retry(
                 self.client,
@@ -177,7 +177,7 @@ class ResearchOrchestrator:
                     "usage": response.usage_metadata.model_dump() if response.usage_metadata else {}
                 }
 
-            await report_status(f"Invoking {len(function_calls)} tools...")
+            await report_status(f"Invoking {len(function_calls)} tools…")
 
             # Enforce strict research limit per turn to prevent shotgunning
             search_calls = [fc for fc in function_calls if fc.name in ["open_archives_search", "search_profiles"]]
@@ -185,7 +185,7 @@ class ResearchOrchestrator:
             
             # Prioritize 'get_profile' over searches in the same turn if both are present
             if any(fc.name == "get_profile" for fc in other_calls) and search_calls:
-                await report_status("Prioritizing WikiTree context over new archival searches...")
+                await report_status("Prioritizing WikiTree context over new archival searches…")
                 search_calls = [] # Do not perform searches if we're also reading a profile for the first time
             
             # Cap research calls
@@ -204,7 +204,7 @@ class ResearchOrchestrator:
                         continue
                     seen_queries.add(q_key)
 
-                await report_status(f"Invoking {fc.name}...")
+                await report_status(f"Invoking {fc.name}…")
                 
                 tool_func = tool_map.get(fc.name)
                 if tool_func:
@@ -221,7 +221,7 @@ class ResearchOrchestrator:
             current_history.append(types.Content(role="user", parts=tool_parts))
             
         # If we hit the turn limit, force a final summary response
-        await report_status("Synthesizing final research report...")
+        await report_status("Synthesizing final research report…")
         final_response = await generate_with_quota_retry(
             self.client,
             model=self.model_name,

@@ -159,7 +159,7 @@ async def search_profiles(
     
     from tools.utils import report_status
     search_desc = f"{first_name or ''} {last_name or ''}".strip()
-    await report_status(f"Searching WikiTree for profiles matching '{search_desc}'...")
+    await report_status(f"Searching WikiTree for profiles matching '{search_desc}'…")
     
     async with httpx.AsyncClient() as client:
         try:
@@ -238,7 +238,7 @@ async def get_relatives(name: str, fields: Optional[List[str]] = None) -> dict:
 
 async def get_profile(profile_id: str) -> dict:
     from tools.utils import report_status
-    await report_status(f"Fetching full research context for WikiTree profile: {profile_id}...")
+    await report_status(f"Fetching full research context for WikiTree profile: {profile_id}…")
     data = await get_relatives(profile_id, fields=PROFILE_FIELDS)
     if data.get('status') != 'ok':
         return data

@@ -137,7 +137,7 @@ function App() {
       sessionId = Math.random().toString(36).substr(2, 9);
       const newSession = {
         id: sessionId,
-        title: query.length > 30 ? query.substring(0, 30) + '...' : query,
+        title: query.length > 30 ? query.substring(0, 30) + '…' : query,
         messages: newMessages
       };
       setSessions(prev => [newSession, ...prev]);
@@ -148,7 +148,7 @@ function App() {
 
     if (!isRetry) setMessages(newMessages);
     setLoading(true);
-    setStatus("Analyzing ancestry...");
+    setStatus("Analyzing ancestry…");
 
     // Statuses are also tracked locally: state updates are not visible to this closure, and
     // the interrupted-research log has to be readable from the error handlers below.

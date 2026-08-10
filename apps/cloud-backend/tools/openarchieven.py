@@ -215,10 +215,10 @@ async def open_archives_search(
         if cache_key in _SEARCH_CACHE:
             _SEARCH_CACHE.move_to_end(cache_key)
             cached_result = _SEARCH_CACHE[cache_key]
-            await report_status(f"(CACHED) Recalled {len(cached_result.get('records', []))} records for '{query}'...")
+            await report_status(f"(CACHED) Recalled {len(cached_result.get('records', []))} records for '{query}'…")
             return cached_result
     
-    await report_status(f"Searching archives for query: '{query}'...")
+    await report_status(f"Searching archives for query: '{query}'…")
     
     base_url = "https://api.openarchieven.nl/1.1/records/search.json"
     
@@ -236,7 +236,7 @@ async def open_archives_search(
             if total_found == 0:
                 await report_status(f"No recordings found matching '{query}'.")
             else:
-                await report_status(f"Found {total_found} total records matching '{query}'. Processing the top {len(docs)}...")
+                await report_status(f"Found {total_found} total records matching '{query}'. Processing the top {len(docs)}…")
             
                 if not multi_page_search and total_found > MAX_RESULTS:
                     return {
@@ -246,7 +246,7 @@ async def open_archives_search(
                     }
 
                 if docs:
-                    await report_status(f"Fetching {len(docs)} detailed records...")
+                    await report_status(f"Fetching {len(docs)} detailed records…")
 
                     async def fetch_one(doc):
                         show_url = "https://api.openarchieven.nl/1.1/records/show.json"

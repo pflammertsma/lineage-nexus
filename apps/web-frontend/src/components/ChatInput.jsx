@@ -40,7 +40,7 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
             <textarea
               ref={textareaRef}
               onKeyDown={handleKeyDown}
-              placeholder="Ask about your ancestors..."
+              placeholder="Ask about your ancestors…"
               className="w-full bg-transparent px-6 py-4 pr-16 focus:outline-none text-sm leading-relaxed resize-none min-h-[56px] transition-all"
             />
 

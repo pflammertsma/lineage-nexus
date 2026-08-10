@@ -412,7 +412,7 @@ it, even if it's just to add sources.
 async def format_wikitree_biography(client, model_name, research_data, user_instructions=None):
     """Invokes a specialized sub-agent to format research data into a high-fidelity WikiTree biography."""
     from tools.utils import report_status, generate_with_quota_retry
-    await report_status("Engaging specialized biography formatter agent...")
+    await report_status("Formatting the biography…")
 
     prompt = f"Format this research data into a WikiTree biography: {research_data}"
     if user_instructions:
