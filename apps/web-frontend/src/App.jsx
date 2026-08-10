@@ -9,6 +9,7 @@ import SyncConsentModal from './components/SyncConsentModal';
 import ChatInterface from './components/ChatInterface';
 import ChatInput from './components/ChatInput';
 import Notification from './components/Notification';
+import { ArrowDown } from 'lucide-react';
 import { API_BASE_URL, API_KEY_STORAGE } from './config';
 import useTheme from './useTheme';
 import useAuth from './useAuth';
@@ -26,6 +27,10 @@ function App() {
   const [pendingQuery, setPendingQuery] = useState(null);
   const [status, setStatus] = useState(null);
   const chatContainerRef = useRef(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const isAtBottomRef = useRef(true);
+  const [showScrollDown, setShowScrollDown] = useState(false);
+  const [hasNewUnread, setHasNewUnread] = useState(false);
   const isLoggedIn = auth.isSignedIn;
   const [activeSessionId, setActiveSessionId] = useState(() => {
     return localStorage.getItem('lineage_active_session_id');
@@ -77,6 +82,33 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
+  const handleScroll = () => {
+    if (!chatContainerRef.current) return;
+    const el = chatContainerRef.current;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const atBottom = distanceToBottom < 120;
+    
+    setIsAtBottom(atBottom);
+    isAtBottomRef.current = atBottom;
+    setShowScrollDown(!atBottom && messages.length > 0);
+    if (atBottom) {
+      setHasNewUnread(false);
+    }
+  };
+
+  const scrollToBottom = () => {
+    if (chatContainerRef.current) {
+      chatContainerRef.current.scrollTo({
+        top: chatContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+      setIsAtBottom(true);
+      isAtBottomRef.current = true;
+      setShowScrollDown(false);
+      setHasNewUnread(false);
+    }
+  };
+
   // Auto-run search from landing page. handleSearch is re-created every render, so including
   // it as a dependency would re-trigger the search on each one.
   useEffect(() => {
@@ -87,13 +119,15 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, pendingQuery, messages.length]);
 
-  // Auto-scroll to bottom of chat
+  // Smart Auto-scroll to bottom of chat only if user is already near the bottom
   useEffect(() => {
-    if (chatContainerRef.current) {
+    if (chatContainerRef.current && isAtBottomRef.current) {
       chatContainerRef.current.scrollTo({
         top: chatContainerRef.current.scrollHeight,
         behavior: 'smooth'
       });
+    } else if (!isAtBottomRef.current && (messages.length > 0 || status)) {
+      setHasNewUnread(true);
     }
   }, [messages, status]);
 
@@ -370,7 +404,7 @@ function App() {
                     </p>
                   </div>
                 ) : (
-                  <div className="h-full overflow-y-auto" ref={chatContainerRef}>
+                  <div className="h-full overflow-y-auto" ref={chatContainerRef} onScroll={handleScroll}>
                     <ChatInterface
                       messages={messages}
                       isLoading={loading}
@@ -382,6 +416,25 @@ function App() {
                   </div>
                 )}
                 
+                {/* Floating "Scroll to bottom" button when user is scrolled up */}
+                {showScrollDown && (
+                  <button
+                    type="button"
+                    onClick={scrollToBottom}
+                    className={`absolute bottom-[200px] right-8 sm:right-12 z-20 flex items-center gap-2 px-3.5 py-2 rounded-full shadow-2xl transition-all hover:scale-105 animate-in fade-in duration-200 cursor-pointer ${
+                      hasNewUnread
+                        ? 'bg-accent text-on-accent shadow-accent/40 ring-2 ring-accent/30 font-bold'
+                        : 'bg-card/90 backdrop-blur-md border border-border/80 text-foreground hover:text-accent font-semibold'
+                    }`}
+                    title={hasNewUnread ? "New messages received" : "Scroll to bottom"}
+                  >
+                    <ArrowDown size={14} className={hasNewUnread ? "animate-bounce text-on-accent" : "text-accent"} />
+                    <span className="text-xs">
+                      {hasNewUnread ? 'New messages' : 'Scroll to bottom'}
+                    </span>
+                  </button>
+                )}
+
                 {/* Floating Gradient Overlay: tight pt-12 fade above input box; inset right-4 to unblock scrollbar track */}
                 <div className="absolute bottom-0 left-0 right-4 pointer-events-none bg-gradient-to-t from-surface via-surface/95 to-transparent pt-12 pb-6 flex justify-center z-10">
                   <div className="w-full max-w-[800px] px-4 sm:px-8 pointer-events-auto">
