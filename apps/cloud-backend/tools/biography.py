@@ -96,9 +96,10 @@ Your output follows these conventions:
 - Use `'''text'''` for bold text.
 - Use `'''text''` for italic text.
 - Use `* text` for bullet points and `** `for sub-bullets.
-- Use `[url link text]` for external links, ensuring that a link text is always provided; e.g.:
-  `[https://www.joodsmonument.nl/nl/page/136176/rika-van-dam-nijveen Joods Monument]`.
 - Never include the WikiTree ID as plain text in the profile. It can only be used as a link.
+- At the very end of your response (after the sources section), you MUST append a hidden HTML comment containing a structured JSON object with the subject's exact vitals metadata:
+  `<!-- LINEAGE_NEXUS_DATA: {"firstName":"...","lastNameAtBirth":"...","lastNameCurrent":"... (for males, same as birth surname; for females, ONLY set if explicitly verified, otherwise leave empty or same as birth surname)","gender":"Male|Female","birthDate":"...","birthLocation":"...","deathDate":"...","deathLocation":"...","marriageDate":"...","marriageEndDate":"...","marriageLocation":"...","spouseName":"..."} -->`
+
 
 
 CATEGORIES

@@ -1,0 +1,43 @@
+{
+  "manifest_version": 3,
+  "name": "Lineage Nexus - WikiTree Assistant",
+  "version": "0.1.0",
+  "description": "Automates populating biographies, sources, and vitals metadata from Lineage Nexus into WikiTree profile edit pages.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "clipboardRead"
+  ],
+  "host_permissions": [
+    "*://*.wikitree.com/*",
+    "http://localhost:*/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Lineage Nexus Assistant"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.wikitree.com/*"
+      ],
+      "js": [
+        "content_script.js"
+      ],
+      "css": [
+        "content_style.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "assets/logo.svg"
+      ],
+      "matches": [
+        "*://*.wikitree.com/*"
+      ]
+    }
+  ]
+}

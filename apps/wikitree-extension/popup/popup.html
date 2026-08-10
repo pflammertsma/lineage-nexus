@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Lineage Nexus Assistant</title>
+  <style>
+    body {
+      width: 320px;
+      margin: 0;
+      padding: 16px;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: #08111E;
+      color: #E9EFF7;
+      box-sizing: border-box;
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid #1E3350;
+      padding-bottom: 12px;
+      margin-bottom: 14px;
+    }
+    .header h1 {
+      font-size: 14px;
+      font-weight: 700;
+      margin: 0;
+      color: #4A90E2;
+    }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      border-radius: 20px;
+      background: rgba(16, 185, 129, 0.15);
+      color: #10B981;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+    .card {
+      background: #0D1A2B;
+      border: 1px solid #1E3350;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 14px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .card-title {
+      font-weight: 600;
+      color: #C8A464;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .bio-preview {
+      font-family: monospace;
+      font-size: 10px;
+      background: #132339;
+      padding: 8px;
+      border-radius: 6px;
+      max-height: 80px;
+      overflow-y: auto;
+      word-break: break-all;
+      color: #93A6BF;
+      border: 1px solid #1E3350;
+    }
+    .btn {
+      width: 100%;
+      padding: 10px;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-primary {
+      background: #4A90E2;
+      color: #08203C;
+    }
+    .btn-primary:hover {
+      background: #357ABD;
+      color: #FFF;
+    }
+    .btn-secondary {
+      background: #132339;
+      color: #93A6BF;
+      border: 1px solid #1E3350;
+    }
+    .btn-secondary:hover {
+      background: #1E3350;
+      color: #FFF;
+    }
+    .footer {
+      font-size: 10px;
+      text-align: center;
+      color: #5A6577;
+      margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#C8A464" stroke-width="2">
+      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon>
+    </svg>
+    <div>
+      <h1>Lineage Nexus</h1>
+      <span class="badge">Extension Active</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">
+      <span>Pending Biography</span>
+    </div>
+    <div id="bio-preview-container" class="bio-preview">
+      No biography pushed from Lineage Nexus yet.
+    </div>
+  </div>
+
+  <button class="btn btn-primary" id="open-app-btn">
+    🚀 Open Lineage Nexus App
+  </button>
+  <button class="btn btn-secondary" id="clear-storage-btn">
+    🗑️ Clear Stored Biography
+  </button>
+
+  <div class="footer">
+    Lineage Nexus Automation &copy; 2026
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
