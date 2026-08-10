@@ -370,18 +370,21 @@ function App() {
                     </p>
                   </div>
                 ) : (
-                  <div className="h-full overflow-y-auto pb-4" ref={chatContainerRef}>
+                  <div className="h-full overflow-y-auto" ref={chatContainerRef}>
                     <ChatInterface
                       messages={messages}
                       isLoading={loading}
                       status={status}
                       onRetry={handleSearch}
                     />
-                    <div className="h-64 shrink-0"></div>
+                    {/* 280px spacer guarantees the last line of text sits completely above the top edge of the gradient fade when scrolled to bottom */}
+                    <div className="h-[280px] shrink-0 pointer-events-none" />
                   </div>
                 )}
-                <div className="absolute bottom-0 left-0 right-0 pointer-events-none bg-gradient-to-t from-surface via-surface/95 to-transparent pt-32 pb-8 flex justify-center">
-                  <div className="w-full max-w-[800px] px-8 pointer-events-auto bg-surface">
+                
+                {/* Floating Gradient Overlay: tight pt-12 fade above input box; inset right-4 to unblock scrollbar track */}
+                <div className="absolute bottom-0 left-0 right-4 pointer-events-none bg-gradient-to-t from-surface via-surface/95 to-transparent pt-12 pb-6 flex justify-center z-10">
+                  <div className="w-full max-w-[800px] px-4 sm:px-8 pointer-events-auto">
                     <ChatInput
                       onSearch={handleSearch}
                       onStop={handleStop}
