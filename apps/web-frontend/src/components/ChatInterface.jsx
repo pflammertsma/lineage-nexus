@@ -49,7 +49,10 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
             )}
           </button>
         </div>
-        <pre className="p-5 font-mono text-xs overflow-x-auto leading-relaxed">
+        {/* text-primary is explicit, not inherited: this block also renders inside
+            user bubbles, whose foreground is the on-accent colour. Inheriting it
+            would put dark navy text on the dark card background. */}
+        <pre className="p-5 font-mono text-xs overflow-x-auto leading-relaxed text-primary">
           <code className={className} {...props}>
             {children}
           </code>
@@ -58,8 +61,10 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
     );
   }
 
+  // Same reasoning: a muted surface with the standard foreground reads correctly
+  // on the page and on an accent-filled bubble. Accent-on-accent did not.
   return (
-    <code className="bg-accent/10 text-accent px-1.5 py-0.5 rounded font-mono text-[0.9em] border border-accent/20" {...props}>
+    <code className="bg-muted text-primary px-1.5 py-0.5 rounded font-mono text-[0.9em] border border-border" {...props}>
       {children}
     </code>
   );
@@ -149,6 +154,11 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
                       remarkPlugins={[remarkGfm]}
                       components={{
                         code: CodeBlock,
+                        // react-markdown wraps fenced code in its own <pre>. Since
+                        // CodeBlock renders a full <div> chrome, that nesting puts a
+                        // block element inside <pre> (invalid) and applies
+                        // white-space: pre to the wrapper. Pass through instead.
+                        pre: ({ children }) => <>{children}</>,
                         table: ({ node, ...props }) => (
                           <div className="overflow-x-auto my-6 border border-border rounded-xl">
                             <table className="w-full text-left border-collapse" {...props} />
