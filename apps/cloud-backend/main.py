@@ -1,9 +1,11 @@
+import json
 import os
 from contextlib import asynccontextmanager
 from typing import List, Optional
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from google import genai
 from pydantic import BaseModel
 
@@ -33,25 +35,17 @@ app = FastAPI(
 )
 
 # --- Middleware ---
+# Set ALLOWED_ORIGINS to a comma-separated list to lock this down in production.
+# Credentials stay off: auth is the BYOK header, not cookies, and a wildcard origin with
+# credentials enabled is rejected by browsers anyway.
+_origins = os.environ.get("ALLOWED_ORIGINS", "*")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust in production
-    allow_credentials=True,
+    allow_origins=[o.strip() for o in _origins.split(",") if o.strip()],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# --- Dependency ---
-def get_gemini_client(x_gemini_api_key: Optional[str] = Header(None)):
-    if not x_gemini_api_key:
-        raise HTTPException(status_code=401, detail="X-Gemini-API-Key header required (BYOK)")
-    
-    try:
-        # Initializing client per-request for true statelessness
-        client = genai.Client(api_key=x_gemini_api_key)
-        return client
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid API Key or initialization error: {str(e)}")
 
 # --- Endpoints ---
 @app.get("/")
@@ -61,9 +55,6 @@ async def root():
         "service": "Lineage Nexus Cloud Backend",
         "version": "0.1.0"
     }
-
-from fastapi.responses import StreamingResponse
-import json
 
 @app.post("/api/v1/chat")
 async def chat(
@@ -82,9 +73,10 @@ async def chat(
             history_dicts = [{"role": msg.role, "content": msg.content} for msg in request.history]
             
             async for update in orchestrator.chat(message=request.message, history=history_dicts):
-                # Padding must go before \n\n to stay within the same 'data' chunk
+                # Padding must go before \n\n to stay within the same 'data' chunk.
+                # Clients trim the frame before parsing, so the filler is discarded.
                 payload = json.dumps(update)
-                chunk = f"data: {payload} {' ' * (4096 - len(payload))}\n\n"
+                chunk = f"data: {payload}{' ' * max(0, 4096 - len(payload))}\n\n"
                 yield chunk
                 
         except Exception as e:

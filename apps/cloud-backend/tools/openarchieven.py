@@ -2,14 +2,40 @@ import httpx
 import re
 import copy
 import asyncio
+import time
+from collections import OrderedDict
 from datetime import datetime
 from typing import Dict, Any, Optional
 
 MAX_RESULTS = 30
 
-# Module-level cache to prevent redundant API spam
-_SEARCH_CACHE: Dict[str, Any] = {}
+# Module-level cache to prevent redundant API spam. This is shared by every request the
+# process serves, so it is bounded and evicted least-recently-used to keep a long-lived
+# instance from growing without limit.
+MAX_CACHE_ENTRIES = 256
+_SEARCH_CACHE: "OrderedDict[str, Any]" = OrderedDict()
 _CACHE_LOCK = asyncio.Lock()
+
+# The archive enforces a requests-per-second budget ("Rate limit exceeded: $limit requests
+# per second allowed", Retry-After: 1). The cap is global rather than per-connection, so
+# lowering concurrency does not help — requests have to be *paced*. Measured empirically:
+# 2 req/s sustains a full 14-record fetch with no throttling, while unpaced bursts lose
+# roughly two thirds of the records.
+MIN_REQUEST_INTERVAL = 0.5
+FETCH_RETRIES = 3
+
+_RATE_LIMIT_LOCK = asyncio.Lock()
+_last_request_at = 0.0
+
+async def _throttle():
+    """Paces every outbound archive call. Shared process-wide, since the API's budget is too:
+    two searches running in the same research turn must not blow the limit between them."""
+    global _last_request_at
+    async with _RATE_LIMIT_LOCK:
+        wait = _last_request_at + MIN_REQUEST_INTERVAL - time.monotonic()
+        if wait > 0:
+            await asyncio.sleep(wait)
+        _last_request_at = time.monotonic()
 
 OPEN_ARCHIVES_INSTRUCTIONS = r"""
 You are an expert at searching `openarchieven.nl`. Follow these strict technical rules:
@@ -135,6 +161,7 @@ async def open_archives_get_record(url: str) -> dict:
     
     async with httpx.AsyncClient() as client:
         try:
+            await _throttle()
             response = await client.get(base_url, params=params, timeout=15.0)
             response.raise_for_status()
             return response.json()
@@ -186,6 +213,7 @@ async def open_archives_search(
     cache_key = f"{query}|{eventplace}|{eventtype}|{relationtype}|{page}|{multi_page_search}"
     async with _CACHE_LOCK:
         if cache_key in _SEARCH_CACHE:
+            _SEARCH_CACHE.move_to_end(cache_key)
             cached_result = _SEARCH_CACHE[cache_key]
             await report_status(f"(CACHED) Recalled {len(cached_result.get('records', []))} records for '{query}'...")
             return cached_result
@@ -196,6 +224,7 @@ async def open_archives_search(
     
     async with httpx.AsyncClient() as client:
         try:
+            await _throttle()
             response = await client.get(base_url, params=params, timeout=20.0)
             response.raise_for_status()
             search_results = response.json()
@@ -217,27 +246,41 @@ async def open_archives_search(
                     }
 
                 if docs:
-                    await report_status(f"Fetching {len(docs)} detailed records in parallel...")
-                    
+                    await report_status(f"Fetching {len(docs)} detailed records...")
+
                     async def fetch_one(doc):
                         show_url = "https://api.openarchieven.nl/1.1/records/show.json"
                         show_params = {"archive": doc["archive_code"], "identifier": doc["identifier"], "lang": "en"}
-                        try:
-                            show_resp = await client.get(show_url, params=show_params, timeout=10.0)
-                            if show_resp.status_code == 200:
-                                rec = show_resp.json()
-                                rec["OpenArchievenLink"] = {"archive_code": doc["archive_code"], "identifier": doc["identifier"]}
-                                return rec
-                        except Exception: 
-                            return None
-                    
-                    # Fetch in batches of 10
-                    batch_size = 10
-                    for i in range(0, len(docs), batch_size):
-                        batch = docs[i:i+batch_size]
-                        results = await asyncio.gather(*(fetch_one(d) for d in batch))
-                        records.extend([r for r in results if r])
-                
+                        for attempt in range(FETCH_RETRIES):
+                            try:
+                                await _throttle()
+                                show_resp = await client.get(show_url, params=show_params, timeout=10.0)
+                                if show_resp.status_code == 200:
+                                    rec = show_resp.json()
+                                    rec["OpenArchievenLink"] = {"archive_code": doc["archive_code"], "identifier": doc["identifier"]}
+                                    return rec
+                                # Anything other than throttling is a genuine miss; don't retry.
+                                if show_resp.status_code != 429:
+                                    return None
+                                retry_after = float(show_resp.headers.get("retry-after", 1))
+                            except (httpx.TransportError, httpx.HTTPError, ValueError):
+                                retry_after = 1.0  # Dropped connection under load
+                            if attempt < FETCH_RETRIES - 1:
+                                await asyncio.sleep(retry_after)
+                        return None
+
+                    results = await asyncio.gather(*(fetch_one(d) for d in docs))
+                    records.extend([r for r in results if r])
+
+                    # Never drop records silently: a partial set can make the orchestrator
+                    # conclude that a record does not exist when it was merely throttled.
+                    missing = len(docs) - len(records)
+                    if missing > 0:
+                        await report_status(
+                            f"Warning: {missing} of {len(docs)} records could not be retrieved "
+                            f"(archive throttling). Results are incomplete."
+                        )
+
                 if len(records) > 0:
                     await report_status(f"Completed analysis of {len(records)} records.")
             
@@ -249,9 +292,12 @@ async def open_archives_search(
             }
             final_result = reformat_results(result, multi_page_search)
             
-            # Save to cache before returning
+            # Save to cache before returning, evicting the least recently used entry if full
             async with _CACHE_LOCK:
                 _SEARCH_CACHE[cache_key] = final_result
+                _SEARCH_CACHE.move_to_end(cache_key)
+                while len(_SEARCH_CACHE) > MAX_CACHE_ENTRIES:
+                    _SEARCH_CACHE.popitem(last=False)
             return final_result
             
         except Exception as e:

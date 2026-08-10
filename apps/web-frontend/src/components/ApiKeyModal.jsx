@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
+import { API_KEY_STORAGE } from '../config';
 
 const ApiKeyModal = ({ notify, onClose, onSave }) => {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('google_api_key') || '');
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || '');
 
   const handleSave = () => {
-    localStorage.setItem('google_api_key', apiKey);
+    localStorage.setItem(API_KEY_STORAGE, apiKey);
     if (notify) notify('API Key updated successfully.', 'success');
     if (onSave) onSave();
   };

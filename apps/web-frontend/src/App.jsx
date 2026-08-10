@@ -8,9 +8,11 @@ import ApiKeyModal from './components/ApiKeyModal';
 import ChatInterface from './components/ChatInterface';
 import ChatInput from './components/ChatInput';
 import Notification from './components/Notification';
+import { API_BASE_URL, API_KEY_STORAGE } from './config';
 import './index.css';
 
 function App() {
+  const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -38,7 +40,8 @@ function App() {
     localStorage.setItem('lineage_active_session_id', activeSessionId || '');
   }, [sessions, isLoggedIn, activeSessionId]);
 
-  // Load messages for the active session
+  // Load messages for the active session. `sessions` is deliberately not a dependency: this
+  // should only fire when the user switches sessions, not on every message written into one.
   useEffect(() => {
     if (activeSessionId) {
       const active = sessions.find(s => s.id === activeSessionId);
@@ -46,14 +49,17 @@ function App() {
     } else {
       setMessages([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSessionId]);
 
-  // Auto-run search from landing page
+  // Auto-run search from landing page. handleSearch is re-created every render, so including
+  // it as a dependency would re-trigger the search on each one.
   useEffect(() => {
     if (isLoggedIn && pendingQuery && messages.length === 0) {
       handleSearch(pendingQuery);
       setPendingQuery(null);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoggedIn, pendingQuery, messages.length]);
 
   // Auto-scroll to bottom of chat
@@ -75,8 +81,6 @@ function App() {
     setNotifications(prev => prev.filter(n => n.id !== id));
   };
 
-  const [apiKey, setApiKey] = useState(localStorage.getItem('GOOGLE_GENAI_API_KEY') || '');
-  const [currentLogs, setCurrentLogs] = useState([]);
   const stopRef = useRef(null);
 
   const handleStop = () => {
@@ -118,7 +122,11 @@ function App() {
     setLoading(true);
     setStatus("Analyzing ancestry...");
 
-    const apiKey = localStorage.getItem('google_api_key');
+    // Statuses are also tracked locally: state updates are not visible to this closure, and
+    // the interrupted-research log has to be readable from the error handlers below.
+    const researchLogs = [];
+
+    const apiKey = localStorage.getItem(API_KEY_STORAGE);
     if (!apiKey) {
       setPendingQuery(query);
       setConfigOpen(true);
@@ -129,8 +137,8 @@ function App() {
     try {
       const controller = new AbortController();
       stopRef.current = controller;
-      
-      const response = await fetch('http://localhost:8081/api/v1/chat', {
+
+      const response = await fetch(`${API_BASE_URL}/api/v1/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -138,8 +146,10 @@ function App() {
         },
         signal: controller.signal,
         body: JSON.stringify({
+          // On a retry the failed turn is still the last entry in `messages`; drop it so the
+          // query is not sent twice. Non-user roles are filtered server-side.
           message: query,
-          history: messages,
+          history: isRetry ? messages.slice(0, -1) : messages,
           model: 'gemini-flash-latest'
         }),
       });
@@ -169,38 +179,38 @@ function App() {
             
             if (data.status) {
               setStatus(data.status);
-              setCurrentLogs(prev => [...prev, data.status]);
+              researchLogs.push(data.status);
             }
             if (data.title) {
               console.log(`[SSE ${new Date().toLocaleTimeString()}] Updating session title to: "${data.title}"`);
-              setSessions(sList => sList.map(s => s.id === activeSessionId ? { ...s, title: data.title } : s));
+              setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, title: data.title } : s));
             }
             if (data.response) {
               setMessages(prev => {
                 const updated = [...prev, { role: 'model', content: data.response }];
-                setSessions(sList => sList.map(s => s.id === activeSessionId ? { ...s, messages: updated } : s));
+                setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
                 return updated;
               });
               setStatus(null);
-              setCurrentLogs([]);
+              researchLogs.length = 0;
             }
             if (data.error) {
               let cleanError = data.error;
               if (typeof cleanError === 'string' && (cleanError.includes('RESOURCE_EXHAUSTED') || cleanError.includes('429') || cleanError.includes('Quota exceeded'))) {
                 cleanError = 'Gemini API Quota Exceeded. You have reached the rate limit for free-tier requests (5 requests/min). Please wait ~1 minute before retrying or check your API key in Settings.';
               }
+              const logsHeader = researchLogs.length > 0 ? `\n\n**Interrupted Research Log:**\n${researchLogs.map(l => `- ${l}`).join('\n')}` : '';
               setMessages(prev => {
-                const logsHeader = currentLogs.length > 0 ? `\n\n**Interrupted Research Log:**\n${currentLogs.map(l => `- ${l}`).join('\n')}` : '';
-                const updated = [...prev, { 
-                  role: 'error', 
-                  content: `${cleanError}${logsHeader}`, 
-                  retry: data.retry !== undefined ? data.retry : true 
+                const updated = [...prev, {
+                  role: 'error',
+                  content: `${cleanError}${logsHeader}`,
+                  retry: data.retry !== undefined ? data.retry : true
                 }];
-                setSessions(sList => sList.map(s => s.id === activeSessionId ? { ...s, messages: updated } : s));
+                setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
                 return updated;
               });
               setStatus(null);
-              setCurrentLogs([]);
+              researchLogs.length = 0;
             }
           } catch (e) {
             console.error("Failed to parse SSE line:", trimmed, e);
@@ -208,20 +218,28 @@ function App() {
         }
       }
     } catch (error) {
-      if (error.name === 'AbortError') {
-        console.log("Search request aborted by user");
-        return;
-      }
-      console.error("Search failed:", error);
+      const logsHeader = researchLogs.length > 0
+        ? `\n\n**Attempted Steps:**\n${researchLogs.map(l => `- ${l}`).join('\n')}`
+        : '';
+
+      // The kill-switch is a normal outcome, not a failure: keep whatever research was
+      // completed so the user can review it, but skip the toast.
+      const content = error.name === 'AbortError'
+        ? `Research stopped at your request.${logsHeader}`
+        : `Search failed: ${error.message}${logsHeader}`;
+
+      if (error.name !== 'AbortError') console.error("Search failed:", error);
+
       setMessages(prev => {
-        const logsHeader = currentLogs.length > 0 ? `\n\n**Attempted Steps:**\n${currentLogs.map(l => `- ${l}`).join('\n')}` : '';
-        const updated = [...prev, { role: 'error', content: `Search failed: ${error.message}${logsHeader}`, retry: true }];
+        const updated = [...prev, { role: 'error', content, retry: true }];
         setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
         return updated;
       });
       setStatus(null);
-      setCurrentLogs([]);
-      notify(`Failed to orchestrate research. ${error.message}`, "error");
+
+      if (error.name !== 'AbortError') {
+        notify(`Failed to orchestrate research. ${error.message}`, "error");
+      }
     } finally {
       setLoading(false);
       stopRef.current = null;

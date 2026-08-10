@@ -1,7 +1,7 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef } from 'react';
 import { Send, Search, FileText, Download, Mic } from 'lucide-react';
 
-const ChatInput = ({ onSearch, onStop, isLoading, status }) => {
+const ChatInput = ({ onSearch, onStop, isLoading }) => {
   const textareaRef = useRef(null);
 
   const handleSubmit = (e) => {

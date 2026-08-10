@@ -113,7 +113,7 @@ class ResearchOrchestrator:
         finally:
             unregister_status_queue()
 
-    async def _conduct_research(self, message: str, history: List[Dict[str, Any]]) -> Dict[Dict[str, Any], Any]:
+    async def _conduct_research(self, message: str, history: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Internal research logic that reports status via 'report_status'."""
         from tools.utils import report_status
         await report_status("Formulating research plan...")
@@ -133,9 +133,7 @@ class ResearchOrchestrator:
             get_relatives,
             get_profile
         ]
-        
-        tool_map = {f.__name__: f for f in all_tools}
-        
+
         # Specialist shim for biography formatting
         async def format_biography(research_data: str = "No research data provided", user_instructions: str = "Follow standard formatting") -> str:
             """
@@ -143,10 +141,9 @@ class ResearchOrchestrator:
             and converts it into a high-fidelity WikiTree biography. Use this ONLY as the final step.
             """
             return await format_wikitree_biography(self.client, self.model_name, research_data, user_instructions)
-        
-        tool_map = {f.__name__: f for f in all_tools}
-        tool_map["format_biography"] = format_biography
+
         all_tools.append(format_biography)
+        tool_map = {f.__name__: f for f in all_tools}
 
         seen_queries = set()
         while turn_count < MAX_RESEARCH_TURNS:
