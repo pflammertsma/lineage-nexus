@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { Send, Search, FileText, Download, Mic } from 'lucide-react';
+import { Send, Search, FileText, Download, ShieldAlert } from 'lucide-react';
 
 const ChatInput = ({ onSearch, onStop, isLoading }) => {
   const textareaRef = useRef(null);
@@ -53,6 +53,15 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
                 >
                   <Search size={14} />
                   <span>Research</span>
+                </button>
+                <div className="h-4 w-[1px] bg-border/50 mx-1"></div>
+                <button 
+                  type="button" 
+                  onClick={() => handleActionClick("Search Holocaust records in Joods Monument and Oorlogsbronnen for [ENTER-NAME]")}
+                  className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest opacity-40 hover:opacity-100 transition-opacity"
+                >
+                  <ShieldAlert size={14} />
+                  <span>Holocaust</span>
                 </button>
                 <div className="h-4 w-[1px] bg-border/50 mx-1"></div>
                 <button 

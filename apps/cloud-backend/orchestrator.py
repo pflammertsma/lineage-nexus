@@ -4,16 +4,17 @@ from google import genai
 from google.genai import types
 from tools.openarchieven import open_archives_search, open_archives_get_record, OPEN_ARCHIVES_INSTRUCTIONS
 from tools.wikitree import search_profiles, get_profile, get_person, get_relatives, WIKITREE_INSTRUCTIONS
+from tools.holocaust import joods_monument_search, joods_monument_get_document, oorlogsbronnen_search, oorlogsbronnen_get_document, HOLOCAUST_INSTRUCTIONS
 from tools.biography import format_wikitree_biography
 from tools.utils import get_ts, generate_with_quota_retry
 
 ROOT_STRATEGY = """
 You are the **Lineage Nexus Heritage Research Orchestrator**. Your primary role is to conduct professional
-genealogical research in the Netherlands using archival and WikiTree tools.
+genealogical research in the Netherlands using archival, WikiTree, and WWII / Holocaust research tools.
 
 ### RESEARCH PROTOCOL
 1. **IDENTIFY**: Extract names, dates, and locations from user queries.
-2. **SEARCH**: Use archival/WikiTree tools to find matches.
+2. **SEARCH**: Use archival/WikiTree/Holocaust tools to find matches.
 3. **READ**: Fetch full record text or profile biographies.
 4. **ANALYZE**: Correlate across multiple sources.
 5. **FORMAT**: Delegate the final biography to the `format_biography` tool.
@@ -35,7 +36,7 @@ MAX_SEARCH_PER_TURN = 2
 MAX_RESEARCH_TURNS = 6
 
 # Assemble the full instruction set from modular skill components
-SYSTEM_INSTRUCTION = ROOT_STRATEGY + "\n" + OPEN_ARCHIVES_INSTRUCTIONS + "\n" + WIKITREE_INSTRUCTIONS
+SYSTEM_INSTRUCTION = ROOT_STRATEGY + "\n" + OPEN_ARCHIVES_INSTRUCTIONS + "\n" + WIKITREE_INSTRUCTIONS + "\n" + HOLOCAUST_INSTRUCTIONS
 
 class ResearchOrchestrator:
     def __init__(self, client: genai.Client, model_name: str = "gemini-flash-latest"):
@@ -134,7 +135,11 @@ class ResearchOrchestrator:
             search_profiles, 
             get_person, 
             get_relatives,
-            get_profile
+            get_profile,
+            joods_monument_search,
+            joods_monument_get_document,
+            oorlogsbronnen_search,
+            oorlogsbronnen_get_document
         ]
 
         # Specialist shim for biography formatting
@@ -147,6 +152,8 @@ class ResearchOrchestrator:
 
         all_tools.append(format_biography)
         tool_map = {f.__name__: f for f in all_tools}
+
+        search_tool_names = ["open_archives_search", "search_profiles", "joods_monument_search", "oorlogsbronnen_search"]
 
         seen_queries = set()
         while turn_count < MAX_RESEARCH_TURNS:
@@ -180,8 +187,8 @@ class ResearchOrchestrator:
             await report_status(f"Invoking {len(function_calls)} tools…")
 
             # Enforce strict research limit per turn to prevent shotgunning
-            search_calls = [fc for fc in function_calls if fc.name in ["open_archives_search", "search_profiles"]]
-            other_calls = [fc for fc in function_calls if fc.name not in ["open_archives_search", "search_profiles"]]
+            search_calls = [fc for fc in function_calls if fc.name in search_tool_names]
+            other_calls = [fc for fc in function_calls if fc.name not in search_tool_names]
             
             # Prioritize 'get_profile' over searches in the same turn if both are present
             if any(fc.name == "get_profile" for fc in other_calls) and search_calls:
@@ -197,7 +204,7 @@ class ResearchOrchestrator:
             tool_parts = []
             for fc in active_calls:
                 # Deduplication check for search calls
-                if fc.name in ["open_archives_search", "search_profiles"]:
+                if fc.name in search_tool_names:
                     q_key = str(fc.args)
                     if q_key in seen_queries:
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": "Redundant query. Broaden your search or try a different source."}))
