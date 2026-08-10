@@ -1,4 +1,4 @@
-# <image src="docs/logo.svg" height="24" alt="ADK web interface"/> Lineage Nexus
+# <image src="docs/logo.svg" height="24" alt="Lineage Nexus"/> Lineage Nexus
 
 ## Background
 
@@ -15,142 +15,90 @@ This enables it to understand queries like:
 * _`Create a WikiTree profile for Jan from this record: https://www.openarchieven.nl/gra:fb3d078b-fd79-feb3-9000-947e38cbc0a3`_
 * _`Research the WikiTree profile 'Jans-10027' and amend it with additional information`_
 
-<image src="docs/chat-screen.png" width="480" alt="ADK web interface"/>
-
-## Quickstart
-
-More details about using ADK can be found in [the general ADK quickstart guide](https://google.github.io/adk-docs/get-started/quickstart/).
-
-### Dependencies
-
- - [Python3](https://www.python.org/downloads/)
- - [pip](https://pypi.org/project/pip/), Python package installer
- - [venv](https://docs.python.org/3/library/venv.html), Virtual environments for Python
- - [Google's ADK](https://google.github.io/adk-docs/), Agent Development Kit
-
-### Directory setup
-
-Note that this project serves as the base directory of where ADK projects are run. ADK identifies all subdirectories as agent projects, and due to this nature, the only directory immediately inside this project is our Lineage Nexus agent project:
-
-This means that adding any directories into the root of this repository may appear (unexpectedly) as agent projects in the Agent Development Kit Dev UI when executing `adk web`.
-
-### Installation
-
-1. Install Python
-2. Install `pip`
-3. Install `venv`
-    ```
-    # Linux
-    pip install virtualenv
-    # macOS
-    brew install virtualenv
-    ```
-
-### Configuration
-
-1. Visit [ai.dev](https://ai.dev) to get your Google API key.
-2. Create `.env` file:
-    ```
-    touch adk-app/.env
-    ```
-3. Add following lines to your `adk-app/.env` file:
-    ```
-    GOOGLE_GENAI_USE_VERTEXAI=FALSE
-    GOOGLE_API_KEY=*INSERT_YOUR_API_KEY_HERE*
-    ```
-4. Create virtual environment:
-    ```
-    python3 -m venv .venv
-    ```
-5. Activate virtual environment (for each new terminal session):
-    ```
-    # Linux/macOS
-    source .venv/bin/activate
-    ```
-6. Install ADK:
-    ```
-    pip install google-adk
-    ```
-    Alternatively, use the weekly build:
-    ```
-    pip install git+https://github.com/google/adk-python.git@main
-    ```
-
-## Running the agent
-
-There are two ways to run the Lineage Nexus agent: with the default ADK web interface, or with the custom Streamlit web interface.
-
-### Default Web Interface
-
-From this repo's root directory, execute:
-
-```
-adk web
-```
-
-Once the ADK is up and running, the chat interface will then be presented to you locally on your machine at http://127.0.0.1:8000/.
-
-### Custom Web Interface (Streamlit)
-
-This project includes a custom web interface built with Streamlit that provides a better user experience.
-
-**1. Install UI Dependencies**
-
-From the project's root directory, install the required packages for the UI:
-```
-pip install -r apps/requirements.txt
-```
-
-**2. Run the ADK API Server**
-
-In one terminal, navigate to the project's root directory and run the agent as an API server:
-```
-adk api_server --log_level DEBUG
-```
-
-**3. Run the Streamlit App**
-
-In a second terminal, navigate to the project's root directory and run the Plotly Dash:
-## 🌐 Next-Generation Platform (Cloud Native)
-
-Lineage Nexus is transitioning from a local-first **ADK tool** to a fully hosted web platform at **[https://lineage.nexus](https://lineage.nexus)**.
-
 ### Features
 - **Modern Heritage Design**: A premium research experience with high-fidelity "Parchment & Slate" aesthetics.
 - **Disciplined Research Orchestration**: Advanced agent guardrails with turn-throttling to prevent "BCE Hallucination" and redundant archival queries.
 - **Persistent Research Logs**: Stateful SSE monitoring that preserves agent "thoughts" even during interruptions or failures.
 - **Agent Kill-Switch**: Full user control via `AbortController` to instantly terminate research turns.
 - **WikiTree Integration**: Deep-linked profile retrieval and context analysis with official AppId compliance.
-- **Professional Analytics**: Multi-turn tool-calling with real-time status reporting.
-- **Technology Stack**: React 19 + Vite (Frontend) and FastAPI + Gemini SDK (Backend).
+- **Bring Your Own Key (BYOK)**: The backend holds no credentials; your Gemini key stays in your browser and is passed per-request.
+
+---
+
+## 🗺️ Repository layout
+
+This is a `pnpm` workspace (`apps/*`) that also contains the deprecated Python implementations.
+
+| Path | What it is |
+|---|---|
+| `apps/web-frontend/` | **Current UI.** React 19 + Vite 8 + Tailwind v4 SPA. |
+| `apps/cloud-backend/` | **Current API.** FastAPI + Gemini SDK research orchestrator. |
+| `apps/` (root files) | *Legacy.* Plotly Dash client for the ADK API server. |
+| `adk-app/` | *Deprecated.* The original Google ADK multi-agent system. |
+| `docs/`, `assets/` | Logos, screenshots and legacy Dash static assets. |
 
 ---
 
 ## 🛠️ Development
 
 ### Web Frontend
-To run the modern workbench locally:
+
 ```bash
 cd apps/web-frontend
 pnpm install
 pnpm dev
 ```
 
+Runs on Vite's default port (`5173`). The backend URL is currently **hardcoded** to
+`http://localhost:8081` in `src/App.jsx`; see [TODO.md](TODO.md).
+
 ### Cloud Backend
-To run the FastAPI research server:
+
 ```bash
 cd apps/cloud-backend
-# Set up a virtual env and install requirements
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 python main.py
 ```
 
+Serves on port `8081` locally (`PORT` env var otherwise; Cloud Run defaults to `8080`).
+
+From the repo root, `pnpm dev` and `pnpm backend` are shortcuts for the two commands above,
+and `pnpm deploy` pushes the backend to Cloud Run.
+
+### Configuration
+
+The backend stores no API keys. Visit [Google AI Studio](https://aistudio.google.com/app/api-keys)
+to get a Gemini key, then paste it into the in-app **API Configuration** dialog. It is kept in
+`localStorage` and sent per-request as the `X-Gemini-API-Key` header.
+
+### API
+
+| Method | Route | Notes |
+|---|---|---|
+| `GET` | `/` | Health/status probe. |
+| `POST` | `/api/v1/chat` | Server-Sent Events. Body: `{ message, history[], model }`. Requires the `X-Gemini-API-Key` header. |
+
+The SSE stream emits one JSON object per `data:` frame, in one of four shapes:
+`{status}` (progress), `{title}` (generated session title), `{response}` (final answer) or
+`{error, retry}`. Frames are right-padded to defeat proxy buffering.
+
+The service is **stateless**: conversation history is round-tripped by the client on every
+request and nothing is persisted server-side.
+
 ---
 
 ## 🪵 Legacy ADK Implementation (Deprecated)
-The project began as an **Agent Development Kit (ADK)** research toolkit. To run the legacy CLI and Dash interfaces, see the instructions below.
+
+The project began as a local-first **Agent Development Kit (ADK)** research toolkit built on
+[Google's ADK](https://google.github.io/adk-docs/), with a hierarchical multi-agent design and a
+Plotly Dash front end. Full setup and run instructions are in
+**[adk-app/README.md](adk-app/README.md)**; [AGENTS.md](AGENTS.md) covers how it compares to the
+current orchestrator.
+
+> **Note:** the legacy code imports itself as `adk_app` while the directory is named `adk-app`.
+> It will not run as-is without a rename or path shim.
 
 ## License
 
@@ -165,4 +113,4 @@ Please feel free to contribute to this project in any way:
 
 Thanks!
 
-<image src="docs/logo.svg" height="128" alt="ADK web interface"/>
+<image src="docs/logo.svg" height="128" alt="Lineage Nexus"/>
