@@ -1,6 +1,6 @@
 import { Plus, MessageSquare, Clock, Settings, User, Trash2 } from 'lucide-react';
 
-const Sidebar = ({ sessions, activeSessionId, onNewChat, onSelectSession, onDeleteSession }) => {
+const Sidebar = ({ sessions, activeSessionId, onNewChat, onSelectSession, onDeleteSession, onOpenSettings }) => {
   return (
     <aside className="w-64 border-r border-border bg-surface flex flex-col h-screen sticky top-0">
       <div className="p-4 border-b border-border">
@@ -54,7 +54,11 @@ const Sidebar = ({ sessions, activeSessionId, onNewChat, onSelectSession, onDele
       </nav>
 
       <div className="p-4 border-t border-border space-y-2">
-        <button className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-card transition-colors">
+        <button
+          onClick={onOpenSettings}
+          title="API configuration"
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-card transition-colors cursor-pointer"
+        >
           <Settings size={16} className="opacity-60" />
           <span>Settings</span>
         </button>

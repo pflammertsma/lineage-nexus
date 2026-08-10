@@ -316,6 +316,7 @@ function App() {
                   setActiveSessionId(null);
                   setMessages([]);
                 }}
+                onOpenSettings={() => setConfigOpen(true)}
               />
               <main className="flex-1 overflow-hidden relative bg-surface">
                 {messages.length === 0 ? (
