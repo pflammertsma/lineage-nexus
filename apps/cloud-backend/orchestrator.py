@@ -1,5 +1,6 @@
 from typing import List, Dict, Any, AsyncGenerator
 import asyncio
+import re
 from google import genai
 from google.genai import types
 from tools.openarchieven import open_archives_search, open_archives_get_record, OPEN_ARCHIVES_INSTRUCTIONS
@@ -34,6 +35,53 @@ genealogical research in the Netherlands using archival, WikiTree, and WWII / Ho
 
 MAX_SEARCH_PER_TURN = 2
 MAX_RESEARCH_TURNS = 6
+
+# A session is about a person, so the sidebar should name that person and nothing
+# else. Asking for a "2-5 word title" invited the model to fill the word budget
+# with task nouns — "Annigje Jans Research", "Annigje Jans Profile Creation".
+TITLE_PROMPT = """Identify the person this genealogical research session is about.
+
+Respond with ONLY that person's name, spelled as it appears in the research. Nothing else.
+
+Rules:
+- NEVER append a task or activity word. Not "Research", "Profile", "Profile Creation",
+  "Biography", "Analysis", "Lookup", "Investigation", "Records" or anything similar.
+- No dates, no places, no quotation marks, no trailing punctuation.
+- If several people appear, name the primary subject of the research.
+- Only if no individual can be identified at all, reply with a two- to four-word
+  description of the topic instead.
+
+Good: Annigje Jans
+Good: Jan Lammertsma
+Bad: Annigje Jans Research
+Bad: Profile Creation for Annigje Jans
+
+Context:
+{context}"""
+
+# The instruction above does most of the work, but models still occasionally tack a
+# task word on, so strip trailing ones as a backstop.
+_TITLE_SUFFIX_NOISE = re.compile(
+    r"\s*[-–—:,]?\s*\b("
+    r"research|profile creation|profile|biography|bio|analysis|lookup|"
+    r"investigation|records?|genealogy|session|summary|report"
+    r")\b\s*$",
+    re.IGNORECASE,
+)
+
+def clean_session_title(raw: str) -> str:
+    """Reduces a generated title to just the subject's name."""
+    title = (raw or "").strip().replace("*", "").strip("\"'`")
+    # Repeat to catch stacked suffixes such as "Annigje Jans Profile Research".
+    for _ in range(3):
+        stripped = _TITLE_SUFFIX_NOISE.sub("", title).strip()
+        if stripped == title:
+            break
+        title = stripped
+    title = title.strip(" -–—:,")
+    # If the response was nothing but a task word, keep the original rather than
+    # yielding an empty sidebar entry.
+    return title or (raw or "").strip().replace("*", "").strip("\"'`")
 
 # Assemble the full instruction set from modular skill components
 SYSTEM_INSTRUCTION = ROOT_STRATEGY + "\n" + OPEN_ARCHIVES_INSTRUCTIONS + "\n" + WIKITREE_INSTRUCTIONS + "\n" + HOLOCAUST_INSTRUCTIONS
@@ -97,14 +145,14 @@ class ResearchOrchestrator:
                     # spend the quota we are trying to conserve.
                     title_response = await self.client.aio.models.generate_content(
                         model=self.model_name,
-                        contents=[types.Content(role="user", parts=[types.Part.from_text(text=f"Based on the following genealogical research, generate a very short, professional 2-5 word title for this session. Respond ONLY with the title text.\n\nContext:\n{title_context}")])],
+                        contents=[types.Content(role="user", parts=[types.Part.from_text(text=TITLE_PROMPT.format(context=title_context))])],
                         config=types.GenerateContentConfig(temperature=0.0)
                     )
-                    
+
                     if title_response.candidates and title_response.candidates[0].content.parts:
                         title_text = "".join([p.text for p in title_response.candidates[0].content.parts if p.text])
-                        if title_text:
-                            clean_title = title_text.strip().replace('"', '').replace('*', '')
+                        clean_title = clean_session_title(title_text)
+                        if clean_title:
                             yield {"title": clean_title}
                 except Exception as e:
                     print(f"[{get_ts()}] DEBUG: Title generation failed (non-critical): {e}")
