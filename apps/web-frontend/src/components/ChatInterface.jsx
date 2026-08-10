@@ -71,21 +71,23 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
           {messages.map((msg, idx) => {
             if (msg.role === 'error') {
               return (
-                <div key={idx} className="flex flex-col items-center justify-center p-8 bg-red-50/10 border border-red-500/20 rounded-2xl animate-in fade-in slide-in-from-bottom-2">
-                  <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4">
+                <div key={idx} className="flex flex-col items-center justify-center p-8 bg-red-500/5 border border-red-500/20 rounded-2xl animate-in fade-in slide-in-from-bottom-2">
+                  <div className="w-12 h-12 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/30">
                     <span className="text-red-400 font-bold text-xl">!</span>
                   </div>
-                  <h3 className="text-rose-200/90 text-[10px] font-bold uppercase tracking-[0.2em] mb-2">Research Interrupted</h3>
-                  <p className="text-rose-100/60 text-sm text-center max-w-[400px] mb-6 font-serif italic leading-relaxed">
-                    {msg.content}
-                  </p>
+                  <h3 className="text-rose-200/90 text-[10px] font-bold uppercase tracking-[0.2em] mb-3">Research Interrupted</h3>
+                  <div className="text-rose-100/80 text-sm text-center max-w-[550px] mb-6 leading-relaxed markdown-content">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {msg.content}
+                    </ReactMarkdown>
+                  </div>
                   {msg.retry && (
                     <button
                       onClick={() => {
                         const lastUser = [...messages].reverse().find(m => m.role === 'user');
                         if (lastUser && onRetry) onRetry(lastUser.content);
                       }}
-                      className="btn btn-primary bg-red-600 hover:bg-red-700 h-10 px-8 text-xs font-bold uppercase tracking-widest shadow-lg shadow-red-900/10"
+                      className="btn btn-primary bg-red-600 hover:bg-red-700 h-10 px-8 text-xs font-bold uppercase tracking-widest shadow-lg shadow-red-900/10 cursor-pointer"
                     >
                       Retry Search
                     </button>

@@ -88,15 +88,18 @@ async def chat(
                 yield chunk
                 
         except Exception as e:
-            from google.genai.errors import ClientError
-            error_msg = str(e)
-            if isinstance(e, ClientError) and e.code == 400 and 'API key not valid' in str(e.message):
+            from google.genai.errors import ClientError, APIError
+            error_str = str(e)
+            if "RESOURCE_EXHAUSTED" in error_str or "429" in error_str or "Quota exceeded" in error_str:
+                error_msg = "Gemini API Quota Exceeded. You have reached the rate limit for free-tier requests (5 requests/min). Please wait ~1 minute before retrying or check your API key quota."
+            elif isinstance(e, ClientError) and getattr(e, 'code', None) == 400 and 'API key not valid' in str(getattr(e, 'message', '')):
                 error_msg = "Invalid Gemini API Key. Please update your key in Settings."
             else:
                 import traceback
                 print(traceback.format_exc())
+                error_msg = f"An unexpected error occurred: {error_str}"
             
-            chunk = f"data: {json.dumps({'error': error_msg})}\n\n"
+            chunk = f"data: {json.dumps({'error': error_msg, 'retry': True})}\n\n"
             yield chunk + (" " * 1024)
 
     return StreamingResponse(
@@ -112,5 +115,5 @@ async def chat(
 if __name__ == "__main__":
     import uvicorn
     # Use PORT from env for Cloud Run
-    port = int(os.environ.get("PORT", 8080))
+    port = int(os.environ.get("PORT", 8081))
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)

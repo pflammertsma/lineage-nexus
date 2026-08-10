@@ -185,12 +185,16 @@ function App() {
               setCurrentLogs([]);
             }
             if (data.error) {
+              let cleanError = data.error;
+              if (typeof cleanError === 'string' && (cleanError.includes('RESOURCE_EXHAUSTED') || cleanError.includes('429') || cleanError.includes('Quota exceeded'))) {
+                cleanError = 'Gemini API Quota Exceeded. You have reached the rate limit for free-tier requests (5 requests/min). Please wait ~1 minute before retrying or check your API key in Settings.';
+              }
               setMessages(prev => {
                 const logsHeader = currentLogs.length > 0 ? `\n\n**Interrupted Research Log:**\n${currentLogs.map(l => `- ${l}`).join('\n')}` : '';
                 const updated = [...prev, { 
                   role: 'error', 
-                  content: `${data.error}${logsHeader}`, 
-                  retry: data.retry 
+                  content: `${cleanError}${logsHeader}`, 
+                  retry: data.retry !== undefined ? data.retry : true 
                 }];
                 setSessions(sList => sList.map(s => s.id === activeSessionId ? { ...s, messages: updated } : s));
                 return updated;
