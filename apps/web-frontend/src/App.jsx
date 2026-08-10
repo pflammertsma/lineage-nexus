@@ -130,7 +130,7 @@ function App() {
       const controller = new AbortController();
       stopRef.current = controller;
       
-      const response = await fetch('http://localhost:8080/api/v1/chat', {
+      const response = await fetch('http://localhost:8081/api/v1/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -5,7 +5,7 @@
     "dev": "cd apps/web-frontend && pnpm dev",
     "build": "cd apps/web-frontend && pnpm build",
     "backend": "pnpm backend:dev",
-    "backend:dev": "cd apps/cloud-backend && uvicorn main:app --port 8080 --host 0.0.0.0 --reload",
+    "backend:dev": "cd apps/cloud-backend && uvicorn main:app --port 8081 --host 0.0.0.0 --reload",
     "deploy": "cd apps/cloud-backend && gcloud run deploy lineage-nexus-api --source . --region europe-west4 --allow-unauthenticated"
   }
 }
