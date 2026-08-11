@@ -14,8 +14,14 @@
   const formatDateToISO = (str) => {
     if (!str) return str;
     const s = str.trim();
-    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    if (/^\d{4}-\d{2}(-\d{2})?$/.test(s)) return s;
     
+    const isBefore = /\bbefore\b|\bbef\b/i.test(s);
+    const isAfter = /\bafter\b|\baft\b/i.test(s);
+    const isEstimate = /\babout\b|\babt\b|\best\b|\bestimated\b|\bcirca\b/i.test(s);
+
+    const clean = s.replace(/^(before|bef|after|aft|about|abt|est|estimated|circa|c\.)\s+/i, '').trim();
+
     const months = {
       january: '01', feb: '02', february: '02', mar: '03', march: '03', apr: '04', april: '04',
       may: '05', jun: '06', june: '06', jul: '07', july: '07', aug: '08', august: '08',
@@ -23,21 +29,59 @@
       jan: '01', februari: '02', maart: '03', mei: '05', juni: '06', juli: '07', augustus: '08', oktober: '10'
     };
 
-    const m1 = s.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+    const m1 = clean.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
     if (m1 && months[m1[1].toLowerCase()]) {
       const mm = months[m1[1].toLowerCase()];
       const dd = m1[2].padStart(2, '0');
-      return `${m1[3]}-${mm}-${dd}`;
+      const iso = `${m1[3]}-${mm}-${dd}`;
+      return isBefore ? `before ${iso}` : isAfter ? `after ${iso}` : isEstimate ? `about ${iso}` : iso;
     }
 
-    const m2 = s.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+    const m2 = clean.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
     if (m2 && months[m2[2].toLowerCase()]) {
       const mm = months[m2[2].toLowerCase()];
       const dd = m2[1].padStart(2, '0');
-      return `${m2[3]}-${mm}-${dd}`;
+      const iso = `${m2[3]}-${mm}-${dd}`;
+      return isBefore ? `before ${iso}` : isAfter ? `after ${iso}` : isEstimate ? `about ${iso}` : iso;
+    }
+
+    const m3 = clean.match(/^([A-Za-z]+)\s+(\d{4})$/);
+    if (m3 && months[m3[1].toLowerCase()]) {
+      const mm = months[m3[1].toLowerCase()];
+      const iso = `${m3[2]}-${mm}`;
+      return isBefore ? `before ${iso}` : isAfter ? `after ${iso}` : isEstimate ? `about ${iso}` : iso;
     }
 
     return s;
+  };
+
+  const sanitizeDutchNamePrefixes = (vitals) => {
+    if (!vitals || !vitals.firstName) return vitals;
+    const dutchPrefixes = ['van', 'de', 'den', 'der', 'van de', 'van den', 'van der', 'ten', 'ter', 'te', 'in \'t', 'op \'t', 'van \'t', 'vander', 'vanden', 'du', 'la', 'le', 'von'];
+    const fnParts = vitals.firstName.trim().split(/\s+/);
+    
+    if (fnParts.length >= 2) {
+      let prefixToMove = '';
+      const lastTwo = `${fnParts[fnParts.length - 2]} ${fnParts[fnParts.length - 1]}`.toLowerCase();
+      if (dutchPrefixes.includes(lastTwo)) {
+        prefixToMove = fnParts.slice(-2).join(' ');
+        vitals.firstName = fnParts.slice(0, -2).join(' ');
+      } else {
+        const lastOne = fnParts[fnParts.length - 1].toLowerCase();
+        if (dutchPrefixes.includes(lastOne)) {
+          prefixToMove = fnParts[fnParts.length - 1];
+          vitals.firstName = fnParts.slice(0, -1).join(' ');
+        }
+      }
+
+      if (prefixToMove) {
+        const currentLastName = vitals.lastNameAtBirth || '';
+        if (!currentLastName.toLowerCase().startsWith(prefixToMove.toLowerCase())) {
+          vitals.lastNameAtBirth = `${prefixToMove} ${currentLastName}`.trim();
+        }
+      }
+    }
+    return vitals;
   };
 
   // Check if we are on a WikiTree page or Lineage Nexus app
@@ -185,7 +229,7 @@
     }
 
     if (raw && !vitals.deathDate) {
-      const deathMatch = raw.match(/(?:passed away|died)\s+(?:at\s+[^\n,]+?\s+on\s+|on\s+)?([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.<]+?))?(?:\.|$|<)/i) ||
+      const deathMatch = raw.match(/(?:passed away|died)\s+((?:before|after|about|abt|est|circa)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:,\s+in\s+([^\n.<]+?))?(?:,|\.|$|<)/i) ||
                          raw.match(/(?:passed away|died)\s+in\s+([^\n.<]+?)\s+on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})/i) ||
                          raw.match(/Death Date:\s*([^\n]+)/i);
       if (deathMatch) {
@@ -231,6 +275,9 @@
     if (vitals.lastNameAtBirth && !vitals.lastNameCurrent && vitals.gender === 'Male') {
       vitals.lastNameCurrent = vitals.lastNameAtBirth;
     }
+
+    // Sanitize Dutch tussenvoegsels (van, de, van der, etc.) placed inside firstName
+    vitals = sanitizeDutchNamePrefixes(vitals);
 
     return { rawWikitext: raw, vitals };
   };

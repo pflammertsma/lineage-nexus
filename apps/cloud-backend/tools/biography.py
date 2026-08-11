@@ -101,6 +101,8 @@ Your output follows these conventions:
   1. You MUST include ALL known vital fields for the SUBJECT of the biography (firstName, lastNameAtBirth, lastNameCurrent, gender, birthDate in YYYY-MM-DD format, birthLocation, deathDate in YYYY-MM-DD format, deathLocation, marriageDate in YYYY-MM-DD format, marriageEndDate in YYYY-MM-DD format, marriageLocation, spouseName).
   2. Always include `marriageDate`, `marriageLocation`, and `spouseName` if the subject was married.
   3. DO NOT confuse the subject's death date with their spouse's death date.
+  4. DUTCH SURNAME PREFIXES (Tussenvoegsels): Dutch prefixes like 'van', 'de', 'van der', 'van den', 'den', 'der', 'ten', 'ter' belong to the SURNAME (lastNameAtBirth), NOT the first name! E.g. for "Jan Isaäc van Heek", firstName MUST be "Jan Isaäc" and lastNameAtBirth MUST be "van Heek" (NEVER put "van" inside firstName).
+  5. RELATIVE / APPROXIMATE DATES (before/after/about): If a date is non-exact (e.g. "before May 1913", "about 1910", "after 1920"), include the qualifier in the date string (e.g. "deathDate": "before 1913-05"). NEVER leave deathDate empty if the text states "passed away before May 1913"!
   `<!-- LINEAGE_NEXUS_DATA: {"firstName":"...","lastNameAtBirth":"...","lastNameCurrent":"...","gender":"Male|Female","birthDate":"YYYY-MM-DD","birthLocation":"...","deathDate":"YYYY-MM-DD","deathLocation":"...","marriageDate":"YYYY-MM-DD","marriageEndDate":"YYYY-MM-DD","marriageLocation":"...","spouseName":"..."} -->`
 
 
