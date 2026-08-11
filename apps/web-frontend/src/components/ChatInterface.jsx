@@ -6,6 +6,35 @@ import remarkGfm from 'remark-gfm';
 const INITIAL_VISIBLE_COUNT = 15;
 const PAGE_INCREMENT = 15;
 
+const formatDateToISO = (str) => {
+  if (!str) return str;
+  const s = str.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  
+  const months = {
+    january: '01', feb: '02', february: '02', mar: '03', march: '03', apr: '04', april: '04',
+    may: '05', jun: '06', june: '06', jul: '07', july: '07', aug: '08', august: '08',
+    sep: '09', september: '09', oct: '10', october: '10', nov: '11', november: '11', dec: '12', december: '12',
+    jan: '01', februari: '02', maart: '03', mei: '05', juni: '06', juli: '07', augustus: '08', oktober: '10'
+  };
+
+  const m1 = s.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+  if (m1 && months[m1[1].toLowerCase()]) {
+    const mm = months[m1[1].toLowerCase()];
+    const dd = m1[2].padStart(2, '0');
+    return `${m1[3]}-${mm}-${dd}`;
+  }
+
+  const m2 = s.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+  if (m2 && months[m2[2].toLowerCase()]) {
+    const mm = months[m2[2].toLowerCase()];
+    const dd = m2[1].padStart(2, '0');
+    return `${m2[3]}-${mm}-${dd}`;
+  }
+
+  return s;
+};
+
 const CodeBlock = ({ node, inline, className, children, ...props }) => {
   const [copied, setCopied] = useState(false);
   const [pushed, setPushed] = useState(false);
@@ -26,7 +55,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
       }
     }
 
-    // 2. Fallback regex parsing if JSON comment is not present
+    // 2. Fallback regex parsing if JSON comment is missing any fields
     if (!vitals.firstName) {
       const nameMatch = text.match(/'''([^']+)'''/);
       if (nameMatch) {
@@ -42,17 +71,29 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
     }
 
     if (!vitals.birthDate) {
-      const birthMatch = text.match(/was born on\s+([^,]+),\s+in\s+([^\n]+?)(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$)/i) ||
-                         text.match(/was born on\s+([^,]+),\s+in\s+([^,.\n]+)/i) ||
+      const birthMatch = text.match(/was born on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
+                         text.match(/was born\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
                          text.match(/Birth Date:\s*([^\n]+)/i);
       if (birthMatch) {
-        vitals.birthDate = birthMatch[1].trim();
-        if (birthMatch[2]) {
+        vitals.birthDate = formatDateToISO(birthMatch[1]);
+        if (birthMatch[2] && !vitals.birthLocation) {
           vitals.birthLocation = birthMatch[2]
             .replace(/,?\s*(?:the\s+)?(?:son|daughter)\s+of[\s\S]*/i, '')
             .replace(/,?\s*\[\[[\s\S]*/, '')
             .replace(/\.$/, '')
             .trim();
+        }
+      }
+    }
+
+    if (!vitals.deathDate) {
+      const deathMatch = text.match(/(?:passed away|died)\s+(?:at\s+[^\n,]+?\s+on\s+|on\s+)?([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.<]+?))?(?:\.|$|<)/i) ||
+                         text.match(/(?:passed away|died)\s+in\s+([^\n.<]+?)\s+on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})/i) ||
+                         text.match(/Death Date:\s*([^\n]+)/i);
+      if (deathMatch) {
+        vitals.deathDate = formatDateToISO(deathMatch[1]);
+        if (deathMatch[2] && !vitals.deathLocation) {
+          vitals.deathLocation = deathMatch[2].replace(/\.$/, '').trim();
         }
       }
     }
@@ -412,7 +453,7 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
                         li: ({ node, ...props }) => <li className="pl-1" {...props} />,
                       }}
                     >
-                      {msg.content || ""}
+                      {(msg.content || '').replace(/<!--\s*LINEAGE_NEXUS_DATA:[\s\S]+?-->/gi, '').trim()}
                     </ReactMarkdown>
                   </div>
                 </div>

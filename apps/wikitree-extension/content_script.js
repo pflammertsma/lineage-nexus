@@ -11,6 +11,35 @@
     return `<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg"><circle cx="256" cy="256" r="256" fill="#134074"/></svg>`;
   };
 
+  const formatDateToISO = (str) => {
+    if (!str) return str;
+    const s = str.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    
+    const months = {
+      january: '01', feb: '02', february: '02', mar: '03', march: '03', apr: '04', april: '04',
+      may: '05', jun: '06', june: '06', jul: '07', july: '07', aug: '08', august: '08',
+      sep: '09', september: '09', oct: '10', october: '10', nov: '11', november: '11', dec: '12', december: '12',
+      jan: '01', februari: '02', maart: '03', mei: '05', juni: '06', juli: '07', augustus: '08', oktober: '10'
+    };
+
+    const m1 = s.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
+    if (m1 && months[m1[1].toLowerCase()]) {
+      const mm = months[m1[1].toLowerCase()];
+      const dd = m1[2].padStart(2, '0');
+      return `${m1[3]}-${mm}-${dd}`;
+    }
+
+    const m2 = s.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
+    if (m2 && months[m2[2].toLowerCase()]) {
+      const mm = months[m2[2].toLowerCase()];
+      const dd = m2[1].padStart(2, '0');
+      return `${m2[3]}-${mm}-${dd}`;
+    }
+
+    return s;
+  };
+
   // Check if we are on a WikiTree page or Lineage Nexus app
   const isWikiTreePage = () => window.location.hostname.includes('wikitree.com');
   const isLineageAppPage = () => window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
@@ -140,17 +169,29 @@
     }
 
     if (raw && !vitals.birthDate) {
-      const birthMatch = raw.match(/was born on\s+([^,]+),\s+in\s+([^\n]+?)(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$)/i) ||
-                         raw.match(/was born on\s+([^,]+),\s+in\s+([^,.\n]+)/i) ||
+      const birthMatch = raw.match(/was born on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
+                         raw.match(/was born\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
                          raw.match(/Birth Date:\s*([^\n]+)/i);
       if (birthMatch) {
-        vitals.birthDate = birthMatch[1].trim();
+        vitals.birthDate = formatDateToISO(birthMatch[1]);
         if (birthMatch[2] && !vitals.birthLocation) {
           vitals.birthLocation = birthMatch[2]
             .replace(/,?\s*(?:the\s+)?(?:son|daughter)\s+of[\s\S]*/i, '')
             .replace(/,?\s*\[\[[\s\S]*/, '')
             .replace(/\.$/, '')
             .trim();
+        }
+      }
+    }
+
+    if (raw && !vitals.deathDate) {
+      const deathMatch = raw.match(/(?:passed away|died)\s+(?:at\s+[^\n,]+?\s+on\s+|on\s+)?([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.<]+?))?(?:\.|$|<)/i) ||
+                         raw.match(/(?:passed away|died)\s+in\s+([^\n.<]+?)\s+on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})/i) ||
+                         raw.match(/Death Date:\s*([^\n]+)/i);
+      if (deathMatch) {
+        vitals.deathDate = formatDateToISO(deathMatch[1]);
+        if (deathMatch[2] && !vitals.deathLocation) {
+          vitals.deathLocation = deathMatch[2].replace(/\.$/, '').trim();
         }
       }
     }

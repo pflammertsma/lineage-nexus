@@ -96,10 +96,8 @@ Your output follows these conventions:
 - Use `'''text'''` for bold text.
 - Use `'''text''` for italic text.
 - Use `* text` for bullet points and `** `for sub-bullets.
-- Never include the WikiTree ID as plain text in the profile. It can only be used as a link.
-- At the very end of your response (after the sources section), you MUST append a hidden HTML comment containing a structured JSON object with the subject's exact vitals metadata:
-  `<!-- LINEAGE_NEXUS_DATA: {"firstName":"...","lastNameAtBirth":"...","lastNameCurrent":"... (for males, same as birth surname; for females, ONLY set if explicitly verified, otherwise leave empty or same as birth surname)","gender":"Male|Female","birthDate":"...","birthLocation":"...","deathDate":"...","deathLocation":"...","marriageDate":"...","marriageEndDate":"...","marriageLocation":"...","spouseName":"..."} -->`
-
+- At the very end of the wikitext code block (after the `<references />` line, before closing the code block), you MUST append a hidden HTML comment containing a structured JSON object with the subject's exact vitals metadata. CRITICAL: You MUST include all known vital fields (firstName, lastNameAtBirth, lastNameCurrent, gender, birthDate in YYYY-MM-DD format, birthLocation, deathDate in YYYY-MM-DD format, deathLocation, marriageDate in YYYY-MM-DD format, marriageEndDate in YYYY-MM-DD format, marriageLocation, spouseName) in this JSON comment. Do NOT omit birthDate, birthLocation, deathDate, or deathLocation:
+  `<!-- LINEAGE_NEXUS_DATA: {"firstName":"...","lastNameAtBirth":"...","lastNameCurrent":"...","gender":"Male|Female","birthDate":"YYYY-MM-DD","birthLocation":"...","deathDate":"YYYY-MM-DD","deathLocation":"...","marriageDate":"YYYY-MM-DD","marriageEndDate":"YYYY-MM-DD","marriageLocation":"...","spouseName":"..."} -->`
 
 
 CATEGORIES
