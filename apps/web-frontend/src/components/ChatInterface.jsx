@@ -110,6 +110,23 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
       }
     }
 
+    if (!vitals.marriageDate) {
+      const marriageMatch = text.match(/married[^\n]+?\bon\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.<]+?))?(?:\.|$|<)/i);
+      if (marriageMatch) {
+        vitals.marriageDate = formatDateToISO(marriageMatch[1]);
+        if (marriageMatch[2] && !vitals.marriageLocation) {
+          vitals.marriageLocation = marriageMatch[2].replace(/\.$/, '').trim();
+        }
+      }
+    }
+
+    if (!vitals.spouseName) {
+      const spouseMatch = text.match(/married\s+(?:\d+-year-old\s+)?(?:\[\[[^|]*\|([^\]]+)\]\]|'''([^']+)'''|([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+))/i);
+      if (spouseMatch) {
+        vitals.spouseName = (spouseMatch[1] || spouseMatch[2] || spouseMatch[3]).trim();
+      }
+    }
+
     if (!vitals.marriageEndDate) {
       const divorceMatch = text.match(/(?:marriage ended in divorce|divorced)\s+on\s+([^,.\n]+)/i);
       if (divorceMatch) {

@@ -96,7 +96,11 @@ Your output follows these conventions:
 - Use `'''text'''` for bold text.
 - Use `'''text''` for italic text.
 - Use `* text` for bullet points and `** `for sub-bullets.
-- At the very end of the wikitext code block (after the `<references />` line, before closing the code block), you MUST append a hidden HTML comment containing a structured JSON object with the subject's exact vitals metadata. CRITICAL: You MUST include all known vital fields (firstName, lastNameAtBirth, lastNameCurrent, gender, birthDate in YYYY-MM-DD format, birthLocation, deathDate in YYYY-MM-DD format, deathLocation, marriageDate in YYYY-MM-DD format, marriageEndDate in YYYY-MM-DD format, marriageLocation, spouseName) in this JSON comment. Do NOT omit birthDate, birthLocation, deathDate, or deathLocation:
+- At the very end of the wikitext code block (after the `<references />` line, before closing the code block), you MUST append a hidden HTML comment containing a structured JSON object with the subject's exact vitals metadata.
+  CRITICAL RULES FOR LINEAGE_NEXUS_DATA JSON:
+  1. You MUST include ALL known vital fields for the SUBJECT of the biography (firstName, lastNameAtBirth, lastNameCurrent, gender, birthDate in YYYY-MM-DD format, birthLocation, deathDate in YYYY-MM-DD format, deathLocation, marriageDate in YYYY-MM-DD format, marriageEndDate in YYYY-MM-DD format, marriageLocation, spouseName).
+  2. Always include `marriageDate`, `marriageLocation`, and `spouseName` if the subject was married.
+  3. DO NOT confuse the subject's death date with their spouse's death date.
   `<!-- LINEAGE_NEXUS_DATA: {"firstName":"...","lastNameAtBirth":"...","lastNameCurrent":"...","gender":"Male|Female","birthDate":"YYYY-MM-DD","birthLocation":"...","deathDate":"YYYY-MM-DD","deathLocation":"...","marriageDate":"YYYY-MM-DD","marriageEndDate":"YYYY-MM-DD","marriageLocation":"...","spouseName":"..."} -->`
 
 
