@@ -76,24 +76,8 @@ const Sidebar = ({
         )}
       </nav>
 
-      <div className="p-4 border-t border-border space-y-2">
-        <button
-          onClick={onOpenSettings}
-          title="API configuration"
-          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm hover:bg-card transition-colors cursor-pointer"
-        >
-          <Settings size={16} className="opacity-60" />
-          <span>Settings</span>
-        </button>
-        <div className="pt-2 flex items-center gap-3 px-3">
-          <div className="w-8 h-8 rounded-full bg-accent-primary flex items-center justify-center text-on-accent-primary font-bold text-xs shrink-0">
-            {initials}
-          </div>
-          <div className="flex flex-col min-w-0">
-            <span className="text-xs font-bold truncate">{displayName || 'Signed in'}</span>
-            <span className="text-[10px] opacity-40 truncate">{syncLabel}</span>
-          </div>
-        </div>
+      <div className="p-3 border-t border-border flex items-center justify-between text-[11px] text-secondary/60">
+        <span>Sync: {syncLabel}</span>
       </div>
     </aside>
   );

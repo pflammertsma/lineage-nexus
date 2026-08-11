@@ -72,8 +72,9 @@ export default function useAuth() {
   return {
     user,
     uid: user?.uid || null,
-    displayName: user?.displayName || null,
-    email: user?.email || null,
+    displayName: user?.displayName || (localSignedIn ? 'Researcher' : null),
+    email: user?.email || (localSignedIn ? 'local@device' : null),
+    photoURL: user?.photoURL || null,
     isSignedIn: isFirebaseConfigured ? Boolean(user) : localSignedIn,
     ready,
     error,

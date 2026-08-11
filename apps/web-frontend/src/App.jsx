@@ -334,8 +334,12 @@ function App() {
       <Header
         isLoggedIn={isLoggedIn}
         onSignIn={handleSignIn}
+        displayName={auth.displayName}
+        email={auth.email}
+        photoURL={auth.photoURL}
         themePreference={themePreference}
         onCycleTheme={cycleTheme}
+        onOpenSettings={() => setConfigOpen(true)}
       />
 
       <div className="toast-container overflow-visible z-50">
