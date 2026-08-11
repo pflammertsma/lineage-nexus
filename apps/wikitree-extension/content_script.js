@@ -56,31 +56,43 @@
   };
 
   const sanitizeDutchNamePrefixes = (vitals) => {
-    if (!vitals || !vitals.firstName) return vitals;
+    if (!vitals) return vitals;
     const dutchPrefixes = ['van', 'de', 'den', 'der', 'van de', 'van den', 'van der', 'ten', 'ter', 'te', 'in \'t', 'op \'t', 'van \'t', 'vander', 'vanden', 'du', 'la', 'le', 'von'];
-    const fnParts = vitals.firstName.trim().split(/\s+/);
     
-    if (fnParts.length >= 2) {
-      let prefixToMove = '';
-      const lastTwo = `${fnParts[fnParts.length - 2]} ${fnParts[fnParts.length - 1]}`.toLowerCase();
-      if (dutchPrefixes.includes(lastTwo)) {
-        prefixToMove = fnParts.slice(-2).join(' ');
-        vitals.firstName = fnParts.slice(0, -2).join(' ');
-      } else {
-        const lastOne = fnParts[fnParts.length - 1].toLowerCase();
-        if (dutchPrefixes.includes(lastOne)) {
-          prefixToMove = fnParts[fnParts.length - 1];
-          vitals.firstName = fnParts.slice(0, -1).join(' ');
+    if (vitals.firstName) {
+      const fnParts = vitals.firstName.trim().split(/\s+/);
+      if (fnParts.length >= 2) {
+        let prefixToMove = '';
+        const lastTwo = `${fnParts[fnParts.length - 2]} ${fnParts[fnParts.length - 1]}`.toLowerCase();
+        if (dutchPrefixes.includes(lastTwo)) {
+          prefixToMove = fnParts.slice(-2).join(' ');
+          vitals.firstName = fnParts.slice(0, -2).join(' ');
+        } else {
+          const lastOne = fnParts[fnParts.length - 1].toLowerCase();
+          if (dutchPrefixes.includes(lastOne)) {
+            prefixToMove = fnParts[fnParts.length - 1];
+            vitals.firstName = fnParts.slice(0, -1).join(' ');
+          }
         }
-      }
 
-      if (prefixToMove) {
-        const currentLastName = vitals.lastNameAtBirth || '';
-        if (!currentLastName.toLowerCase().startsWith(prefixToMove.toLowerCase())) {
-          vitals.lastNameAtBirth = `${prefixToMove} ${currentLastName}`.trim();
+        if (prefixToMove) {
+          const currentLastName = vitals.lastNameAtBirth || '';
+          if (!currentLastName.toLowerCase().startsWith(prefixToMove.toLowerCase())) {
+            vitals.lastNameAtBirth = `${prefixToMove} ${currentLastName}`.trim();
+          }
         }
       }
     }
+
+    // If lastNameCurrent was set equal to (or un-prefixed version of) lastNameAtBirth, delete it so the optional field remains blank
+    if (vitals.lastNameCurrent && vitals.lastNameAtBirth) {
+      const cleanCurrent = vitals.lastNameCurrent.trim().toLowerCase();
+      const cleanBirth = vitals.lastNameAtBirth.trim().toLowerCase();
+      if (cleanCurrent === cleanBirth || cleanBirth.endsWith(` ${cleanCurrent}`) || cleanBirth.endsWith(`'${cleanCurrent}`)) {
+        delete vitals.lastNameCurrent;
+      }
+    }
+
     return vitals;
   };
 
@@ -213,8 +225,7 @@
     }
 
     if (raw && !vitals.birthDate) {
-      const birthMatch = raw.match(/was born on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
-                         raw.match(/was born\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
+      const birthMatch = raw.match(/was born\s+((?:on|in|about|abt|circa|c\.|est|estimated)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:,\s+in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
                          raw.match(/Birth Date:\s*([^\n]+)/i);
       if (birthMatch) {
         vitals.birthDate = formatDateToISO(birthMatch[1]);
@@ -270,10 +281,6 @@
       } else if (/was born[^\n]*\bthe daughter of\b/i.test(raw) || /\bShe married\b/i.test(raw) || /^\s*Gender:\s*Female/im.test(raw)) {
         vitals.gender = 'Female';
       }
-    }
-
-    if (vitals.lastNameAtBirth && !vitals.lastNameCurrent && vitals.gender === 'Male') {
-      vitals.lastNameCurrent = vitals.lastNameAtBirth;
     }
 
     // Sanitize Dutch tussenvoegsels (van, de, van der, etc.) placed inside firstName
@@ -489,12 +496,29 @@
       marriageLocation: ['#mMarriageLocation', 'input[name="mMarriageLocation"]']
     };
 
+    const cleanDateInputVal = (val) => {
+      if (!val) return '';
+      let clean = val.trim()
+        .replace(/^(before|bef|after|aft|about|abt|est|estimated|circa|c\.)\s+/i, '')
+        .trim();
+
+      // WikiTree partial dates format for YYYY-MM is YYYY-MM-00
+      if (/^\d{4}-\d{2}$/.test(clean)) {
+        return `${clean}-00`;
+      }
+      return clean;
+    };
+
     for (const [key, selectors] of Object.entries(fieldMap)) {
       if (vitals[key]) {
         for (const sel of selectors) {
           const input = document.querySelector(sel);
           if (input) {
-            setNativeInputValue(input, vitals[key]);
+            let valToSet = vitals[key];
+            if (key.endsWith('Date')) {
+              valToSet = cleanDateInputVal(valToSet);
+            }
+            setNativeInputValue(input, valToSet);
             filledCount++;
             break;
           }
