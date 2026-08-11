@@ -225,7 +225,7 @@
     }
 
     if (raw && !vitals.birthDate) {
-      const birthMatch = raw.match(/was born\s+((?:on|in|about|abt|circa|c\.|est|estimated)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:,\s+in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
+      const birthMatch = raw.match(/was born\s+((?:on|in|about|abt|circa|c\.|est|estimated)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:\s*,?\s*in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
                          raw.match(/Birth Date:\s*([^\n]+)/i);
       if (birthMatch) {
         vitals.birthDate = formatDateToISO(birthMatch[1]);

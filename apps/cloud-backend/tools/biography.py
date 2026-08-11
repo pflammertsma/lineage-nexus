@@ -96,27 +96,21 @@ Your output follows these conventions:
 - Use `'''text'''` for bold text.
 - Use `'''text''` for italic text.
 - Use `* text` for bullet points and `** `for sub-bullets.
-- At the very end of the wikitext code block (after the `<references />` line, before closing the code block), you MUST append a hidden HTML comment containing a structured JSON object with the subject's exact vitals metadata.
-
-  STRICT DATA CONTRACT FOR LINEAGE_NEXUS_DATA:
-  - `firstName`: Given name(s) ONLY (e.g. "Jan Isaäc" or "Maria Elisabeth"). NEVER include Dutch surname prefixes like "van", "de", "van der" in firstName!
-  - `lastNameAtBirth`: Full surname at birth including any Dutch prefix ("tussenvoegsel"), e.g. "van Heek", "de Jong", "van der Pol", "Prinsen".
-  - `lastNameCurrent`: MUST be left as empty string `""` unless there is explicit verification of a different married surname. For males, ALWAYS set `""`.
+- At the very end of the wikitext code block (after the `<references />` line, before closing the code block), append a hidden HTML comment containing a structured JSON object with the subject's vitals metadata:
+  `<!-- LINEAGE_NEXUS_DATA: {"firstName":"...","lastNameAtBirth":"...","lastNameCurrent":"","gender":"Male|Female","birthDate":"YYYY-MM-DD","birthLocation":"...","deathDate":"YYYY-MM-DD","deathLocation":"...","marriageDate":"YYYY-MM-DD","marriageEndDate":"YYYY-MM-DD","marriageLocation":"...","spouseName":"..."} -->`
+  Field specifications:
+  - `firstName`: Given name(s) ONLY (e.g. "Jan Isaäc" or "Maria Elisabeth"). Do not include Dutch surname prefixes ("tussenvoegsels" e.g. "van", "de", "van der").
+  - `lastNameAtBirth`: Full surname at birth including any Dutch prefix, e.g. "van Heek", "de Jong", "van der Pol", "Prinsen".
+  - `lastNameCurrent`: Set to empty string `""` unless there is explicit verification of a different married surname. For males, set `""`.
   - `gender`: Strictly `"Male"` or `"Female"`.
-  - `birthDate`: MUST be formatted in ISO standard:
-    - Exact date: `"1874-12-03"` or `"1900-01-15"` (NEVER include words like "on", "in", or month names).
-    - Partial date (month+year): `"1913-05-00"` or `"1913-05"` (e.g. May 1913).
-    - Relative/Approximate date: `"before 1913-05-00"`, `"after 1920-01-01"`, `"about 1910-00-00"`, `"about 1910"`.
-  - `birthLocation`: Exact place string (e.g. "Zaandam, Noord-Holland, Nederland").
-  - `deathDate`: Same ISO format rules as birthDate for the SUBJECT (e.g. `"1956-04-04"` or `"before 1913-05-00"`). NEVER omit deathDate if the text mentions death (e.g. "passed away at age 81 on April 4, 1956" -> "1956-04-04"). DO NOT use the spouse's death date!
-  - `deathLocation`: Exact place string for the SUBJECT (e.g. "Limmen, Noord-Holland, Nederland"). NEVER omit deathLocation if place of death is mentioned!
-  - `marriageDate`: ISO date (e.g. `"1907-05-23"`) if married. NEVER omit marriageDate if marriage is mentioned (e.g. "On May 23, 1907, he married..." -> "1907-05-23").
-  - `marriageEndDate`: ISO date if marriage ended in divorce.
-  - `marriageLocation`: Exact place string if married (e.g. "Amsterdam, Noord-Holland"). NEVER omit marriageLocation if place of marriage is mentioned!
+  - `birthDate`: ISO standard date (`YYYY-MM-DD`, `YYYY-MM-00`, or relative format like `before 1913-05-00` / `about 1910`).
+  - `birthLocation`: City, Province, Country (e.g. "Zaandam, Noord-Holland, Nederland").
+  - `deathDate`: ISO standard date (`YYYY-MM-DD`, `YYYY-MM-00`, or relative format like `before 1913-05-00`).
+  - `deathLocation`: City, Province, Country (e.g. "Limmen, Noord-Holland, Nederland").
+  - `marriageDate`: ISO standard date if married (e.g. "1907-05-23").
+  - `marriageEndDate`: ISO standard date if marriage ended in divorce.
+  - `marriageLocation`: City, Province, Country if married (e.g. "Amsterdam, Noord-Holland, Nederland").
   - `spouseName`: Full name of spouse (e.g. "Harmanna Pijbes").
-
-  Example of correct comment output:
-  `<!-- LINEAGE_NEXUS_DATA: {"firstName":"Severijn","lastNameAtBirth":"Vergouw","lastNameCurrent":"","gender":"Male","birthDate":"1874-12-03","birthLocation":"Zaandam, Noord-Holland, Nederland","deathDate":"1956-04-04","deathLocation":"Limmen, Noord-Holland, Nederland","marriageDate":"1906-11-22","marriageLocation":"Amsterdam, Noord-Holland, Nederland","spouseName":"Harmanna Pijbes"} -->`
 
 
 CATEGORIES
@@ -432,7 +426,7 @@ async def format_wikitree_biography(client, model_name, research_data, user_inst
     from tools.utils import report_status, generate_with_quota_retry
     await report_status("Formatting the biography…")
 
-    prompt = f"Format this research data into a WikiTree biography: {research_data}"
+    prompt = f"Format this research data into a WikiTree biography:\n{research_data}"
     if user_instructions:
         prompt += f"\n\n[USER SPECIFIC INSTRUCTIONS]\n{user_instructions}"
 

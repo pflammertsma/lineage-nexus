@@ -127,7 +127,7 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
     }
 
     if (!vitals.birthDate) {
-      const birthMatch = text.match(/was born\s+((?:on|in|about|abt|circa|c\.|est|estimated)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:,\s+in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
+      const birthMatch = text.match(/was born\s+((?:on|in|about|abt|circa|c\.|est|estimated)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:\s*,?\s*in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
                          text.match(/Birth Date:\s*([^\n]+)/i);
       if (birthMatch) {
         vitals.birthDate = formatDateToISO(birthMatch[1]);
@@ -193,15 +193,17 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
     // Sanitize Dutch tussenvoegsels (van, de, van der, etc.) placed inside firstName
     vitals = sanitizeDutchNamePrefixes(vitals);
 
+    // If content already has structured comment, preserve raw text as payloadWithMeta without re-serializing
+    const cleanBio = content.replace(/<!--\s*LINEAGE_NEXUS_DATA:[\s\S]+?-->/, '').trim();
+    const payloadWithMeta = content.includes('<!-- LINEAGE_NEXUS_DATA:')
+      ? content.trim()
+      : cleanBio + '\n\n<!-- LINEAGE_NEXUS_DATA: ' + JSON.stringify(vitals) + ' -->';
+
     // Save to localStorage for cross-tab extension sync
     try {
-      localStorage.setItem('lineage_nexus_pending_bio', content);
+      localStorage.setItem('lineage_nexus_pending_bio', payloadWithMeta);
       localStorage.setItem('lineage_nexus_pending_vitals', JSON.stringify(vitals));
     } catch (e) {}
-
-    // Embed structured metadata comment if missing
-    const cleanBio = content.replace(/<!--\s*LINEAGE_NEXUS_DATA:[\s\S]+?-->/, '').trim();
-    const payloadWithMeta = cleanBio + '\n\n<!-- LINEAGE_NEXUS_DATA: ' + JSON.stringify(vitals) + ' -->';
 
     navigator.clipboard.writeText(payloadWithMeta);
     window.postMessage({ type: 'LINEAGE_NEXUS_PUSH_BIO', biography: cleanBio, vitals }, '*');
@@ -522,7 +524,7 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
                         li: ({ node, ...props }) => <li className="pl-1" {...props} />,
                       }}
                     >
-                      {(msg.content || '').replace(/<!--\s*LINEAGE_NEXUS_DATA:[\s\S]+?-->/gi, '').trim()}
+                      {(msg.content || '').trim()}
                     </ReactMarkdown>
                   </div>
                 </div>
