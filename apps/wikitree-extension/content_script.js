@@ -486,12 +486,18 @@
     const cleanDate = dateVal.trim();
     if (!cleanDate) return;
 
-    const nameSelectors = [
-      `input[name="${prefix}DateStatus"]`,
-      `input[name="${prefix}Date_status"]`,
-      `input[name="m${prefix}DateStatus"]`,
-      `input[name="m${prefix}Date_status"]`
-    ];
+    let nameSelectors = [];
+    if (prefix === 'Marriage') {
+      nameSelectors = [`input[name="mMarriageStatus_marriage_date"]`, `input[name="mStatus_MarriageDate"]`];
+    } else if (prefix === 'MarriageEnd') {
+      nameSelectors = [`input[name="mMarriageStatus_marriage_end_date"]`, `input[name="mStatus_MarriageEndDate"]`];
+    } else {
+      nameSelectors = [
+        `input[name="mStatus_${prefix}Date"]`,
+        `input[name="m${prefix}DateStatus"]`,
+        `input[name="m${prefix}Date_status"]`
+      ];
+    }
 
     let radios = [];
     for (const sel of nameSelectors) {
@@ -502,7 +508,7 @@
     if (radios.length === 0) {
       const dateInput = document.querySelector(`#${prefix}Date`) || document.querySelector(`#m${prefix}Date`);
       if (dateInput) {
-        const container = dateInput.closest('.form-group, tr, div, td, p') || dateInput.parentElement;
+        const container = dateInput.closest('.form-group, tr, div, td, p') || dateInput.parentElement?.parentElement;
         if (container) {
           radios = Array.from(container.querySelectorAll('input[type="radio"]'));
         }
@@ -527,17 +533,23 @@
 
       let isMatch = false;
       if (targetType === 'exact') {
-        isMatch = val === 'exact' || val === 'certain' || val === '2' || id.includes('exact') || id.includes('certain') || labelText.includes('exact') || labelText.includes('certain');
+        isMatch = val === 'certain' || val === 'exact' || val === '2' ||
+                  id.endsWith('-certain') || id.includes('-certain') || id.includes('_certain') ||
+                  (labelText.includes('certain') && !labelText.includes('uncertain')) ||
+                  (labelText.includes('exact') && !labelText.includes('inexact'));
       } else if (targetType === 'estimate') {
-        isMatch = val === 'guess' || val === 'estimate' || val === 'estimated' || val === 'uncertain' || val === '1' || id.includes('guess') || id.includes('estimate') || labelText.includes('estimate') || labelText.includes('uncertain');
+        isMatch = val === 'guess' || val === 'estimate' || val === 'estimated' || val === 'uncertain' || val === '1' ||
+                  id.endsWith('-guess') || id.includes('-guess') || id.includes('-estimate') ||
+                  labelText.includes('uncertain') || labelText.includes('estimate') || labelText.includes('approximate');
       } else if (targetType === 'before') {
-        isMatch = val === 'before' || val === '3' || id.includes('before') || labelText.includes('before');
+        isMatch = val === 'before' || val === '3' || id.endsWith('-before') || id.includes('-before') || labelText.includes('before');
       } else if (targetType === 'after') {
-        isMatch = val === 'after' || val === '4' || id.includes('after') || labelText.includes('after');
+        isMatch = val === 'after' || val === '4' || id.endsWith('-after') || id.includes('-after') || labelText.includes('after');
       }
 
       if (isMatch) {
         radio.checked = true;
+        radio.dispatchEvent(new Event('input', { bubbles: true }));
         radio.dispatchEvent(new Event('change', { bubbles: true }));
         radio.dispatchEvent(new Event('click', { bubbles: true }));
         break;
@@ -551,12 +563,16 @@
     const cleanLoc = locationVal.trim();
     if (!cleanLoc) return;
 
-    const nameSelectors = [
-      `input[name="${prefix}LocationStatus"]`,
-      `input[name="${prefix}Location_status"]`,
-      `input[name="m${prefix}LocationStatus"]`,
-      `input[name="m${prefix}Location_status"]`
-    ];
+    let nameSelectors = [];
+    if (prefix === 'Marriage') {
+      nameSelectors = [`input[name="mMarriageStatus_marriage_location"]`, `input[name="mMarriageStatus_location"]`];
+    } else {
+      nameSelectors = [
+        `input[name="mStatus_${prefix}Location"]`,
+        `input[name="m${prefix}LocationStatus"]`,
+        `input[name="m${prefix}Location_status"]`
+      ];
+    }
 
     let radios = [];
     for (const sel of nameSelectors) {
@@ -567,7 +583,7 @@
     if (radios.length === 0) {
       const locInput = document.querySelector(`#${prefix}Location`) || document.querySelector(`#m${prefix}Location`);
       if (locInput) {
-        const container = locInput.closest('.form-group, tr, div, td, p') || locInput.parentElement;
+        const container = locInput.closest('.form-group, tr, div, td, p') || locInput.parentElement?.parentElement;
         if (container) {
           radios = Array.from(container.querySelectorAll('input[type="radio"]'));
         }
@@ -585,13 +601,18 @@
 
       let isMatch = false;
       if (targetCertainty === 'certain') {
-        isMatch = val === 'certain' || val === '2' || id.includes('certain') || (labelText.includes('certain') && !labelText.includes('uncertain'));
+        isMatch = val === 'certain' || val === '2' ||
+                  id.endsWith('-certain') || id.includes('-certain') ||
+                  (labelText.includes('certain') && !labelText.includes('uncertain'));
       } else {
-        isMatch = val === 'uncertain' || val === '1' || id.includes('uncertain') || labelText.includes('uncertain');
+        isMatch = val === 'uncertain' || val === '1' ||
+                  id.endsWith('-guess') || id.includes('-guess') || id.includes('uncertain') ||
+                  labelText.includes('uncertain');
       }
 
       if (isMatch) {
         radio.checked = true;
+        radio.dispatchEvent(new Event('input', { bubbles: true }));
         radio.dispatchEvent(new Event('change', { bubbles: true }));
         radio.dispatchEvent(new Event('click', { bubbles: true }));
         break;
