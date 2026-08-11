@@ -13,14 +13,14 @@
 
   const formatDateToISO = (str) => {
     if (!str) return str;
-    const s = str.trim();
+    let s = str.trim().replace(/^(on|in)\s+/i, '');
     if (/^\d{4}-\d{2}(-\d{2})?$/.test(s)) return s;
     
     const isBefore = /\bbefore\b|\bbef\b/i.test(s);
     const isAfter = /\bafter\b|\baft\b/i.test(s);
     const isEstimate = /\babout\b|\babt\b|\best\b|\bestimated\b|\bcirca\b/i.test(s);
 
-    const clean = s.replace(/^(before|bef|after|aft|about|abt|est|estimated|circa|c\.)\s+/i, '').trim();
+    const clean = s.replace(/^(before|bef|after|aft|about|abt|est|estimated|circa|c\.|on|in)\s+/i, '').trim();
 
     const months = {
       january: '01', feb: '02', february: '02', mar: '03', march: '03', apr: '04', april: '04',
@@ -52,7 +52,7 @@
       return isBefore ? `before ${iso}` : isAfter ? `after ${iso}` : isEstimate ? `about ${iso}` : iso;
     }
 
-    return s;
+    return clean;
   };
 
   const sanitizeDutchNamePrefixes = (vitals) => {
@@ -240,8 +240,8 @@
     }
 
     if (raw && !vitals.deathDate) {
-      const deathMatch = raw.match(/(?:passed away|died)\s+((?:before|after|about|abt|est|circa)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:,\s+in\s+([^\n.<]+?))?(?:,|\.|$|<)/i) ||
-                         raw.match(/(?:passed away|died)\s+in\s+([^\n.<]+?)\s+on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})/i) ||
+      const deathMatch = raw.match(/(?:passed away|died)\s+(?:at\s+(?:the\s+)?age\s+of\s+\d+,?\s*|at\s+age\s+\d+,?\s*)?((?:before|after|about|abt|circa|c\.|est|estimated|on|in)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:,\s+in\s+([^\n.<]+?))?(?:,|\.|$|<)/i) ||
+                         raw.match(/(?:passed away|died)\s+(?:at\s+(?:the\s+)?age\s+of\s+\d+|\s+at\s+age\s+\d+)?\s+in\s+([^\n.<]+?)\s+on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})/i) ||
                          raw.match(/Death Date:\s*([^\n]+)/i);
       if (deathMatch) {
         vitals.deathDate = formatDateToISO(deathMatch[1]);
@@ -252,7 +252,8 @@
     }
 
     if (raw && !vitals.marriageDate) {
-      const marriageMatch = raw.match(/married[^\n]+?\bon\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.<]+?))?(?:\.|$|<)/i);
+      const marriageMatch = raw.match(/married[^\n]+?\bon\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.<]+?))?(?:\.|$|<)/i) ||
+                            raw.match(/on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}),?\s+(?:he|she)?\s*married[^\n]+?\bin\s+([^\n.<]+?)(?:\.|$|<)/i);
       if (marriageMatch) {
         vitals.marriageDate = formatDateToISO(marriageMatch[1]);
         if (marriageMatch[2] && !vitals.marriageLocation) {
@@ -499,7 +500,7 @@
     const cleanDateInputVal = (val) => {
       if (!val) return '';
       let clean = val.trim()
-        .replace(/^(before|bef|after|aft|about|abt|est|estimated|circa|c\.)\s+/i, '')
+        .replace(/^(before|bef|after|aft|about|abt|est|estimated|circa|c\.|on|in)\s+/i, '')
         .trim();
 
       // WikiTree partial dates format for YYYY-MM is YYYY-MM-00
@@ -554,16 +555,23 @@
       }
     }
 
-    // Language selection: Set to Dutch if Dutch individual
-    const isDutch = vitals.isDutch || (rawWikitext && /Netherlands Sticker|Nederlanders|Nederland|Friesland|Groningen|Drenthe|Overijssel|Gelderland|Utrecht|Noord-Holland|Zuid-Holland|Zeeland|Noord-Brabant|Limburg|Flevoland/i.test(rawWikitext + ' ' + (vitals.birthLocation || '')));
+    // Language selection: Set "Language for Locations" to Dutch/Flemish if location is in the Netherlands
+    const allLocations = [vitals.birthLocation, vitals.deathLocation, vitals.marriageLocation, rawWikitext].filter(Boolean).join(' ');
+    const isDutch = vitals.isDutch || /Netherlands Sticker|Nederlanders|Nederland|Netherlands|Friesland|Groningen|Drenthe|Overijssel|Gelderland|Utrecht|Noord-Holland|Zuid-Holland|Zeeland|Noord-Brabant|Limburg|Flevoland/i.test(allLocations);
+    
     if (isDutch) {
-      const langSelect = document.querySelector('#mLanguage') || document.querySelector('select[name="mLanguage"]');
+      const langSelect = document.querySelector('#mLanguage') ||
+                         document.querySelector('select[name="mLanguage"]') ||
+                         document.querySelector('#mLocationLanguage') ||
+                         document.querySelector('select[name="mLocationLanguage"]') ||
+                         document.querySelector('select[name*="Language"]') ||
+                         document.querySelector('select[name*="language"]');
       if (langSelect) {
         for (let i = 0; i < langSelect.options.length; i++) {
           const opt = langSelect.options[i];
           const text = opt.text.toLowerCase();
           const val = opt.value.toLowerCase();
-          if (text.includes('dutch') || text.includes('nederlands') || val === 'nl' || val === 'dutch') {
+          if (text.includes('dutch') || text.includes('nederlands') || val === 'nl' || val === 'dutch' || val.includes('dutch')) {
             langSelect.selectedIndex = i;
             langSelect.dispatchEvent(new Event('change', { bubbles: true }));
             filledCount++;
