@@ -59,7 +59,13 @@ Your output follows these conventions:
     when the record says Groningen is not.
   - Use the full form for the places of birth, marriage and death, since those are the facts
     carried into the WikiTree profile. Incidental later mentions of the same place in the
-    narrative may be shortened to just the city.
+    narrative, and the birthplaces of spouses named in passing, may be shortened to just the
+    city.
+  - "City, Province, Country" is a minimum, not a maximum. Where a record names a village
+    within a municipality, keep both, e.g. "Annerveenschekanaal, Anloo, Drenthe, Nederland".
+  - For places outside the Netherlands, give the fullest form you can support from the record,
+    e.g. "Koepang, Timor, Indonesië". Where a place has no meaningful province, "City, Country"
+    is correct, e.g. "Auschwitz, Polen". Do not invent a foreign administrative division.
 - Do not include details about siblings in the profile unless it's something uniquely relevant
   to the subject of the biography.
 - For all stated facts, you should provide an inline source citation, which is always
@@ -278,7 +284,7 @@ Here's an example of a biography for a person named Murkjen Langeraap who died y
 
 '''Murkjen Langeraap''' was born on November 22, 1832, in Wijmbritseradeel, Friesland, Nederland, the daughter of [[Langeraap-13|Jelle Klazes Langeraap]] and [[Visser-3593|Aukjen Symens Visser]].<ref name="frl:a6eeff82-7ed3-9fce-6141-06999fe31318">Burgerlijke Stand Geboorte 1832, Wijmbritseradeel, Friesland, Nederland. Akte 0217 (1832-11-23), [http://allefriezen.nl/zoeken/deeds/a6eeff82-7ed3-9fce-6141-06999fe31318 AlleFriezen] accessed via [https://www.openarchieven.nl/frl:a6eeff82-7ed3-9fce-6141-06999fe31318 OpenArch Permalink]</ref><ref>Geni.com: http://www.geni.com/people/Jan-Jelles-Langeraap/340516841380011418</ref>
 
-She passed away at the age of 13 on June 14, 1846, in Hommerts.<ref name="frl:1d9eea29-7185-b0ee-3594-a9989a70accb">Burgerlijke Stand Overlijden 1846, Wijmbritseradeel, Friesland, Nederland. Akte 0090 (1846-06-15), [http://allefriezen.nl/zoeken/deeds/1d9eea29-7185-b0ee-3594-a9989a70accb AlleFriezen] accessed via [https://www.openarchieven.nl/frl:1d9eea29-7185-b0ee-3594-a9989a70accb OpenArch Permalink]</ref>
+She passed away at the age of 13 on June 14, 1846, in Hommerts, Friesland, Nederland.<ref name="frl:1d9eea29-7185-b0ee-3594-a9989a70accb">Burgerlijke Stand Overlijden 1846, Wijmbritseradeel, Friesland, Nederland. Akte 0090 (1846-06-15), [http://allefriezen.nl/zoeken/deeds/1d9eea29-7185-b0ee-3594-a9989a70accb AlleFriezen] accessed via [https://www.openarchieven.nl/frl:1d9eea29-7185-b0ee-3594-a9989a70accb OpenArch Permalink]</ref>
 
 == Sources ==
 <references />
