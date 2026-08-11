@@ -52,7 +52,53 @@
       return isBefore ? `before ${iso}` : isAfter ? `after ${iso}` : isEstimate ? `about ${iso}` : iso;
     }
 
-    return clean;
+    // Unrecognised shape (e.g. a bare year, or an already-padded YYYY-00-00). Re-apply the
+    // qualifier that was stripped above, otherwise "about 1910" degrades to a date asserted
+    // as certain and setDateRadioStatus picks the wrong radio.
+    return isBefore ? `before ${clean}` : isAfter ? `after ${clean}` : isEstimate ? `about ${clean}` : clean;
+  };
+
+  // The LINEAGE_NEXUS_DATA comment is written by a language model, so treat it as untrusted
+  // input rather than a guaranteed contract. Without this, a stray "unknown" or "N/A" is typed
+  // straight into a WikiTree field, and a free-text date bypasses normalisation entirely
+  // (formatDateToISO is otherwise only applied on the regex fallback path).
+  const PLACEHOLDER_VALUES = new Set([
+    'unknown', 'n/a', 'na', 'none', 'null', 'undefined', '?', '-', '', 'not known', 'not recorded'
+  ]);
+  const DATE_FIELDS = ['birthDate', 'deathDate', 'marriageDate', 'marriageEndDate'];
+
+  const sanitizeVitals = (vitals) => {
+    if (!vitals || typeof vitals !== 'object') return {};
+    const out = {};
+
+    for (const [key, value] of Object.entries(vitals)) {
+      if (value === null || value === undefined) continue;
+      if (typeof value === 'boolean' || typeof value === 'number') {
+        out[key] = value;
+        continue;
+      }
+      if (typeof value !== 'string') continue;
+
+      const trimmed = value.trim();
+      // Drop placeholders so downstream truthiness checks correctly treat them as absent.
+      if (PLACEHOLDER_VALUES.has(trimmed.toLowerCase())) continue;
+      out[key] = trimmed;
+    }
+
+    // Normalise dates the model may have written in prose form ("September 9, 1880").
+    // formatDateToISO preserves about/before/after, which setDateRadioStatus needs.
+    for (const field of DATE_FIELDS) {
+      if (out[field]) out[field] = formatDateToISO(out[field]);
+    }
+
+    // WikiTree only accepts these two; anything else would fail to match a gender control.
+    if (out.gender && !/^(male|female)$/i.test(out.gender)) {
+      delete out.gender;
+    } else if (out.gender) {
+      out.gender = out.gender[0].toUpperCase() + out.gender.slice(1).toLowerCase();
+    }
+
+    return out;
   };
 
   const sanitizeDutchNamePrefixes = (vitals) => {
@@ -203,7 +249,7 @@
       const jsonCommentMatch = raw.match(/<!--\s*LINEAGE_NEXUS_DATA:\s*({[\s\S]+?})\s*-->/);
       if (jsonCommentMatch) {
         try {
-          vitals = JSON.parse(jsonCommentMatch[1]);
+          vitals = sanitizeVitals(JSON.parse(jsonCommentMatch[1]));
           raw = raw.replace(/<!--\s*LINEAGE_NEXUS_DATA:[\s\S]+?-->/, '').trim();
         } catch (err) {}
       }
