@@ -9,6 +9,7 @@ export const API_BASE_URL =
 // Single source of truth for where the BYOK Gemini key lives in localStorage. Both the
 // settings modal and the chat request read through this constant so they cannot drift apart.
 export const API_KEY_STORAGE = 'google_api_key';
+export const FALLBACK_API_KEY_STORAGE = 'google_fallback_api_key';
 
 export const SESSIONS_STORAGE = 'lineage_sessions';
 export const SYNC_CONSENT_STORAGE = 'lineage_sync_consent';

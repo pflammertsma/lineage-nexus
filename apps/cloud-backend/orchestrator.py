@@ -1,4 +1,4 @@
-from typing import List, Dict, Any, AsyncGenerator
+from typing import List, Dict, Any, AsyncGenerator, Optional
 import asyncio
 import re
 from google import genai
@@ -87,9 +87,14 @@ def clean_session_title(raw: str) -> str:
 SYSTEM_INSTRUCTION = ROOT_STRATEGY + "\n" + OPEN_ARCHIVES_INSTRUCTIONS + "\n" + WIKITREE_INSTRUCTIONS + "\n" + HOLOCAUST_INSTRUCTIONS
 
 class ResearchOrchestrator:
-    def __init__(self, client: genai.Client, model_name: str = "gemini-flash-latest"):
-        self.client = client
+    def __init__(self, client: genai.Client, model_name: str = "gemini-flash-latest", fallback_client: Optional[genai.Client] = None):
+        from tools.utils import ClientHolder
+        self.client_holder = ClientHolder(primary_client=client, fallback_client=fallback_client)
         self.model_name = model_name
+
+    @property
+    def client(self):
+        return self.client_holder.active_client
 
     async def chat(self, message: str, history: List[Dict[str, Any]]) -> AsyncGenerator[Dict[str, Any], None]:
         """Entry point for the chat session, managing the dual-task status consumer loop."""
@@ -209,7 +214,7 @@ class ResearchOrchestrator:
             await report_status(f"Consulting lineage engine (Turn {turn_count})…")
             
             response = await generate_with_quota_retry(
-                self.client,
+                self.client_holder,
                 model=self.model_name,
                 contents=current_history,
                 config=types.GenerateContentConfig(

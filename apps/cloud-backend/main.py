@@ -56,19 +56,47 @@ async def root():
         "version": "0.1.0"
     }
 
+class ValidateKeyRequest(BaseModel):
+    apiKey: str
+
+@app.post("/api/v1/validate-key")
+async def validate_key(req: ValidateKeyRequest):
+    if not req.apiKey or not req.apiKey.strip():
+        return {"valid": False, "error": "API key cannot be empty."}
+    try:
+        client = genai.Client(api_key=req.apiKey.strip())
+        # Lightweight check to verify key validity
+        client.models.list()
+        return {"valid": True}
+    except Exception as e:
+        error_str = str(e)
+        if "API_KEY_INVALID" in error_str or "API key not valid" in error_str:
+            return {"valid": False, "error": "API key is invalid or revoked."}
+        elif "RESOURCE_EXHAUSTED" in error_str or "Quota exceeded" in error_str:
+            return {"valid": False, "error": "Quota or monthly budget cap exceeded on this key."}
+        return {"valid": False, "error": f"Validation failed: {error_str[:120]}"}
+
 @app.post("/api/v1/chat")
 async def chat(
     request: ChatRequest,
-    x_gemini_api_key: Optional[str] = Header(None, alias="X-Gemini-API-Key")
+    x_gemini_api_key: Optional[str] = Header(None, alias="X-Gemini-API-Key"),
+    x_gemini_fallback_api_key: Optional[str] = Header(None, alias="X-Gemini-Fallback-API-Key")
 ):
-    if not x_gemini_api_key:
+    if not x_gemini_api_key and not x_gemini_fallback_api_key:
         raise HTTPException(status_code=401, detail="X-Gemini-API-Key header required (BYOK)")
     
     async def event_generator():
         try:
-            client = genai.Client(api_key=x_gemini_api_key)
+            client = genai.Client(api_key=x_gemini_api_key) if x_gemini_api_key else None
+            fallback_client = genai.Client(api_key=x_gemini_fallback_api_key) if x_gemini_fallback_api_key else None
+            
+            # If primary is missing but fallback is present, default primary to fallback
+            if not client:
+                client = fallback_client
+                fallback_client = None
+
             from orchestrator import ResearchOrchestrator
-            orchestrator = ResearchOrchestrator(client=client, model_name=request.model)
+            orchestrator = ResearchOrchestrator(client=client, fallback_client=fallback_client, model_name=request.model)
             
             history_dicts = [{"role": msg.role, "content": msg.content} for msg in request.history]
             

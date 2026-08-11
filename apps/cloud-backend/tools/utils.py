@@ -68,19 +68,44 @@ def parse_retry_delay(error: Exception) -> float:
     return _DEFAULT_QUOTA_WAIT
 
 
-async def generate_with_quota_retry(client, **kwargs) -> Any:
-    """`generate_content` that pauses through quota limits rather than failing.
+class ClientHolder:
+    def __init__(self, primary_client: Any, fallback_client: Optional[Any] = None):
+        self.active_client = primary_client
+        self.fallback_client = fallback_client
+        self.switched = False
+
+
+async def generate_with_quota_retry(client_or_holder, **kwargs) -> Any:
+    """`generate_content` that pauses through quota limits or fails over to a backup key.
 
     Only quota errors are retried; everything else propagates untouched. The
     caller's `contents` list is untouched between attempts, so a retry is a
     true continuation rather than a restart."""
+    if isinstance(client_or_holder, ClientHolder):
+        holder = client_or_holder
+    else:
+        holder = ClientHolder(primary_client=client_or_holder)
+
     attempt = 0
     while True:
         try:
-            return await client.aio.models.generate_content(**kwargs)
+            return await holder.active_client.aio.models.generate_content(**kwargs)
         except Exception as e:
-            if not is_quota_error(e) or attempt >= QUOTA_MAX_RETRIES:
+            if not is_quota_error(e):
                 raise
+
+            # Automatic failover to backup key if available
+            if holder.fallback_client and not holder.switched:
+                holder.switched = True
+                holder.active_client = holder.fallback_client
+                await report_status(
+                    "Primary API key quota exceeded. Automatically switching to backup free-tier key…"
+                )
+                continue
+
+            if attempt >= QUOTA_MAX_RETRIES:
+                raise
+
             attempt += 1
             # A second of headroom: the advised delay is a lower bound.
             delay = min(parse_retry_delay(e) + 1.0, QUOTA_MAX_WAIT_SECONDS)

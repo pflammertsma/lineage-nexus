@@ -10,7 +10,7 @@ import ChatInterface from './components/ChatInterface';
 import ChatInput from './components/ChatInput';
 import Notification from './components/Notification';
 import { ArrowDown } from 'lucide-react';
-import { API_BASE_URL, API_KEY_STORAGE } from './config';
+import { API_BASE_URL, API_KEY_STORAGE, FALLBACK_API_KEY_STORAGE } from './config';
 import useTheme from './useTheme';
 import useAuth from './useAuth';
 import useSyncedSessions, { readSyncConsent, writeSyncConsent } from './useSyncedSessions';
@@ -189,7 +189,9 @@ function App() {
     const researchLogs = [];
 
     const apiKey = localStorage.getItem(API_KEY_STORAGE);
-    if (!apiKey) {
+    const fallbackApiKey = localStorage.getItem(FALLBACK_API_KEY_STORAGE);
+
+    if (!apiKey && !fallbackApiKey) {
       setPendingQuery(query);
       setConfigOpen(true);
       setLoading(false);
@@ -200,12 +202,15 @@ function App() {
       const controller = new AbortController();
       stopRef.current = controller;
 
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (apiKey) headers['X-Gemini-API-Key'] = apiKey;
+      if (fallbackApiKey) headers['X-Gemini-Fallback-API-Key'] = fallbackApiKey;
+
       const response = await fetch(`${API_BASE_URL}/api/v1/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Gemini-API-Key': apiKey,
-        },
+        headers,
         signal: controller.signal,
         body: JSON.stringify({
           // On a retry the failed turn is still the last entry in `messages`; drop it so the

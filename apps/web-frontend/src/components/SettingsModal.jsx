@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { X, AlertTriangle } from 'lucide-react';
-import { API_KEY_STORAGE } from '../config';
+import { X, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react';
+import { API_KEY_STORAGE, FALLBACK_API_KEY_STORAGE, API_BASE_URL } from '../config';
 
 const SettingsModal = ({
   notify,
@@ -15,13 +15,63 @@ const SettingsModal = ({
   onDeleteAllData,
 }) => {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || '');
+  const [fallbackApiKey, setFallbackApiKey] = useState(() => localStorage.getItem(FALLBACK_API_KEY_STORAGE) || '');
+  const [validating, setValidating] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
   const handleSave = () => {
-    localStorage.setItem(API_KEY_STORAGE, apiKey);
-    if (notify) notify('API key updated.', 'success');
+    localStorage.setItem(API_KEY_STORAGE, apiKey.trim());
+    if (fallbackApiKey.trim()) {
+      localStorage.setItem(FALLBACK_API_KEY_STORAGE, fallbackApiKey.trim());
+    } else {
+      localStorage.removeItem(FALLBACK_API_KEY_STORAGE);
+    }
+    if (notify) notify('API keys updated.', 'success');
     if (onSave) onSave();
+  };
+
+  const handleTestKeys = async () => {
+    if (!apiKey.trim() && !fallbackApiKey.trim()) {
+      if (notify) notify('Please enter at least one API key to test.', 'error');
+      return;
+    }
+    setValidating(true);
+    try {
+      if (apiKey.trim()) {
+        const res = await fetch(`${API_BASE_URL}/api/v1/validate-key`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey: apiKey.trim() })
+        });
+        const data = await res.json();
+        if (!data.valid) {
+          if (notify) notify(`Primary Key Issue: ${data.error}`, 'error');
+          setValidating(false);
+          return;
+        }
+      }
+
+      if (fallbackApiKey.trim()) {
+        const res = await fetch(`${API_BASE_URL}/api/v1/validate-key`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey: fallbackApiKey.trim() })
+        });
+        const data = await res.json();
+        if (!data.valid) {
+          if (notify) notify(`Backup Key Issue: ${data.error}`, 'error');
+          setValidating(false);
+          return;
+        }
+      }
+
+      if (notify) notify('All API keys validated successfully!', 'success');
+    } catch (err) {
+      if (notify) notify('Could not reach backend validation server.', 'error');
+    } finally {
+      setValidating(false);
+    }
   };
 
   const handleDeleteAll = async () => {
@@ -50,7 +100,7 @@ const SettingsModal = ({
       className="fixed inset-0 flex items-center justify-center z-[3000] p-4 overflow-y-auto"
       style={{ backgroundColor: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)' }}
     >
-      <div className="card relative w-full my-8" style={{ maxWidth: '460px' }}>
+      <div className="card relative w-full my-8" style={{ maxWidth: '480px' }}>
         <button
           onClick={onClose}
           aria-label="Close settings"
@@ -61,29 +111,60 @@ const SettingsModal = ({
 
         <div className="mb-6">
           <div className="text-accent text-xs mb-2 font-bold tracking-widest uppercase">Settings</div>
-          <h2 style={{ fontSize: '22px' }}>API configuration</h2>
+          <h2 style={{ fontSize: '22px' }}>API Configuration</h2>
         </div>
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <label htmlFor="gemini-key" className="text-xs text-secondary">
-              Google AI Studio API key
+            <label htmlFor="gemini-key" className="text-xs font-bold text-primary flex items-center justify-between">
+              <span>Primary Gemini API key</span>
+              <span className="text-[10px] text-accent uppercase tracking-wider font-normal">Paid / Main</span>
             </label>
             <input
               id="gemini-key"
               type="password"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Paste your key here"
+              placeholder="Paste primary key here"
               className="input-field"
             />
             <p className="text-xs text-secondary">
-              Stored in this browser only, and sent directly to Gemini with each request. Never synced.
+              Main key used for fast, unthrottled research execution.
             </p>
           </div>
-          <button onClick={() => { handleSave(); onClose(); }} className="btn btn-primary w-full">
-            Save key
-          </button>
+
+          <div className="flex flex-col gap-2">
+            <label htmlFor="gemini-fallback-key" className="text-xs font-bold text-primary flex items-center justify-between">
+              <span>Backup / Fallback API key</span>
+              <span className="text-[10px] text-green-500 uppercase tracking-wider font-normal">Optional Free Tier</span>
+            </label>
+            <input
+              id="gemini-fallback-key"
+              type="password"
+              value={fallbackApiKey}
+              onChange={(e) => setFallbackApiKey(e.target.value)}
+              placeholder="Paste free-tier backup key here"
+              className="input-field"
+            />
+            <p className="text-xs text-secondary">
+              If your primary key reaches a budget cap or quota limit, research automatically switches to this backup key without interrupting your session.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 pt-2">
+            <button
+              type="button"
+              onClick={handleTestKeys}
+              disabled={validating}
+              className="btn btn-secondary flex-1 flex items-center justify-center gap-2"
+            >
+              {validating ? <RefreshCw size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
+              <span>Test Key Health</span>
+            </button>
+            <button onClick={() => { handleSave(); onClose(); }} className="btn btn-primary flex-1">
+              Save Configuration
+            </button>
+          </div>
           <p className="text-xs text-secondary text-center">
             Need a key?{' '}
             <a
