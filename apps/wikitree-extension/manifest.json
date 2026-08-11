@@ -12,7 +12,17 @@
     "*://*.wikitree.com/*",
     "http://localhost:*/*"
   ],
+  "icons": {
+    "16": "assets/icon16.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  },
   "action": {
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    },
     "default_popup": "popup/popup.html",
     "default_title": "Lineage Nexus Assistant"
   },
@@ -33,7 +43,10 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "assets/logo.svg"
+        "assets/logo.svg",
+        "assets/icon16.png",
+        "assets/icon48.png",
+        "assets/icon128.png"
       ],
       "matches": [
         "*://*.wikitree.com/*"
