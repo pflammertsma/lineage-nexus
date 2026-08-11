@@ -201,12 +201,21 @@ const ErrorMessageCard = ({ msg, onRetry, lastUserQuery }) => {
     researchLogsText = parts[1] ? parts[1].trim() : '';
   }
 
+  // Clean dangling markdown formatting remnants
+  mainSummary = mainSummary.replace(/\*\*$/, '').replace(/^\*\*/, '').trim();
+
   let userFriendlyText = mainSummary;
-  if (mainSummary.includes('503') || mainSummary.includes('UNAVAILABLE')) {
+  if (mainSummary.includes('500') || mainSummary.includes('INTERNAL') || mainSummary.includes('Internal error')) {
+    userFriendlyText = 'An unexpected internal error occurred with the AI service. This is usually temporary — please try clicking Retry to resume.';
+    technicalDetailText = mainSummary;
+  } else if (mainSummary.includes('503') || mainSummary.includes('UNAVAILABLE')) {
     userFriendlyText = 'The model is currently experiencing high demand. Spikes in demand are usually temporary. Please try again in a few moments.';
     technicalDetailText = mainSummary;
-  } else if (mainSummary.includes('429') || mainSummary.includes('RESOURCE_EXHAUSTED')) {
+  } else if (mainSummary.includes('429') || mainSummary.includes('RESOURCE_EXHAUSTED') || mainSummary.includes('Quota exceeded')) {
     userFriendlyText = 'Gemini API Quota Exceeded. You have reached the rate limit for free-tier requests. Please wait ~1 minute before retrying.';
+    technicalDetailText = mainSummary;
+  } else if (mainSummary.includes("{'error':") || mainSummary.includes('{"error":') || mainSummary.includes('Traceback')) {
+    userFriendlyText = 'Research was interrupted due to a backend service error. Expand technical details below for the full log.';
     technicalDetailText = mainSummary;
   }
 
