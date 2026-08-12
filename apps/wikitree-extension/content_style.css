@@ -158,3 +158,97 @@
   background: rgba(16, 185, 129, 0.1);
   border: 1px solid rgba(16, 185, 129, 0.2);
 }
+
+/* Contextual suggestion chip — sits immediately left of the collapsed logo icon.
+   Vertically centred on the 52px icon whose bottom edge is 24px from the viewport. */
+#lineage-nexus-suggestion {
+  position: fixed;
+  bottom: 34px;
+  right: 88px;
+  z-index: 999999;
+  max-width: 340px;
+  display: flex;
+  align-items: stretch;
+  background: rgba(13, 26, 43, 0.97);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid #C8A464;
+  border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5), 0 0 15px rgba(200, 164, 100, 0.25);
+  overflow: hidden;
+  animation: nexus-suggestion-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes nexus-suggestion-in {
+  from { opacity: 0; transform: translateX(12px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
+#lineage-nexus-suggestion .nexus-suggestion-label {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #E9EFF7;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  text-align: left;
+  padding: 10px 8px 10px 14px;
+  cursor: pointer;
+}
+
+#lineage-nexus-suggestion .nexus-suggestion-label:hover {
+  color: #C8A464;
+}
+
+#lineage-nexus-suggestion .nexus-suggestion-close {
+  appearance: none;
+  border: none;
+  border-left: 1px solid rgba(200, 164, 100, 0.3);
+  background: transparent;
+  color: #93A6BF;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 10px;
+  cursor: pointer;
+}
+
+#lineage-nexus-suggestion .nexus-suggestion-close:hover {
+  color: #E9EFF7;
+  background: rgba(200, 164, 100, 0.12);
+}
+
+/* Relationship choices shown when the page has no profile form to fill. */
+#nexus-relation-actions:empty { display: none; }
+
+#nexus-relation-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0 2px;
+}
+
+#nexus-relation-actions .nexus-relation-hint {
+  width: 100%;
+  color: #93A6BF;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 2px;
+}
+
+.nexus-btn-relation {
+  background: rgba(74, 144, 226, 0.12);
+  color: #E9EFF7;
+  border: 1px solid rgba(74, 144, 226, 0.45);
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.nexus-btn-relation:hover {
+  background: rgba(74, 144, 226, 0.24);
+  border-color: #4A90E2;
+}

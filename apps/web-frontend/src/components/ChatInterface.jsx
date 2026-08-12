@@ -6,50 +6,6 @@ import remarkGfm from 'remark-gfm';
 const INITIAL_VISIBLE_COUNT = 15;
 const PAGE_INCREMENT = 15;
 
-const formatDateToISO = (str) => {
-  if (!str) return str;
-  let s = str.trim().replace(/^(on|in)\s+/i, '');
-  if (/^\d{4}-\d{2}(-\d{2})?$/.test(s)) return s;
-  
-  const isBefore = /\bbefore\b|\bbef\b/i.test(s);
-  const isAfter = /\bafter\b|\baft\b/i.test(s);
-  const isEstimate = /\babout\b|\babt\b|\best\b|\bestimated\b|\bcirca\b/i.test(s);
-
-  const clean = s.replace(/^(before|bef|after|aft|about|abt|est|estimated|circa|c\.|on|in)\s+/i, '').trim();
-
-  const months = {
-    january: '01', feb: '02', february: '02', mar: '03', march: '03', apr: '04', april: '04',
-    may: '05', jun: '06', june: '06', jul: '07', july: '07', aug: '08', august: '08',
-    sep: '09', september: '09', oct: '10', october: '10', nov: '11', november: '11', dec: '12', december: '12',
-    jan: '01', februari: '02', maart: '03', mei: '05', juni: '06', juli: '07', augustus: '08', oktober: '10'
-  };
-
-  const m1 = clean.match(/^([A-Za-z]+)\s+(\d{1,2}),?\s+(\d{4})$/);
-  if (m1 && months[m1[1].toLowerCase()]) {
-    const mm = months[m1[1].toLowerCase()];
-    const dd = m1[2].padStart(2, '0');
-    const iso = `${m1[3]}-${mm}-${dd}`;
-    return isBefore ? `before ${iso}` : isAfter ? `after ${iso}` : isEstimate ? `about ${iso}` : iso;
-  }
-
-  const m2 = clean.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);
-  if (m2 && months[m2[2].toLowerCase()]) {
-    const mm = months[m2[2].toLowerCase()];
-    const dd = m2[1].padStart(2, '0');
-    const iso = `${m2[3]}-${mm}-${dd}`;
-    return isBefore ? `before ${iso}` : isAfter ? `after ${iso}` : isEstimate ? `about ${iso}` : iso;
-  }
-
-  const m3 = clean.match(/^([A-Za-z]+)\s+(\d{4})$/);
-  if (m3 && months[m3[1].toLowerCase()]) {
-    const mm = months[m3[1].toLowerCase()];
-    const iso = `${m3[2]}-${mm}`;
-    return isBefore ? `before ${iso}` : isAfter ? `after ${iso}` : isEstimate ? `about ${iso}` : iso;
-  }
-
-  return clean;
-};
-
 const sanitizeDutchNamePrefixes = (vitals) => {
   if (!vitals) return vitals;
   const dutchPrefixes = ['van', 'de', 'den', 'der', 'van de', 'van den', 'van der', 'ten', 'ter', 'te', 'in \'t', 'op \'t', 'van \'t', 'vander', 'vanden', 'du', 'la', 'le', 'von'];
@@ -111,93 +67,19 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
       }
     }
 
-    // 2. Fallback regex parsing if JSON comment is missing any fields
-    if (!vitals.firstName) {
-      const nameMatch = text.match(/'''([^']+)'''/);
-      if (nameMatch) {
-        const fullName = nameMatch[1].trim();
-        const nameParts = fullName.split(' ');
-        if (nameParts.length > 1) {
-          vitals.firstName = nameParts.slice(0, -1).join(' ');
-          vitals.lastNameAtBirth = nameParts[nameParts.length - 1];
-        } else {
-          vitals.firstName = fullName;
-        }
-      }
-    }
-
-    if (!vitals.birthDate) {
-      const birthMatch = text.match(/was born\s+((?:on|in|about|abt|circa|c\.|est|estimated)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:\s*,?\s*in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
-                         text.match(/Birth Date:\s*([^\n]+)/i);
-      if (birthMatch) {
-        vitals.birthDate = formatDateToISO(birthMatch[1]);
-        if (birthMatch[2] && !vitals.birthLocation) {
-          vitals.birthLocation = birthMatch[2]
-            .replace(/,?\s*(?:the\s+)?(?:son|daughter)\s+of[\s\S]*/i, '')
-            .replace(/,?\s*\[\[[\s\S]*/, '')
-            .replace(/\.$/, '')
-            .trim();
-        }
-      }
-    }
-
-    if (!vitals.deathDate) {
-      const deathMatch = text.match(/(?:passed away|died)\s+(?:at\s+(?:the\s+)?age\s+of\s+\d+,?\s*|at\s+age\s+\d+,?\s*)?((?:before|after|about|abt|circa|c\.|est|estimated|on|in)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:,\s+in\s+([^\n.<]+?))?(?:,|\.|$|<)/i) ||
-                         text.match(/(?:passed away|died)\s+(?:at\s+(?:the\s+)?age\s+of\s+\d+|\s+at\s+age\s+\d+)?\s+in\s+([^\n.<]+?)\s+on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})/i) ||
-                         text.match(/Death Date:\s*([^\n]+)/i);
-      if (deathMatch) {
-        vitals.deathDate = formatDateToISO(deathMatch[1]);
-        if (deathMatch[2] && !vitals.deathLocation) {
-          vitals.deathLocation = deathMatch[2].replace(/\.$/, '').trim();
-        }
-      }
-    }
-
-    if (!vitals.gender) {
-      if (/was born[^\n]*\bthe son of\b/i.test(text) || /\bHe married\b/i.test(text) || /^\s*Gender:\s*Male/im.test(text)) {
-        vitals.gender = 'Male';
-      } else if (/was born[^\n]*\bthe daughter of\b/i.test(text) || /\bShe married\b/i.test(text) || /^\s*Gender:\s*Female/im.test(text)) {
-        vitals.gender = 'Female';
-      } else if (/\bson of\b/i.test(text) || /\bhe married\b/i.test(text)) {
-        vitals.gender = 'Male';
-      } else if (/\bdaughter of\b/i.test(text) || /\bshe married\b/i.test(text)) {
-        vitals.gender = 'Female';
-      }
-    }
-
-    if (!vitals.marriageDate) {
-      const marriageMatch = text.match(/married[^\n]+?\bon\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.<]+?))?(?:\.|$|<)/i) ||
-                            text.match(/on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}),?\s+(?:he|she)?\s*married[^\n]+?\bin\s+([^\n.<]+?)(?:\.|$|<)/i);
-      if (marriageMatch) {
-        vitals.marriageDate = formatDateToISO(marriageMatch[1]);
-        if (marriageMatch[2] && !vitals.marriageLocation) {
-          vitals.marriageLocation = marriageMatch[2].replace(/\.$/, '').trim();
-        }
-      }
-    }
-
-    if (!vitals.spouseName) {
-      const spouseMatch = text.match(/married\s+(?:\d+-year-old\s+)?(?:\[\[[^|]*\|([^\]]+)\]\]|'''([^']+)'''|([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+))/i);
-      if (spouseMatch) {
-        vitals.spouseName = (spouseMatch[1] || spouseMatch[2] || spouseMatch[3]).trim();
-      }
-    }
-
-    if (!vitals.marriageEndDate) {
-      const divorceMatch = text.match(/(?:marriage ended in divorce|divorced)\s+on\s+([^,.\n]+)/i);
-      if (divorceMatch) {
-        vitals.marriageEndDate = divorceMatch[1].trim();
-      }
-    }
+    // No regex fallback. Deriving vitals from prose fabricated data: "died unmarried"
+    // matched the marriage pattern and produced a spouse named "at the age of", while the
+    // death date in the same sentence was missed. If the agent did not emit the metadata,
+    // the biography is still copied, but no vitals are claimed.
+    const hasStructuredData = Boolean(jsonCommentMatch) && Object.keys(vitals).length > 0;
 
     // Sanitize Dutch tussenvoegsels (van, de, van der, etc.) placed inside firstName
     vitals = sanitizeDutchNamePrefixes(vitals);
 
-    // If content already has structured comment, preserve raw text as payloadWithMeta without re-serializing
+    // Never synthesise a metadata comment. Sending an empty or invented one is worse than
+    // sending none, because the extension cannot tell a guess from a fact.
     const cleanBio = content.replace(/<!--\s*LINEAGE_NEXUS_DATA:[\s\S]+?-->/, '').trim();
-    const payloadWithMeta = content.includes('<!-- LINEAGE_NEXUS_DATA:')
-      ? content.trim()
-      : cleanBio + '\n\n<!-- LINEAGE_NEXUS_DATA: ' + JSON.stringify(vitals) + ' -->';
+    const payloadWithMeta = hasStructuredData ? content.trim() : cleanBio;
 
     // Save to localStorage for cross-tab extension sync
     try {
@@ -207,8 +89,8 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
 
     navigator.clipboard.writeText(payloadWithMeta);
     window.postMessage({ type: 'LINEAGE_NEXUS_PUSH_BIO', biography: cleanBio, vitals }, '*');
-    setPushed(true);
-    setTimeout(() => setPushed(false), 2500);
+    setPushed(hasStructuredData ? 'sent' : 'no-vitals');
+    setTimeout(() => setPushed(false), hasStructuredData ? 2500 : 5000);
   };
   
   if (!inline && (match || content.includes('\n'))) {
@@ -238,10 +120,15 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
                 className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-highlight hover:opacity-80 transition-opacity focus:outline-none cursor-pointer"
                 title="Push biography directly to WikiTree Extension"
               >
-                {pushed ? (
+                {pushed === 'sent' ? (
                   <>
                     <Check size={12} className="text-green-500" />
                     <span className="text-green-500">Pushed to Extension</span>
+                  </>
+                ) : pushed === 'no-vitals' ? (
+                  <>
+                    <AlertCircle size={12} className="text-amber-500" />
+                    <span className="text-amber-500">Biography only — no vitals returned</span>
                   </>
                 ) : (
                   <>

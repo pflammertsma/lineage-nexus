@@ -1,6 +1,7 @@
 from typing import List, Dict, Any, AsyncGenerator, Optional
 import asyncio
 import re
+import json
 from google import genai
 from google.genai import types
 from tools.openarchieven import open_archives_search, open_archives_get_record, OPEN_ARCHIVES_INSTRUCTIONS
@@ -30,6 +31,12 @@ genealogical research in the Netherlands using archival, WikiTree, and WWII / Ho
 ### GUIDELINES
 - Be factual and cite your sources.
 - **NEVER** format the final biography without using the `format_biography` tool.
+- **REPRODUCE THE BIOGRAPHY VERBATIM**: when you present the result of `format_biography`, copy
+  it character for character inside a ```wiki code block. Do not rewrite, reformat, summarise or
+  tidy it. In particular it ends with an HTML comment beginning `<!-- LINEAGE_NEXUS_DATA:` —
+  that comment is machine-readable data used to fill in the WikiTree profile, and it MUST be
+  included, unaltered, as the last line inside the code block. Deleting it silently discards
+  the entire profile's structured data.
 - Use archival records to validate WikiTree claims.
 """
 
@@ -82,6 +89,71 @@ def clean_session_title(raw: str) -> str:
     # If the response was nothing but a task word, keep the original rather than
     # yielding an empty sidebar entry.
     return title or (raw or "").strip().replace("*", "").strip("\"'`")
+
+# The biography the user sees is written by the orchestrator, which re-transcribes the
+# `format_biography` tool result into its reply. The specialist formatter reliably emits the
+# LINEAGE_NEXUS_DATA comment, but the orchestrator frequently drops it on the way through —
+# it reads as machine noise worth tidying away. Losing it means the WikiTree extension gets
+# no vitals at all, so restore it deterministically rather than relying on the model to copy
+# faithfully.
+_METADATA_RE = re.compile(r"<!--\s*LINEAGE_NEXUS_DATA:.*?-->", re.DOTALL)
+_WIKI_FENCE_RE = re.compile(r"```wiki\b.*?```", re.DOTALL)
+
+def restore_metadata_comment(response_text: str, formatted_biography: Optional[str]) -> str:
+    """Re-attaches the formatter's metadata comment if the orchestrator omitted it.
+
+    A reply may contain several biographies while only the most recent formatter output is
+    held, so the target block is identified by the subject's name rather than by position.
+    Attaching one person's vitals to another's profile would be far worse than attaching
+    none, so anything ambiguous is left untouched.
+    """
+    if not response_text or not formatted_biography:
+        return response_text
+
+    source = _METADATA_RE.search(formatted_biography)
+    if not source:
+        return response_text                      # formatter produced none; nothing to restore
+    comment = source.group(0).strip()
+
+    # Only blocks that are missing a comment are candidates.
+    candidates = [
+        b for b in _WIKI_FENCE_RE.finditer(response_text)
+        if not _METADATA_RE.search(b.group(0))
+    ]
+    if not candidates:
+        return response_text
+
+    # Narrow by the subject's name, which appears boldfaced in their own biography.
+    try:
+        payload = json.loads(source.group(0).split("LINEAGE_NEXUS_DATA:", 1)[1].rsplit("-->", 1)[0].strip())
+        names = [str(payload.get(k, "")).strip() for k in ("firstName", "lastNameAtBirth")]
+        names = [n for n in names if n]
+    except Exception:
+        names = []
+
+    if names:
+        # Compare against the boldfaced subject at the top of each biography rather than the
+        # whole block, and on whole words: a plain substring test matches "Jan" inside
+        # "Jantina", which would put the father's vitals on his daughter's profile.
+        def is_subject(block_text: str) -> bool:
+            bold = re.search(r"'''(.+?)'''", block_text)
+            haystack = bold.group(1) if bold else block_text
+            return all(re.search(rf"\b{re.escape(n)}\b", haystack) for n in names)
+
+        matching = [b for b in candidates if is_subject(b.group(0))]
+    else:
+        matching = candidates
+
+    # Exactly one unambiguous target, or we decline to guess.
+    if len(matching) != 1:
+        print(f"[{get_ts()}] WARN: metadata comment not restored; "
+              f"{len(matching)} candidate biography blocks matched the subject.")
+        return response_text
+
+    target = matching[0]
+    body = target.group(0)
+    repaired = body[: body.rfind("```")].rstrip() + "\n\n" + comment + "\n```"
+    return response_text[: target.start()] + repaired + response_text[target.end():]
 
 # Assemble the full instruction set from modular skill components
 SYSTEM_INSTRUCTION = ROOT_STRATEGY + "\n" + OPEN_ARCHIVES_INSTRUCTIONS + "\n" + WIKITREE_INSTRUCTIONS + "\n" + HOLOCAUST_INSTRUCTIONS
@@ -195,13 +267,19 @@ class ResearchOrchestrator:
             oorlogsbronnen_get_document
         ]
 
+        # The formatter's exact output, kept so the metadata comment can be restored if the
+        # orchestrator drops it while re-transcribing the biography into its reply.
+        formatter_output = {"text": None}
+
         # Specialist shim for biography formatting
         async def format_biography(research_data: str = "No research data provided", user_instructions: str = "Follow standard formatting") -> str:
             """
-            Takes ALL raw genealogical research data gathered during previous turns (JSON, notes, records) 
+            Takes ALL raw genealogical research data gathered during previous turns (JSON, notes, records)
             and converts it into a high-fidelity WikiTree biography. Use this ONLY as the final step.
             """
-            return await format_wikitree_biography(self.client, self.model_name, research_data, user_instructions)
+            result = await format_wikitree_biography(self.client, self.model_name, research_data, user_instructions)
+            formatter_output["text"] = result
+            return result
 
         all_tools.append(format_biography)
         tool_map = {f.__name__: f for f in all_tools}
@@ -230,7 +308,8 @@ class ResearchOrchestrator:
             
             # Extract just the text parts safely
             response_text = "".join([p.text for p in current_candidate.content.parts if p.text])
-            
+            response_text = restore_metadata_comment(response_text, formatter_output["text"])
+
             if not function_calls:
                 return {
                     "response": response_text or "I have completed my research.",
@@ -292,6 +371,6 @@ class ResearchOrchestrator:
             )
         )
         return {
-            "response": f"(Maximum research turns reached) {final_response.text}",
+            "response": f"(Maximum research turns reached) {restore_metadata_comment(final_response.text, formatter_output['text'])}",
             "usage": final_response.usage_metadata.model_dump() if final_response.usage_metadata else {}
         }

@@ -85,6 +85,39 @@
       out[key] = trimmed;
     }
 
+    // Marriages arrive as an array so multiple marriages survive the round trip. Normalise
+    // each entry, then project the first onto the flat fields the form filler uses, since
+    // WikiTree's edit form only takes one spouse at a time.
+    const hasMarriagesKey = Array.isArray(vitals.marriages);
+    const marriages = hasMarriagesKey ? vitals.marriages : [];
+    out.marriages = marriages
+      .filter(m => m && typeof m === 'object')
+      .map(m => ({
+        spouseName: typeof m.spouseName === 'string' ? m.spouseName.trim() : '',
+        // Needed by inferRelationship to spot "this profile is the spouse".
+        spouseWikiTreeId: typeof m.spouseWikiTreeId === 'string' ? m.spouseWikiTreeId.trim() : '',
+        date: m.date ? formatDateToISO(String(m.date).trim()) : '',
+        location: typeof m.location === 'string' ? m.location.trim() : '',
+        endDate: m.endDate ? formatDateToISO(String(m.endDate).trim()) : '',
+        endReason: typeof m.endReason === 'string' ? m.endReason.trim() : '',
+      }))
+      .filter(m => m.spouseName || m.date || m.location || m.spouseWikiTreeId);
+
+    if (out.marriages.length > 0) {
+      const first = out.marriages[0];
+      if (first.spouseName) out.spouseName = first.spouseName;
+      if (first.date) out.marriageDate = first.date;
+      if (first.location) out.marriageLocation = first.location;
+      if (first.endDate) out.marriageEndDate = first.endDate;
+    } else if (hasMarriagesKey) {
+      // An explicitly empty array asserts the subject never married, so clear any flat fields.
+      // A payload with no `marriages` key at all is simply the older schema — leave it alone.
+      delete out.spouseName;
+      delete out.marriageDate;
+      delete out.marriageLocation;
+      delete out.marriageEndDate;
+    }
+
     // Normalise dates the model may have written in prose form ("September 9, 1880").
     // formatDateToISO preserves about/before/after, which setDateRadioStatus needs.
     for (const field of DATE_FIELDS) {
@@ -99,6 +132,137 @@
     }
 
     return out;
+  };
+
+  // --- Contextual relationship detection -----------------------------------
+  // The metadata carries the subject's own WikiTree ID plus those of their parents and
+  // spouses. Comparing them against the profile currently open in the browser tells us what
+  // the user is actually trying to do: attach a newly researched child to this parent, add a
+  // spouse, or update this very profile.
+  const WIKITREE_ID_RE = /^[A-Za-z][A-Za-z0-9_'’.-]*-\d+$/;
+
+  const getCurrentProfileId = () => {
+    const m = (location.pathname || '').match(/^\/wiki\/([^/?#]+)/);
+    if (!m) return null;
+    let id;
+    try { id = decodeURIComponent(m[1]); } catch (e) { id = m[1]; }
+    return WIKITREE_ID_RE.test(id) ? id : null;
+  };
+
+  const getCurrentProfileName = () => {
+    const heading = document.querySelector('h1');
+    const text = heading && heading.textContent ? heading.textContent.trim().replace(/\s+/g, ' ') : '';
+    return text || null;
+  };
+
+  const fullNameOf = (v) =>
+    [v && v.firstName, v && v.middleName, v && v.lastNameAtBirth].filter(Boolean).join(' ').trim();
+
+  /**
+   * Works out how the staged person relates to the open profile.
+   * Returns null when there is nothing sensible to offer.
+   */
+  const inferRelationship = (vitals, currentProfileId, currentProfileName) => {
+    if (!vitals || !currentProfileId) return null;
+    const subject = fullNameOf(vitals);
+    if (!subject) return null;
+
+    const who = currentProfileName || currentProfileId;
+    const isCurrent = (id) =>
+      Boolean(id) && String(id).trim().toLowerCase() === currentProfileId.toLowerCase();
+
+    if (isCurrent(vitals.wikiTreeId)) {
+      return { type: 'update', subject, label: `Update ${subject}'s profile with this research?` };
+    }
+    if (isCurrent(vitals.fatherWikiTreeId) || isCurrent(vitals.motherWikiTreeId)) {
+      return { type: 'add-child', subject, label: `Add ${subject} as a child of ${who}?` };
+    }
+    const marriages = Array.isArray(vitals.marriages) ? vitals.marriages : [];
+    if (marriages.some((m) => isCurrent(m && m.spouseWikiTreeId))) {
+      return { type: 'add-spouse', subject, label: `Add ${subject} as a spouse of ${who}?` };
+    }
+    // Staged data with no stated link to this profile. Importing here would silently fill
+    // nothing, so ask for the relationship rather than implying the import will work.
+    return {
+      type: 'unknown-relation',
+      subject,
+      label: `How is ${subject} related to ${who}?`,
+    };
+  };
+
+  /**
+   * True when this page actually has a profile form to populate. A profile *view* page has
+   * none, which is why "Import Profile" there filled 0 fields and still claimed success.
+   */
+  const canFillProfileForm = () => {
+    const nameInput = document.querySelector('#mFirstName') ||
+                      document.querySelector('input[name="mFirstName"]') ||
+                      document.querySelector('#mRealName');
+    if (nameInput) return true;
+    return Boolean(
+      document.querySelector('input[type="radio"]#editAction_createNew') ||
+      document.querySelector('#editAction_createNew') ||
+      document.querySelector('input[type="radio"][value="create"]')
+    );
+  };
+
+  /**
+   * WikiTree renders its own "add relative" links on a profile ([spouse?], [children?], the
+   * pencil icons). Reading them off the page avoids inventing URLs, and means the user lands
+   * on the form the extension can actually fill.
+   */
+  // WikiTree encodes the relationship in the query string, e.g.
+  //   /index.php?title=Special:EditFamily&u=51238239&who=spouse
+  // so read `who` rather than guessing from link text ("[spouse?]", "add sibling").
+  const RELATION_LABELS = {
+    child: 'Add as child',
+    spouse: 'Add as spouse',
+    parent: 'Add as parent',
+    sibling: 'Add as sibling',
+  };
+
+  const findRelativeLinks = () => {
+    const found = new Map();
+    for (const a of document.querySelectorAll('a[href*="EditFamily"], a[href*="editfamily"]')) {
+      const href = a.getAttribute('href') || '';
+      const param = href.match(/[?&]amp;?who=([a-z]+)/i);
+      let who = param ? param[1].toLowerCase() : '';
+
+      if (!who) {
+        // Fall back to the visible text for any markup that omits the parameter.
+        const text = `${href} ${a.textContent || ''}`.toLowerCase();
+        who = Object.keys(RELATION_LABELS).find((k) => text.includes(k)) || '';
+      }
+      if (who === 'children') who = 'child';
+      if (who === 'spouses') who = 'spouse';
+      if (who === 'parents') who = 'parent';
+
+      if (RELATION_LABELS[who] && !found.has(who)) {
+        found.set(who, { key: who, title: RELATION_LABELS[who], href: a.href });
+      }
+    }
+    return Array.from(found.values());
+  };
+
+  const findEditPersonLink = () => {
+    const a = document.querySelector('a[href*="Special:EditPerson"], a[href*="EditPerson"]');
+    return a ? a.href : null;
+  };
+
+  const RELATION_FOR_TYPE = {
+    'add-child': 'child',
+    'add-spouse': 'spouse',
+    'add-parent': 'parent',
+  };
+
+  /** The WikiTree form this suggestion should open, or null if the page offers none. */
+  const linkForSuggestion = (suggestion) => {
+    if (!suggestion) return null;
+    if (suggestion.type === 'update') return findEditPersonLink();
+    const key = RELATION_FOR_TYPE[suggestion.type];
+    if (!key) return null;
+    const match = findRelativeLinks().find((l) => l.key === key);
+    return match ? match.href : null;
   };
 
   const sanitizeDutchNamePrefixes = (vitals) => {
@@ -255,80 +419,11 @@
       }
     }
 
-    // 4. Regex fallback parsing
-    if (raw && !vitals.firstName) {
-      const nameMatch = raw.match(/'''([^']+)'''/) || raw.match(/Name at Birth:\s*([^\n]+)/i);
-      if (nameMatch) {
-        const fullName = nameMatch[1].trim();
-        const parts = fullName.split(' ');
-        if (parts.length > 1) {
-          vitals.firstName = parts.slice(0, -1).join(' ');
-          vitals.lastNameAtBirth = parts[parts.length - 1];
-        } else {
-          vitals.firstName = fullName;
-        }
-      }
-    }
-
-    if (raw && !vitals.birthDate) {
-      const birthMatch = raw.match(/was born\s+((?:on|in|about|abt|circa|c\.|est|estimated)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:\s*,?\s*in\s+([^\n.]+?))?(?:,\s*(?:the\s+)?(?:son|daughter)\s+of|\.|$|<)/i) ||
-                         raw.match(/Birth Date:\s*([^\n]+)/i);
-      if (birthMatch) {
-        vitals.birthDate = formatDateToISO(birthMatch[1]);
-        if (birthMatch[2] && !vitals.birthLocation) {
-          vitals.birthLocation = birthMatch[2]
-            .replace(/,?\s*(?:the\s+)?(?:son|daughter)\s+of[\s\S]*/i, '')
-            .replace(/,?\s*\[\[[\s\S]*/, '')
-            .replace(/\.$/, '')
-            .trim();
-        }
-      }
-    }
-
-    if (raw && !vitals.deathDate) {
-      const deathMatch = raw.match(/(?:passed away|died)\s+(?:at\s+(?:the\s+)?age\s+of\s+\d+,?\s*|at\s+age\s+\d+,?\s*)?((?:before|after|about|abt|circa|c\.|est|estimated|on|in)?\s*(?:[A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}|[A-Za-z]+\s+\d{4}|\d{4}))(?:,\s+in\s+([^\n.<]+?))?(?:,|\.|$|<)/i) ||
-                         raw.match(/(?:passed away|died)\s+(?:at\s+(?:the\s+)?age\s+of\s+\d+|\s+at\s+age\s+\d+)?\s+in\s+([^\n.<]+?)\s+on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})/i) ||
-                         raw.match(/Death Date:\s*([^\n]+)/i);
-      if (deathMatch) {
-        vitals.deathDate = formatDateToISO(deathMatch[1]);
-        if (deathMatch[2] && !vitals.deathLocation) {
-          vitals.deathLocation = deathMatch[2].replace(/\.$/, '').trim();
-        }
-      }
-    }
-
-    if (raw && !vitals.marriageDate) {
-      const marriageMatch = raw.match(/married[^\n]+?\bon\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4})(?:,\s+in\s+([^\n.<]+?))?(?:\.|$|<)/i) ||
-                            raw.match(/on\s+([A-Za-z]+\s+\d+,\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}\s+[A-Za-z]+\s+\d{4}),?\s+(?:he|she)?\s*married[^\n]+?\bin\s+([^\n.<]+?)(?:\.|$|<)/i);
-      if (marriageMatch) {
-        vitals.marriageDate = formatDateToISO(marriageMatch[1]);
-        if (marriageMatch[2] && !vitals.marriageLocation) {
-          vitals.marriageLocation = marriageMatch[2].replace(/\.$/, '').trim();
-        }
-      }
-    }
-
-    if (raw && !vitals.spouseName) {
-      const spouseMatch = raw.match(/married\s+(?:\d+-year-old\s+)?(?:\[\[[^|]*\|([^\]]+)\]\]|'''([^']+)'''|([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+))/i);
-      if (spouseMatch) {
-        vitals.spouseName = (spouseMatch[1] || spouseMatch[2] || spouseMatch[3]).trim();
-      }
-    }
-
-    if (raw && !vitals.marriageEndDate) {
-      const divorceMatch = raw.match(/(?:marriage ended in divorce|divorced)\s+on\s+([^,.\n]+)/i);
-      if (divorceMatch) {
-        vitals.marriageEndDate = formatDateToISO(divorceMatch[1]);
-      }
-    }
-
-    if (raw && !vitals.gender) {
-      if (/was born[^\n]*\bthe son of\b/i.test(raw) || /\bHe married\b/i.test(raw) || /^\s*Gender:\s*Male/im.test(raw)) {
-        vitals.gender = 'Male';
-      } else if (/was born[^\n]*\bthe daughter of\b/i.test(raw) || /\bShe married\b/i.test(raw) || /^\s*Gender:\s*Female/im.test(raw)) {
-        vitals.gender = 'Female';
-      }
-    }
+    // The metadata comment is the sole source of vitals. Deriving them from prose with
+    // regexes produced confident nonsense — "died unmarried" matched the marriage pattern and
+    // yielded a spouse called "at the age of", while the death date was missed entirely. If
+    // the agent did not supply the comment, we report that rather than guessing.
+    const hasStructuredData = Object.keys(vitals).length > 0;
 
     // Sanitize Dutch tussenvoegsels (van, de, van der, etc.) placed inside firstName
     vitals = sanitizeDutchNamePrefixes(vitals);
@@ -357,8 +452,7 @@
 
       iconBtn.addEventListener('click', () => {
         if (barPanel) {
-          barPanel.style.display = 'flex';
-          iconBtn.style.display = 'none';
+          openPanel(barPanel, iconBtn);
         }
       });
     }
@@ -379,6 +473,7 @@
           <button class="nexus-close" id="nexus-close-btn">&times;</button>
         </div>
         <div class="nexus-status" id="nexus-status-msg"></div>
+        <div id="nexus-relation-actions"></div>
         <div id="nexus-toast-container"></div>
         <div class="nexus-actions">
           <button class="nexus-btn nexus-btn-gold" id="nexus-import-all-btn">
@@ -397,21 +492,91 @@
 
     // Update status text
     const statusMsg = document.querySelector('#nexus-status-msg');
+    const relationActions = document.querySelector('#nexus-relation-actions');
+    const importBtn = document.querySelector('#nexus-import-all-btn');
     const isStep1 = isStepOnePage();
+
+    // Rendered with textContent rather than innerHTML: names come from model output.
+    const setStatus = (parts) => {
+      statusMsg.textContent = '';
+      for (const part of parts) {
+        if (typeof part === 'string') {
+          statusMsg.appendChild(document.createTextNode(part));
+        } else {
+          const strong = document.createElement('strong');
+          strong.textContent = part.strong;
+          statusMsg.appendChild(strong);
+        }
+      }
+    };
+
+    if (relationActions) relationActions.textContent = '';
 
     if (hasData) {
       const v = parsed.vitals;
-      const personName = [v.firstName, v.lastNameAtBirth].filter(Boolean).join(' ') || 'staged profile';
+      const personName = [v.firstName, v.middleName, v.lastNameAtBirth].filter(Boolean).join(' ') || 'staged profile';
+      const fillable = canFillProfileForm();
+
+      if (!fillable) {
+        // A profile view page has no form. Previously "Import Profile" ran here, filled
+        // nothing, and still reported success — so explain what is actually needed instead.
+        const relationship = inferRelationship(v, getCurrentProfileId(), getCurrentProfileName());
+        const whoHere = getCurrentProfileName() || getCurrentProfileId() || 'this profile';
+        const links = findRelativeLinks();
+
+        const known = relationship && relationship.type !== 'unknown-relation';
+        if (relationship && relationship.type === 'add-child') {
+          setStatus([{ strong: personName }, ` is a child of ${whoHere}.`]);
+        } else if (relationship && relationship.type === 'add-spouse') {
+          setStatus([{ strong: personName }, ` is a spouse of ${whoHere}.`]);
+        } else if (relationship && relationship.type === 'update') {
+          setStatus([`This profile is `, { strong: personName }, `.`]);
+        } else {
+          setStatus([`No stated relationship between `, { strong: personName }, ` and ${whoHere}.`]);
+        }
+
+        // Offer updating the profile that is open, which the metadata often cannot know —
+        // frequently the staged person IS this profile, just without a wikiTreeId recorded.
+        const options = links.slice();
+        const editHref = findEditPersonLink();
+        const currentId = getCurrentProfileId();
+        if (editHref && currentId) {
+          options.unshift({ key: 'update', title: `Update ${currentId}`, href: editHref });
+        }
+
+        if (relationActions && options.length) {
+          const hint = document.createElement('div');
+          hint.className = 'nexus-relation-hint';
+          hint.textContent = known ? 'Open on WikiTree' : 'Choose a relationship';
+          relationActions.appendChild(hint);
+          for (const option of options) {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'nexus-btn nexus-btn-relation' +
+              (option.key === 'update' ? ' nexus-btn-relation-update' : '');
+            btn.textContent = option.title;
+            btn.addEventListener('click', () => { window.location.href = option.href; });
+            relationActions.appendChild(btn);
+          }
+        }
+
+        // The import button cannot do anything here; hiding it beats a button that lies.
+        if (importBtn) importBtn.style.display = 'none';
+        openPanel(barPanel, iconBtn);
+        return;
+      }
+
+      if (importBtn) importBtn.style.display = '';
       if (isStep1) {
-        statusMsg.innerHTML = `👉 <strong>Step 1:</strong> Ready to advance & import for <strong>${personName}</strong>`;
+        setStatus(['👉 ', { strong: 'Step 1:' }, ' Ready to advance & import for ', { strong: personName }]);
       } else {
-        statusMsg.innerHTML = `Ready to import profile for <strong>${personName}</strong>`;
+        setStatus(['Ready to import profile for ', { strong: personName }]);
       }
 
       // Auto-expand panel when data is ready
-      barPanel.style.display = 'flex';
-      iconBtn.style.display = 'none';
+      openPanel(barPanel, iconBtn);
     } else {
+      if (importBtn) importBtn.style.display = '';
       // Collapse to single logo icon when inactive/no data
       statusMsg.innerHTML = isStep1
         ? `👉 <strong>Step 1:</strong> Advance to creation form`
@@ -420,6 +585,146 @@
       barPanel.style.display = 'none';
       iconBtn.style.display = 'flex';
     }
+  };
+
+  // --- Panel visibility ----------------------------------------------------
+  // The chip and the expanded panel are two presentations of the same state, so exactly one
+  // may be on screen. Showing both stacked them on top of each other.
+  const isPanelOpen = () => {
+    const bar = document.querySelector('#lineage-nexus-floating-bar');
+    return Boolean(bar && bar.style.display === 'flex');
+  };
+
+  const openPanel = (bar, icon) => {
+    const panel = bar || document.querySelector('#lineage-nexus-floating-bar');
+    const logo = icon || document.querySelector('#lineage-nexus-collapsed-icon');
+    if (panel) panel.style.display = 'flex';
+    if (logo) logo.style.display = 'none';
+    dismissSuggestion();
+  };
+
+  // --- Contextual suggestion chip -----------------------------------------
+  // Sits to the left of the collapsed logo. Clicking it opens the existing panel; the import
+  // itself is still a deliberate click on "Import Profile", unchanged.
+  const dismissSuggestion = () => {
+    const chip = document.querySelector('#lineage-nexus-suggestion');
+    if (chip) chip.remove();
+  };
+
+  const renderSuggestion = (vitals) => {
+    if (!document.body) return;
+    const suggestion = inferRelationship(vitals, getCurrentProfileId(), getCurrentProfileName());
+    if (!suggestion) return;
+
+    // The panel already states this, in more detail. Refresh it rather than stacking a chip
+    // on top of it.
+    if (isPanelOpen()) {
+      dismissSuggestion();
+      injectFloatingAssistant();
+      return;
+    }
+
+    dismissSuggestion();
+
+    const chip = document.createElement('div');
+    chip.id = 'lineage-nexus-suggestion';
+    chip.dataset.action = suggestion.type;
+
+    const label = document.createElement('button');
+    label.className = 'nexus-suggestion-label';
+    label.type = 'button';
+    label.textContent = suggestion.label;   // textContent, never innerHTML: this is model output
+    label.addEventListener('click', () => {
+      // Accepting the suggestion should land on the form that can actually be filled, which
+      // is what WikiTree's own [spouse?] / [children?] links open.
+      const href = linkForSuggestion(suggestion);
+      if (href) {
+        dismissSuggestion();
+        window.location.href = href;
+        return;
+      }
+      // No matching form on this page: fall back to opening the panel, which explains why.
+      const bar = document.querySelector('#lineage-nexus-floating-bar');
+      const icon = document.querySelector('#lineage-nexus-collapsed-icon');
+      if (bar) bar.style.display = 'flex';
+      if (icon) icon.style.display = 'none';
+      dismissSuggestion();
+    });
+
+    const close = document.createElement('button');
+    close.className = 'nexus-suggestion-close';
+    close.type = 'button';
+    close.setAttribute('aria-label', 'Dismiss suggestion');
+    close.textContent = '×';
+    close.addEventListener('click', dismissSuggestion);
+
+    chip.appendChild(label);
+    chip.appendChild(close);
+    document.body.appendChild(chip);
+
+    const icon = document.querySelector('#lineage-nexus-collapsed-icon');
+    if (icon) icon.style.display = 'flex';
+  };
+
+  // --- Clipboard watcher ---------------------------------------------------
+  // Copying a biography in Lineage Nexus should be enough for the assistant to offer the right
+  // action. Two deliberate constraints:
+  //   * readText() rejects unless the document is focused, so polling a background tab would
+  //     only produce console noise. We read on focus and while visible.
+  //   * We ignore anything that does not carry our own marker, so ordinary clipboard contents
+  //     are never inspected, stored or transmitted.
+  const CLIPBOARD_POLL_MS = 1500;
+  let lastClipboardSignature = null;
+  let clipboardTimer = null;
+
+  const readClipboardQuietly = async () => {
+    if (!navigator.clipboard || !navigator.clipboard.readText) return null;
+    if (!document.hasFocus() || document.visibilityState !== 'visible') return null;
+    try {
+      return await navigator.clipboard.readText();
+    } catch (e) {
+      return null;   // not focused, or permission withheld
+    }
+  };
+
+  const checkClipboardForBiography = async () => {
+    const text = await readClipboardQuietly();
+    if (!text || text.indexOf('LINEAGE_NEXUS_DATA') === -1) return;
+
+    // Cheap change detection so we only act on genuinely new content.
+    const signature = `${text.length}:${text.slice(-160)}`;
+    if (signature === lastClipboardSignature) return;
+    lastClipboardSignature = signature;
+
+    const match = text.match(/<!--\s*LINEAGE_NEXUS_DATA:\s*({[\s\S]+?})\s*-->/);
+    if (!match) return;
+
+    let vitals;
+    try {
+      vitals = sanitizeVitals(JSON.parse(match[1]));
+    } catch (e) {
+      return;
+    }
+    vitals = sanitizeDutchNamePrefixes(vitals);
+
+    // Stage it exactly as "Send to Extension" would, so the existing manual import path is
+    // unchanged and still works from the panel.
+    if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.id && chrome.storage) {
+      try {
+        chrome.storage.local.set({ pending_biography: text.trim(), pending_vitals: vitals });
+      } catch (e) {}
+    }
+
+    renderSuggestion(vitals);
+  };
+
+  const startClipboardWatcher = () => {
+    if (clipboardTimer) return;
+    const tick = () => { checkClipboardForBiography(); };
+    clipboardTimer = setInterval(tick, CLIPBOARD_POLL_MS);
+    window.addEventListener('focus', tick);
+    document.addEventListener('visibilitychange', tick);
+    tick();
   };
 
   const showToast = (msg, isError = false) => {
@@ -532,6 +837,7 @@
 
     const fieldMap = {
       firstName: ['#mFirstName', 'input[name="mFirstName"]', '#mRealName'],
+      middleName: ['#mMiddleName', 'input[name="mMiddleName"]'],
       lastNameAtBirth: ['#mLastNameAtBirth', 'input[name="mLastNameAtBirth"]'],
       lastNameCurrent: ['#mLastNameCurrent', 'input[name="mLastNameCurrent"]'],
       birthDate: ['#mBirthDate', 'input[name="mBirthDate"]'],
@@ -803,10 +1109,15 @@
     }
   };
 
+  const start = () => {
+    injectFloatingAssistant();
+    startClipboardWatcher();
+  };
+
   // Run injection safely after DOMContentLoaded if loading
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', injectFloatingAssistant);
+    document.addEventListener('DOMContentLoaded', start);
   } else {
-    injectFloatingAssistant();
+    start();
   }
 })();

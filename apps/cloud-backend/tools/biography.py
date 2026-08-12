@@ -241,7 +241,7 @@ Jokos archive dossier number 51688.<ref name="joodsmonument">...</ref>
 == Sources ==
 <references />
 
-<!-- LINEAGE_NEXUS_DATA: {"firstName":"Aron","lastNameAtBirth":"Cohen","lastNameCurrent":"","gender":"Male","birthDate":"1879-10-27","birthLocation":"","deathDate":"1942-12-03","deathLocation":"Auschwitz, Polen","marriageDate":"1908-06-28","marriageEndDate":"","marriageLocation":"Groningen, Groningen, Nederland","spouseName":"Jetje de Behr","diedYoung":false,"isDutch":true} -->
+<!-- LINEAGE_NEXUS_DATA: {"wikiTreeId":"","firstName":"Aron","middleName":"","lastNameAtBirth":"Cohen","lastNameCurrent":"","gender":"Male","birthDate":"1879-10-27","birthLocation":"","deathDate":"1942-12-03","deathLocation":"Auschwitz, Polen","fatherWikiTreeId":"","motherWikiTreeId":"","marriages":[{"spouseName":"Jetje de Behr","spouseWikiTreeId":"","date":"1908-06-28","location":"Groningen, Groningen, Nederland","endDate":"","endReason":""}],"diedYoung":false,"isDutch":true} -->
 ```
 
 Note that `birthLocation` is `""` because the biography does not state where he was born. An
@@ -266,13 +266,14 @@ She died at age 57 in 1888, in Leeuwarden, Friesland, Nederland.<ref name="frl:2
 == Sources ==
 <references />
 
-<!-- LINEAGE_NEXUS_DATA: {"firstName":"Florette","lastNameAtBirth":"Frijda","lastNameCurrent":"","gender":"Female","birthDate":"about 1830-00-00","birthLocation":"","deathDate":"1888-00-00","deathLocation":"Leeuwarden, Friesland, Nederland","marriageDate":"1860-07-22","marriageEndDate":"","marriageLocation":"Sneek, Friesland, Nederland","spouseName":"Salomon Sanders","diedYoung":false,"isDutch":true} -->
+<!-- LINEAGE_NEXUS_DATA: {"wikiTreeId":"","firstName":"Florette","middleName":"","lastNameAtBirth":"Frijda","lastNameCurrent":"","gender":"Female","birthDate":"about 1830-00-00","birthLocation":"","deathDate":"1888-00-00","deathLocation":"Leeuwarden, Friesland, Nederland","fatherWikiTreeId":"","motherWikiTreeId":"","marriages":[{"spouseName":"Salomon Sanders","spouseWikiTreeId":"Sanders-25402","date":"1860-07-22","location":"Sneek, Friesland, Nederland","endDate":"","endReason":"death"},{"spouseName":"Levi van der Woude","spouseWikiTreeId":"Van_der_Woude-423","date":"1868-08-30","location":"Franeker, Friesland, Nederland","endDate":"","endReason":""}],"diedYoung":false,"isDutch":true} -->
 ```
 
-Two things to note in that metadata. Florette married twice, and only the FIRST marriage
-appears. And because her birth year is uncertain ("1830 or 1831"), `birthDate` carries the
-`about ` prefix, which tells WikiTree the date is an estimate rather than certain. Her death
-year is known but the day is not, so it is `1888-00-00` with no prefix.
+Note how Florette's two marriages are BOTH recorded, in chronological order, and the first
+carries `"endReason":"death"` because she was widowed. Because her birth year is uncertain
+("1830 or 1831"), `birthDate` carries the `about ` prefix, which tells WikiTree the date is an
+estimate rather than certain. Her death year is known but the day is not, so it is
+`1888-00-00` with no prefix.
 
 Here's an example of a biography for a person named Murkjen Langeraap who died young (under
 18):
@@ -289,11 +290,34 @@ She passed away at the age of 13 on June 14, 1846, in Hommerts, Friesland, Neder
 == Sources ==
 <references />
 
-<!-- LINEAGE_NEXUS_DATA: {"firstName":"Murkjen","lastNameAtBirth":"Langeraap","lastNameCurrent":"","gender":"Female","birthDate":"1832-11-22","birthLocation":"Wijmbritseradeel, Friesland, Nederland","deathDate":"1846-06-14","deathLocation":"Hommerts, Friesland, Nederland","marriageDate":"","marriageEndDate":"","marriageLocation":"","spouseName":"","diedYoung":true,"isDutch":true} -->
+<!-- LINEAGE_NEXUS_DATA: {"wikiTreeId":"","firstName":"Murkjen","middleName":"","lastNameAtBirth":"Langeraap","lastNameCurrent":"","gender":"Female","birthDate":"1832-11-22","birthLocation":"Wijmbritseradeel, Friesland, Nederland","deathDate":"1846-06-14","deathLocation":"Hommerts, Friesland, Nederland","fatherWikiTreeId":"Langeraap-13","motherWikiTreeId":"Visser-3593","marriages":[],"diedYoung":true,"isDutch":true} -->
 ```
 
 She never married, so every marriage field is `""` rather than omitted, and `diedYoung` is
 `true` to match the `{{Died Young}}` template.
+
+Here's an example of somebody who never married. Note that `marriages` is an empty array, and
+that the death date and place appear in the metadata even though the paragraph mentioning them
+also contains the word "unmarried":
+
+```wiki
+[[Category:Nederlanders_na_1811]]
+== Biography ==
+
+'''Wichertje Porringa''' was born on April 1, 1867, in Annerveenschekanaal, Anloo, Drenthe, Nederland, the daughter of [[Porringa-2|Jan Porringa]] and [[Mulder-726|Jantien Mulder]].<ref name="dar:61b60706-3cbd-4e18-8cd8-97986f954919">Burgerlijke Stand Geboorte 1867, Anloo, Drenthe, Nederland. Akte 29 (1867-04-01), Drents Archief accessed via [https://www.openarchieven.nl/dar:61b60706-3cbd-4e18-8cd8-97986f954919 OpenArch Permalink]</ref>
+
+She worked as a seamstress (naaister).
+
+She died unmarried at the age of 24 on March 19, 1892, in Annerveenschekanaal, Anloo, Drenthe, Nederland.<ref name="dar:5bfa0f62-3dae-4050-8b01-fb2167d643fe">Burgerlijke Stand Overlijden 1892, Anloo, Drenthe, Nederland. Akte 22 (1892-03-21), Drents Archief accessed via [https://www.openarchieven.nl/dar:5bfa0f62-3dae-4050-8b01-fb2167d643fe OpenArch Permalink]</ref>
+
+== Sources ==
+<references />
+
+<!-- LINEAGE_NEXUS_DATA: {"wikiTreeId":"","firstName":"Wichertje","middleName":"","lastNameAtBirth":"Porringa","lastNameCurrent":"","gender":"Female","birthDate":"1867-04-01","birthLocation":"Annerveenschekanaal, Anloo, Drenthe, Nederland","deathDate":"1892-03-19","deathLocation":"Annerveenschekanaal, Anloo, Drenthe, Nederland","fatherWikiTreeId":"Porringa-2","motherWikiTreeId":"Mulder-726","marriages":[],"diedYoung":false,"isDutch":true} -->
+```
+
+She died at 24, so `diedYoung` is `false` — that flag means under 18, not "died young in
+general".
 
 Here's an example of a biography for a person with very limited information:
 
@@ -378,13 +402,15 @@ Every one of these is a serious error:
   1939. Her own marriage was on 1906-05-26 in Muntendam. Never read the subject's marriage out
   of the list of children.
 - `deathLocation` is truncated to "Oosterbroek" instead of "Oosterbroek, Groningen, Nederland".
-- `lastNameCurrent`, `marriageEndDate`, `diedYoung` and `isDutch` are missing. Every key must
-  always be present.
+- `lastNameCurrent`, `middleName`, `diedYoung` and `isDutch` are missing. Every key must always
+  be present.
+- It uses the obsolete flat `marriageDate` / `marriageLocation` / `spouseName` fields instead of
+  the `marriages` array.
 
 The corrected metadata is:
 
 ```
-<!-- LINEAGE_NEXUS_DATA: {"firstName":"Harmke","lastNameAtBirth":"Porringa","lastNameCurrent":"","gender":"Female","birthDate":"1880-09-09","birthLocation":"Annerveenschekanaal, Anloo, Drenthe, Nederland","deathDate":"1973-05-26","deathLocation":"Oosterbroek, Groningen, Nederland","marriageDate":"1906-05-26","marriageEndDate":"","marriageLocation":"Muntendam, Groningen, Nederland","spouseName":"Wilhelmus Siert Molog","diedYoung":false,"isDutch":true} -->
+<!-- LINEAGE_NEXUS_DATA: {"wikiTreeId":"","firstName":"Harmke","middleName":"","lastNameAtBirth":"Porringa","lastNameCurrent":"","gender":"Female","birthDate":"1880-09-09","birthLocation":"Annerveenschekanaal, Anloo, Drenthe, Nederland","deathDate":"1973-05-26","deathLocation":"Oosterbroek, Groningen, Nederland","fatherWikiTreeId":"Porringa-2","motherWikiTreeId":"Mulder-726","marriages":[{"spouseName":"Wilhelmus Siert Molog","spouseWikiTreeId":"Molog-1","date":"1906-05-26","location":"Muntendam, Groningen, Nederland","endDate":"","endReason":""}],"diedYoung":false,"isDutch":true} -->
 ```
 
 
@@ -460,7 +486,12 @@ Shape:
 - Valid JSON. Every key below must be present in every biography.
 - Never write `--` inside any value; it terminates the HTML comment and destroys the data.
 
-`<!-- LINEAGE_NEXUS_DATA: {"firstName":"","lastNameAtBirth":"","lastNameCurrent":"","gender":"","birthDate":"","birthLocation":"","deathDate":"","deathLocation":"","marriageDate":"","marriageEndDate":"","marriageLocation":"","spouseName":"","diedYoung":false,"isDutch":false} -->`
+`<!-- LINEAGE_NEXUS_DATA: {"wikiTreeId":"","firstName":"","middleName":"","lastNameAtBirth":"","lastNameCurrent":"","gender":"","birthDate":"","birthLocation":"","deathDate":"","deathLocation":"","fatherWikiTreeId":"","motherWikiTreeId":"","marriages":[],"diedYoung":false,"isDutch":false} -->`
+
+This metadata is the ONLY thing the WikiTree extension reads. It does not and will not parse
+your prose. A fact that appears in the biography but is missing from this comment is lost, so
+the comment must repeat every vital you established in the text — most commonly forgotten is
+the death date.
 
 ### THE FIELDS DESCRIBE THE SUBJECT, AND ONLY THE SUBJECT
 
@@ -481,8 +512,19 @@ and it is easy to describe the wrong person.
 
 ### FIELD SPECIFICATIONS
 
-- `firstName`: Given name(s) ONLY (e.g. "Jan Isaäc", "Maria Elisabeth"). No surname, and no
-  Dutch surname prefix ("tussenvoegsel" such as "van", "de", "van der").
+- `wikiTreeId`: the subject's OWN WikiTree ID, e.g. "Porringa-3", when the profile already
+  exists and you know the ID. `""` when the profile has yet to be created — never guess an ID.
+- `fatherWikiTreeId`, `motherWikiTreeId`: the parents' WikiTree IDs when known, e.g. "Molog-1".
+  These come from the profile links you already used in the biography: writing
+  "the daughter of [[Molog-1|Wilhelmus Siert Molog]]" means `"fatherWikiTreeId":"Molog-1"`.
+  `""` when the parent has no profile or the ID is unknown.
+  The extension uses these to work out how the person relates to the profile currently open in
+  the browser, so that a newly researched child can be attached to the right parent. Getting
+  them wrong attaches somebody to the wrong family, so only ever copy an ID you actually linked
+  to in the biography.
+- `firstName`: the FIRST given name only, e.g. "Jan" for "Jan Isaäc". No surname, and no Dutch
+  surname prefix ("tussenvoegsel" such as "van", "de", "van der").
+- `middleName`: any remaining given names, e.g. "Isaäc". `""` when there are none.
 - `lastNameAtBirth`: Surname at birth including any Dutch prefix, e.g. "van Heek", "de Jong",
   "van der Pol", "Prinsen".
 - `lastNameCurrent`: `""` unless a different married surname is explicitly evidenced.
@@ -498,7 +540,16 @@ and it is easy to describe the wrong person.
   "Zaandam, Noord-Holland, Nederland". Never a bare municipality: "Veendam" is wrong, and
   "Veendam, Groningen, Nederland" is right. If the biography text mentions only the city, still
   expand it here using the province from that event's source citation.
-- `spouseName`: the subject's spouse's full name.
+- `marriages`: an ARRAY of the subject's own marriages, in chronological order. Each entry is
+  `{"spouseName":"","spouseWikiTreeId":"","date":"","location":"","endDate":"","endReason":""}`
+  where `spouseWikiTreeId` follows the same rule as the parent IDs above, and `date` and
+  `endDate` follow the date rules above, `location` follows the place rules, and `endReason` is
+  `"divorce"`, `"death"` (the marriage ended when one spouse died) or `""` if not known.
+  - Use `[]` when the subject never married. NEVER invent an entry.
+  - A phrase such as "she died unmarried", "he never married" or "no marriage record was found"
+    means `"marriages": []`. The word "unmarried" contains the word "married"; do not let that
+    mislead you into recording a marriage.
+  - Never take an entry from a child's, parent's or sibling's marriage.
 - `diedYoung`: `true` only when the subject died under 18 (matching the `{{Died Young}}` rule).
 - `isDutch`: `true` when the subject was born in the Netherlands.
 
@@ -510,8 +561,19 @@ would be typed into the WikiTree form verbatim.
 
 ### MULTIPLE MARRIAGES
 
-The marriage fields hold the subject's FIRST marriage only, since the extension fills one
-spouse at a time. Later marriages remain documented in the biography text.
+Record every marriage as its own entry in the `marriages` array, in chronological order. Two
+marriages produce two entries. The extension fills the first one into the WikiTree form and
+keeps the rest for the profile's marriage records, so nothing is lost.
+
+### BEFORE YOU WRITE THE COMMENT
+
+Check each of these against the biography you just wrote:
+- Is the death date present in the text but missing from the metadata?
+- Does `gender` match how the SUBJECT is described, not the spouse or children?
+- Does every marriage entry belong to the subject, and is `marriages` empty if the text says
+  the subject never married?
+- Are all locations in full "City, Province, Country" form?
+- Is every key present, with `""` or `[]` or `false` rather than being omitted?
 
 
 TRANSFER PROTOCOL
