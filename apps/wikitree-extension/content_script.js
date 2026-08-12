@@ -408,12 +408,18 @@
       } catch (e) {}
     }
 
-    // 3. Check for embedded JSON comment <!-- LINEAGE_NEXUS_DATA: {...} -->
-    if (raw && Object.keys(vitals).length === 0) {
+    // 3. The metadata comment embedded in the biography is authoritative and ALWAYS wins.
+    //    It is the payload the agent produced for this exact biography, whereas
+    //    `pending_vitals` in storage may be left over from an earlier copy or an older
+    //    schema. Previously this only ran when storage yielded nothing, so a stale object
+    //    written before `wikiTreeId` existed masked the fresh comment and relationship
+    //    detection silently failed — the extension could not tell it was already looking at
+    //    the subject's own profile.
+    if (raw) {
       const jsonCommentMatch = raw.match(/<!--\s*LINEAGE_NEXUS_DATA:\s*({[\s\S]+?})\s*-->/);
       if (jsonCommentMatch) {
         try {
-          vitals = sanitizeVitals(JSON.parse(jsonCommentMatch[1]));
+          vitals = JSON.parse(jsonCommentMatch[1]);
           raw = raw.replace(/<!--\s*LINEAGE_NEXUS_DATA:[\s\S]+?-->/, '').trim();
         } catch (err) {}
       }
@@ -424,6 +430,10 @@
     // yielded a spouse called "at the age of", while the death date was missed entirely. If
     // the agent did not supply the comment, we report that rather than guessing.
     const hasStructuredData = Object.keys(vitals).length > 0;
+
+    // Applied whatever the source: vitals loaded straight from storage previously skipped
+    // sanitising altogether, so dates went unnormalised and marriages unprojected.
+    vitals = sanitizeVitals(vitals);
 
     // Sanitize Dutch tussenvoegsels (van, de, van der, etc.) placed inside firstName
     vitals = sanitizeDutchNamePrefixes(vitals);

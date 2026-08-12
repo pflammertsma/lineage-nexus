@@ -252,3 +252,74 @@
   background: rgba(74, 144, 226, 0.24);
   border-color: #4A90E2;
 }
+
+/* --- Compact pass -------------------------------------------------------
+   The panel gained a relationship-choice section, which made it tall enough to
+   crowd the page. Tighten spacing and controls without shrinking text below 11px. */
+#lineage-nexus-floating-bar {
+  gap: 8px;
+  padding: 12px 14px;
+  width: 300px;
+  border-radius: 12px;
+}
+
+#lineage-nexus-floating-bar .nexus-header {
+  padding-bottom: 6px;
+}
+
+#lineage-nexus-floating-bar .nexus-title {
+  font-size: 12px;
+}
+
+#lineage-nexus-floating-bar .nexus-title svg,
+#lineage-nexus-floating-bar .nexus-title img.nexus-logo-img {
+  width: 16px;
+  height: 16px;
+}
+
+#lineage-nexus-floating-bar .nexus-status {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+#nexus-relation-actions {
+  gap: 5px;
+  margin: 0;
+}
+
+#nexus-relation-actions .nexus-relation-hint {
+  font-size: 10px;
+  margin-bottom: 0;
+}
+
+.nexus-btn-relation {
+  padding: 5px 9px;
+  font-size: 11px;
+  border-radius: 6px;
+}
+
+.nexus-btn-relation-update {
+  background: rgba(200, 164, 100, 0.14);
+  border-color: rgba(200, 164, 100, 0.5);
+  color: #F0E2C6;
+}
+
+.nexus-btn-relation-update:hover {
+  background: rgba(200, 164, 100, 0.26);
+  border-color: #C8A464;
+}
+
+#lineage-nexus-floating-bar .nexus-actions .nexus-btn {
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+/* Chip: keep it on one line where possible and clear of the icon. */
+#lineage-nexus-suggestion {
+  max-width: 300px;
+}
+
+#lineage-nexus-suggestion .nexus-suggestion-label {
+  font-size: 12px;
+  padding: 8px 6px 8px 12px;
+}
