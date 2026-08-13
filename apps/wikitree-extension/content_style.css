@@ -323,3 +323,10 @@
   font-size: 12px;
   padding: 8px 6px 8px 12px;
 }
+
+/* Empty flex children still consume the panel's row gap, which read as extra padding
+   along the bottom edge. Collapse them when they hold nothing. */
+#nexus-toast-container:empty,
+#lineage-nexus-floating-bar .nexus-actions:empty {
+  display: none;
+}

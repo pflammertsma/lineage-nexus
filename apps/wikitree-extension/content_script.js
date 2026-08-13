@@ -90,6 +90,10 @@
     // WikiTree's edit form only takes one spouse at a time.
     const hasMarriagesKey = Array.isArray(vitals.marriages);
     const marriages = hasMarriagesKey ? vitals.marriages : [];
+    // `out.marriages` ends up [] either way, so record whether that emptiness was asserted
+    // by the agent or merely absent from an older payload. Ticking "No spouses" on the
+    // strength of a missing key would state something the research never claimed.
+    out.marriagesKnown = hasMarriagesKey;
     out.marriages = marriages
       .filter(m => m && typeof m === 'object')
       .map(m => ({
@@ -162,6 +166,41 @@
    * Works out how the staged person relates to the open profile.
    * Returns null when there is nothing sensible to offer.
    */
+  // Lowercase, strip accents and punctuation so "van Wattum" and "Van_Wattum" compare equal.
+  const normaliseName = (value) =>
+    String(value || '')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .toLowerCase()
+      .replace(/[()[\].,'’`"]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  // A WikiTree ID carries the last name at birth: "Van_Wattum-7" -> "van wattum".
+  const lnabFromProfileId = (id) =>
+    normaliseName(String(id || '').replace(/-\d+$/, '').replace(/_/g, ' '));
+
+  /**
+   * True when the staged person appears to BE the profile on screen.
+   *
+   * The agent usually has no WikiTree ID for somebody it researched from archives, so
+   * `wikiTreeId` is empty and an exact match is impossible — yet the user is plainly looking
+   * at that person's profile. Both the URL and the page title carry the name, and requiring
+   * BOTH to agree keeps this safe: a child shares its father's surname, so the ID alone would
+   * match Wichertje Porringa against her father's Porringa-2 page. The given name breaks the tie.
+   */
+  const looksLikeCurrentProfile = (vitals, currentProfileId, currentProfileName) => {
+    const first = normaliseName(vitals.firstName);
+    const lnab = normaliseName(vitals.lastNameAtBirth);
+    if (!first || !lnab) return false;
+
+    if (lnabFromProfileId(currentProfileId) !== lnab) return false;
+
+    // WikiTree renders a married name as "Jantiene (Porringa) Rijsdijk", so match on tokens.
+    const shown = normaliseName(currentProfileName);
+    if (!shown) return false;              // no title to corroborate: do not guess
+    return shown.split(' ').includes(first);
+  };
+
   const inferRelationship = (vitals, currentProfileId, currentProfileName) => {
     if (!vitals || !currentProfileId) return null;
     const subject = fullNameOf(vitals);
@@ -180,6 +219,12 @@
     const marriages = Array.isArray(vitals.marriages) ? vitals.marriages : [];
     if (marriages.some((m) => isCurrent(m && m.spouseWikiTreeId))) {
       return { type: 'add-spouse', subject, label: `Add ${subject} as a spouse of ${who}?` };
+    }
+    // No ID matched. Checked last so an explicitly stated relationship always wins, this
+    // catches the common case where the agent researched somebody from archives and never
+    // learned their WikiTree ID, yet the user is looking at that very profile.
+    if (looksLikeCurrentProfile(vitals, currentProfileId, currentProfileName)) {
+      return { type: 'update', subject, label: `Update ${subject}'s profile with this research?` };
     }
     // Staged data with no stated link to this profile. Importing here would silently fill
     // nothing, so ask for the relationship rather than implying the import will work.
@@ -571,12 +616,20 @@
         }
 
         // The import button cannot do anything here; hiding it beats a button that lies.
-        if (importBtn) importBtn.style.display = 'none';
+        // Hide its row too: an empty flex child still consumes the panel's row gap, which
+        // showed up as unbalanced padding along the bottom edge.
+        if (importBtn) {
+          importBtn.style.display = 'none';
+          if (importBtn.parentElement) importBtn.parentElement.style.display = 'none';
+        }
         openPanel(barPanel, iconBtn);
         return;
       }
 
-      if (importBtn) importBtn.style.display = '';
+      if (importBtn) {
+        importBtn.style.display = '';
+        if (importBtn.parentElement) importBtn.parentElement.style.display = '';
+      }
       if (isStep1) {
         setStatus(['👉 ', { strong: 'Step 1:' }, ' Ready to advance & import for ', { strong: personName }]);
       } else {
@@ -586,7 +639,10 @@
       // Auto-expand panel when data is ready
       openPanel(barPanel, iconBtn);
     } else {
-      if (importBtn) importBtn.style.display = '';
+      if (importBtn) {
+        importBtn.style.display = '';
+        if (importBtn.parentElement) importBtn.parentElement.style.display = '';
+      }
       // Collapse to single logo icon when inactive/no data
       statusMsg.innerHTML = isStep1
         ? `👉 <strong>Step 1:</strong> Advance to creation form`
@@ -943,28 +999,43 @@
       }
     }
 
-    // Died Young: Tick "No spouses" and "No children" if {{Died Young}} is present
-    const isDiedYoung = vitals.diedYoung || (rawWikitext && /\{\{\s*Died\s+Young/i.test(rawWikitext));
-    if (isDiedYoung) {
-      const noSpousesCheckbox = document.querySelector('#mNoSpouses') ||
-                               document.querySelector('input[name="mNoSpouses"]') ||
-                               document.querySelector('input[id*="NoSpouse"]');
-      if (noSpousesCheckbox && !noSpousesCheckbox.checked) {
-        noSpousesCheckbox.checked = true;
-        noSpousesCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-        noSpousesCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
-        filledCount++;
+    // "No spouses" / "No children".
+    //
+    // The spouse checkbox is `name="mStatus_Spouse" value="blank"` and carries no id, so the
+    // previous #mNoSpouses / [name="mNoSpouses"] selectors never matched it — it was never
+    // ticked, including for {{Died Young}}.
+    const tickCheckbox = (selectors) => {
+      for (const sel of selectors) {
+        const box = document.querySelector(sel);
+        if (!box) continue;
+        if (box.checked) return false;
+        box.checked = true;
+        box.dispatchEvent(new Event('change', { bubbles: true }));
+        box.dispatchEvent(new Event('click', { bubbles: true }));
+        return true;
       }
+      return false;
+    };
 
-      const noChildrenCheckbox = document.querySelector('#mNoChildren') ||
-                                document.querySelector('input[name="mNoChildren"]') ||
-                                document.querySelector('input[id*="NoChildren"]');
-      if (noChildrenCheckbox && !noChildrenCheckbox.checked) {
-        noChildrenCheckbox.checked = true;
-        noChildrenCheckbox.dispatchEvent(new Event('change', { bubbles: true }));
-        noChildrenCheckbox.dispatchEvent(new Event('click', { bubbles: true }));
-        filledCount++;
-      }
+    const isDiedYoung = vitals.diedYoung || (rawWikitext && /\{\{\s*Died\s+Young/i.test(rawWikitext));
+    // An explicitly empty marriages array is the agent asserting the subject never married.
+    const neverMarried = vitals.marriagesKnown === true &&
+                         Array.isArray(vitals.marriages) &&
+                         vitals.marriages.length === 0;
+
+    if (isDiedYoung || neverMarried) {
+      if (tickCheckbox([
+        'input[name="mStatus_Spouse"]',
+        '#mNoSpouses',
+        'input[name="mNoSpouses"]',
+        'input[id*="NoSpouse"]',
+      ])) filledCount++;
+
+      if (tickCheckbox([
+        'input[name="mNoChildren"]',
+        '#mNoChildren',
+        'input[id*="NoChildren"]',
+      ])) filledCount++;
     }
 
     // Auto-select Date & Location Certainty Radio Buttons
