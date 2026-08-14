@@ -254,7 +254,13 @@ function App() {
             }
             if (data.response) {
               setMessages(prev => {
-                const updated = [...prev, { role: 'model', content: data.response }];
+                // `steps` is the trail of tool calls the agent actually made; kept on the
+                // message so it survives reloads and syncs with the rest of the session.
+                const updated = [...prev, {
+                  role: 'model',
+                  content: data.response,
+                  ...(Array.isArray(data.steps) && data.steps.length ? { steps: data.steps } : {}),
+                }];
                 setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, messages: updated } : s));
                 return updated;
               });

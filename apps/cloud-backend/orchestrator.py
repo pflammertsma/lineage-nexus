@@ -155,6 +155,65 @@ def restore_metadata_comment(response_text: str, formatted_biography: Optional[s
     repaired = body[: body.rfind("```")].rstrip() + "\n\n" + comment + "\n```"
     return response_text[: target.start()] + repaired + response_text[target.end():]
 
+# --- Research trail ---------------------------------------------------------
+# Tool calls are recorded as they execute so the UI can show what the agent actually did:
+# which WikiTree profiles it read, which archive queries it ran. Derived from the real call
+# and its result rather than from the human-readable status prose, which is for live progress.
+
+_TOOL_LABELS = {
+    "open_archives_search": "Archive search",
+    "open_archives_get_record": "Archive record",
+    "search_profiles": "WikiTree search",
+    "get_profile": "WikiTree profile",
+    "get_person": "WikiTree person",
+    "get_relatives": "WikiTree relatives",
+    "joods_monument_search": "Joods Monument search",
+    "joods_monument_get_document": "Joods Monument record",
+    "oorlogsbronnen_search": "Oorlogsbronnen search",
+    "oorlogsbronnen_get_document": "Oorlogsbronnen record",
+    "format_biography": "Biography formatted",
+}
+
+def _truncate(value: Any, limit: int = 120) -> str:
+    text = "" if value is None else str(value)
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+def describe_tool_args(name: str, args: Dict[str, Any]) -> str:
+    """The one detail worth showing for this call — the query, the profile, the URL."""
+    args = args or {}
+    for key in ("query", "profile_id", "name_or_id", "name", "url", "key"):
+        if args.get(key):
+            return _truncate(args[key])
+    # Name-part searches: recombine into something readable.
+    parts = [args.get("first_name"), args.get("last_name")]
+    joined = " ".join(p for p in parts if p).strip()
+    if joined:
+        return _truncate(joined)
+    if name == "format_biography":
+        return ""
+    return _truncate(", ".join(f"{k}={v}" for k, v in args.items() if v))
+
+def summarise_tool_result(result: Any) -> str:
+    """A short outcome, e.g. '14 records' or the error the tool reported."""
+    if isinstance(result, dict):
+        if result.get("status") == "error":
+            return _truncate(result.get("error_message") or "failed", 80)
+        for key in ("records", "results"):
+            value = result.get(key)
+            if isinstance(value, list):
+                return f"{len(value)} {'result' if len(value) == 1 else 'results'}"
+        person = result.get("person")
+        if isinstance(person, dict):
+            full = " ".join(
+                str(person.get(k, "")) for k in ("FirstName", "LastNameAtBirth")
+            ).strip()
+            return _truncate(full or "profile loaded", 80)
+        if result.get("status") == "ok":
+            return "ok"
+    if isinstance(result, str):
+        return f"{len(result)} characters"
+    return ""
+
 # Assemble the full instruction set from modular skill components
 SYSTEM_INSTRUCTION = ROOT_STRATEGY + "\n" + OPEN_ARCHIVES_INSTRUCTIONS + "\n" + WIKITREE_INSTRUCTIONS + "\n" + HOLOCAUST_INSTRUCTIONS
 
@@ -287,6 +346,7 @@ class ResearchOrchestrator:
         search_tool_names = ["open_archives_search", "search_profiles", "joods_monument_search", "oorlogsbronnen_search"]
 
         seen_queries = set()
+        research_steps = []   # what the agent actually did, surfaced in the UI
         while turn_count < MAX_RESEARCH_TURNS:
             turn_count += 1
             await report_status(f"Consulting lineage engine (Turn {turn_count})…")
@@ -313,6 +373,7 @@ class ResearchOrchestrator:
             if not function_calls:
                 return {
                     "response": response_text or "I have completed my research.",
+                    "steps": research_steps,
                     "usage": response.usage_metadata.model_dump() if response.usage_metadata else {}
                 }
 
@@ -340,21 +401,45 @@ class ResearchOrchestrator:
                     q_key = str(fc.args)
                     if q_key in seen_queries:
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": "Redundant query. Broaden your search or try a different source."}))
+                        research_steps.append({
+                            "tool": fc.name,
+                            "label": _TOOL_LABELS.get(fc.name, fc.name),
+                            "detail": describe_tool_args(fc.name, dict(fc.args or {})),
+                            "ok": False,
+                            "result": "skipped, repeated query",
+                        })
                         continue
                     seen_queries.add(q_key)
 
                 await report_status(f"Invoking {fc.name}…")
-                
+
+                call_args = dict(fc.args or {})
+                step = {
+                    "tool": fc.name,
+                    "label": _TOOL_LABELS.get(fc.name, fc.name),
+                    "detail": describe_tool_args(fc.name, call_args),
+                    "ok": True,
+                    "result": "",
+                }
+
                 tool_func = tool_map.get(fc.name)
                 if tool_func:
                     try:
                         result = await tool_func(**fc.args)
+                        step["result"] = summarise_tool_result(result)
+                        step["ok"] = not (isinstance(result, dict) and result.get("status") == "error")
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"result": result}))
                     except Exception as e:
                         print(f"[{get_ts()}] ERROR: Tool {fc.name} failed: {e}")
+                        step["ok"] = False
+                        step["result"] = _truncate(str(e), 80)
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": str(e)}))
                 else:
+                    step["ok"] = False
+                    step["result"] = "tool not found"
                     tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": f"Tool '{fc.name}' not found."}))
+
+                research_steps.append(step)
             
             # Use the tool mapping results to generate the next response
             current_history.append(types.Content(role="user", parts=tool_parts))
@@ -371,6 +456,7 @@ class ResearchOrchestrator:
             )
         )
         return {
+            "steps": research_steps,
             "response": f"(Maximum research turns reached) {restore_metadata_comment(final_response.text, formatter_output['text'])}",
             "usage": final_response.usage_metadata.model_dump() if final_response.usage_metadata else {}
         }

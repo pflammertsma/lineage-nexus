@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Network, Check, Copy, History, Sparkles, AlertCircle, RotateCcw, ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import ResearchTrail from './ResearchTrail';
 import remarkGfm from 'remark-gfm';
 
 const INITIAL_VISIBLE_COUNT = 15;
@@ -414,6 +415,8 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
                       {(msg.content || '').trim()}
                     </ReactMarkdown>
                   </div>
+
+                  {msg.role !== 'user' && <ResearchTrail steps={msg.steps} />}
                 </div>
               </div>
             );
