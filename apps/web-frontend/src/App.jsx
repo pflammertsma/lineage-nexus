@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Routes, Route, useNavigate, Navigate } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import FeatureGrid from './components/FeatureGrid';
@@ -7,6 +7,7 @@ import Sidebar from './components/Sidebar';
 import SettingsModal from './components/SettingsModal';
 import SyncConsentModal from './components/SyncConsentModal';
 import ChatInterface from './components/ChatInterface';
+import { PrivacyPage, TermsPage } from './components/LegalPage';
 import ChatInput from './components/ChatInput';
 import Notification from './components/Notification';
 import { ArrowDown } from 'lucide-react';
@@ -27,10 +28,13 @@ function App() {
   const [pendingQuery, setPendingQuery] = useState(null);
   const [status, setStatus] = useState(null);
   const chatContainerRef = useRef(null);
-  const [isAtBottom, setIsAtBottom] = useState(true);
+  // A ref, not state: this is read inside SSE handlers that close over their
+  // creation-time scope, and it must never trigger a re-render on scroll.
   const isAtBottomRef = useRef(true);
   const [showScrollDown, setShowScrollDown] = useState(false);
   const [hasNewUnread, setHasNewUnread] = useState(false);
+  // Drawer state, mobile only. At `md` and up the sidebar ignores this entirely.
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const isLoggedIn = auth.isSignedIn;
   const [activeSessionId, setActiveSessionId] = useState(() => {
     return localStorage.getItem('lineage_active_session_id');
@@ -88,7 +92,6 @@ function App() {
     const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     const atBottom = distanceToBottom < 120;
     
-    setIsAtBottom(atBottom);
     isAtBottomRef.current = atBottom;
     setShowScrollDown(!atBottom && messages.length > 0);
     if (atBottom) {
@@ -102,7 +105,6 @@ function App() {
         top: chatContainerRef.current.scrollHeight,
         behavior: 'smooth'
       });
-      setIsAtBottom(true);
       isAtBottomRef.current = true;
       setShowScrollDown(false);
       setHasNewUnread(false);
@@ -242,14 +244,12 @@ function App() {
           try {
             const jsonStr = trimmed.slice(6);
             const data = JSON.parse(jsonStr);
-            console.log(`[SSE ${new Date().toLocaleTimeString()}] Data:`, data);
-            
+
             if (data.status) {
               setStatus(data.status);
               researchLogs.push(data.status);
             }
             if (data.title) {
-              console.log(`[SSE ${new Date().toLocaleTimeString()}] Updating session title to: "${data.title}"`);
               setSessions(sList => sList.map(s => s.id === sessionId ? { ...s, title: data.title } : s));
             }
             if (data.response) {
@@ -335,6 +335,32 @@ function App() {
     if (auth.error) notify(auth.error, 'error');
   }, [auth.error]);
 
+  // Escape closes the drawer, and the page behind it must not scroll while it is
+  // open — on iOS a scrollable body under an overlay is what makes a drawer feel
+  // broken. Both are undone as soon as it closes, including on unmount.
+  useEffect(() => {
+    if (!sidebarOpen) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setSidebarOpen(false);
+    };
+    document.addEventListener('keydown', onKeyDown);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [sidebarOpen]);
+
+  // Resizing past the breakpoint with the drawer open would otherwise leave the
+  // scroll lock and backdrop applied to a desktop layout that has neither.
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const sync = (e) => { if (e.matches) setSidebarOpen(false); };
+    mq.addEventListener('change', sync);
+    return () => mq.removeEventListener('change', sync);
+  }, []);
+
   return (
     <div className="min-h-screen bg-background text-primary">
       <Header
@@ -346,6 +372,7 @@ function App() {
         themePreference={themePreference}
         onCycleTheme={cycleTheme}
         onOpenSettings={() => setConfigOpen(true)}
+        onToggleSidebar={() => setSidebarOpen(v => !v)}
       />
 
       <div className="toast-container overflow-visible z-50">
@@ -372,6 +399,10 @@ function App() {
               <footer className="py-16 bg-card border-t border-border">
                 <div className="container flex flex-col items-center gap-6">
                   <span className="text-xl font-extrabold tracking-tight text-accent">Lineage Nexus</span>
+                  <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[10px] font-bold uppercase tracking-widest opacity-60">
+                    <Link to="/privacy" className="hover:text-accent transition-colors">Privacy</Link>
+                    <Link to="/terms" className="hover:text-accent transition-colors">Terms</Link>
+                  </nav>
                   <p className="text-xs opacity-40">© 2026 Lineage Nexus. All rights reserved.</p>
                 </div>
               </footer>
@@ -381,8 +412,12 @@ function App() {
 
         <Route path="/chat" element={
           !isLoggedIn ? <Navigate to="/" replace /> : (
-            <div className="flex h-[calc(100vh-70px)] overflow-hidden">
+            // dvh, not vh: mobile browser chrome shrinks the visual viewport and
+            // vh does not follow it, which clipped the composer off-screen.
+            <div className="flex h-[calc(100dvh-var(--h-header))] overflow-hidden">
               <Sidebar
+                open={sidebarOpen}
+                onClose={() => setSidebarOpen(false)}
                 sessions={sessions}
                 activeSessionId={activeSessionId}
                 onSelectSession={(id) => setActiveSessionId(id)}
@@ -399,13 +434,10 @@ function App() {
                   setActiveSessionId(null);
                   setMessages([]);
                 }}
-                onOpenSettings={() => setConfigOpen(true)}
-                displayName={auth.displayName}
-                email={auth.email}
                 syncEnabled={syncConsent === true}
                 syncState={syncState}
               />
-              <main className="flex-1 overflow-hidden relative bg-surface">
+              <main className="flex-1 min-w-0 overflow-hidden relative bg-surface">
                 {messages.length === 0 ? (
                   <div className="h-full flex flex-col items-center justify-center p-8 text-center animate-in">
                     <div className="w-24 h-24 mb-6 transition-transform hover:scale-110 duration-500">
@@ -426,8 +458,10 @@ function App() {
                       status={status}
                       onRetry={handleSearch}
                     />
-                    {/* 280px spacer guarantees the last line of text sits completely above the top edge of the gradient fade when scrolled to bottom */}
-                    <div className="h-[280px] shrink-0 pointer-events-none" />
+                    {/* Keeps the last line clear of the composer overlay when
+                        scrolled to the bottom. Derived from the composer height
+                        so the two cannot drift apart. */}
+                    <div className="h-[calc(var(--h-composer)+112px)] shrink-0 pointer-events-none" />
                   </div>
                 )}
                 
@@ -436,7 +470,7 @@ function App() {
                   <button
                     type="button"
                     onClick={scrollToBottom}
-                    className={`absolute bottom-[200px] right-8 sm:right-12 z-20 flex items-center gap-2 px-3.5 py-2 rounded-full shadow-2xl transition-all hover:scale-105 animate-in fade-in duration-200 cursor-pointer ${
+                    className={`absolute bottom-[calc(var(--h-composer)+24px)] right-4 sm:right-8 z-20 flex items-center gap-2 px-3.5 py-2 rounded-full shadow-2xl transition-all hover:scale-105 animate-in fade-in duration-200 cursor-pointer ${
                       hasNewUnread
                         ? 'bg-accent text-on-accent shadow-accent/40 ring-2 ring-accent/30 font-bold'
                         : 'bg-card/90 backdrop-blur-md border border-border/80 text-foreground hover:text-accent font-semibold'
@@ -450,9 +484,12 @@ function App() {
                   </button>
                 )}
 
-                {/* Floating Gradient Overlay: tight pt-12 fade above input box; inset right-4 to unblock scrollbar track */}
-                <div className="absolute bottom-0 left-0 right-4 pointer-events-none bg-gradient-to-t from-surface via-surface/95 to-transparent pt-12 pb-6 flex justify-center z-10">
-                  <div className="w-full max-w-[800px] px-4 sm:px-8 pointer-events-auto">
+                {/* Floating composer: tight pt-12 fade above the input; inset right-4
+                    to unblock the scrollbar track. `.reading-column` matches the
+                    transcript exactly, so the input sits directly under the text
+                    it answers rather than on its own axis. */}
+                <div className="absolute bottom-0 left-0 right-4 pointer-events-none bg-gradient-to-t from-surface via-surface/95 to-transparent pt-12 pb-[calc(1.5rem+env(safe-area-inset-bottom))] flex justify-center z-10">
+                  <div className="reading-column pointer-events-auto">
                     <ChatInput
                       onSearch={handleSearch}
                       onStop={handleStop}
@@ -465,6 +502,14 @@ function App() {
             </div>
           )
         } />
+
+        {/* Reachable signed in or out, and linkable from the OAuth consent screen. */}
+        <Route path="/privacy" element={<PrivacyPage />} />
+        <Route path="/terms" element={<TermsPage />} />
+
+        {/* Hosting rewrites every path to index.html, so unknown URLs land here
+            rather than on a 404 page. */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
       {configOpen && (

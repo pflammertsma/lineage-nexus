@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Sun, Moon, Monitor, Settings, LogOut } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Sun, Moon, Monitor, Settings, LogOut, Menu } from 'lucide-react';
 import logo from '../assets/logo.svg';
 
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
@@ -25,6 +26,7 @@ const Header = ({
   themePreference = 'system',
   onCycleTheme,
   onOpenSettings,
+  onToggleSidebar,
 }) => {
   const ThemeIcon = THEME_ICON[themePreference] || Monitor;
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -43,19 +45,32 @@ const Header = ({
   }, []);
 
   return (
-    <header className="h-[70px] bg-surface border-b border-border sticky top-0 z-[1000]">
-      <div className="container h-full flex items-center justify-between">
-        <div className="flex items-center gap-3 select-none">
-          <img src={logo} alt="" className="w-7 h-7 pointer-events-none" />
-          <span className="text-lg font-extrabold tracking-tight text-accent">Lineage Nexus</span>
+    <header className="h-[var(--h-header)] bg-surface border-b border-border sticky top-0 z-[1000]">
+      {/* On /chat the bar runs full-bleed so the wordmark aligns with the sidebar
+          instead of a centred container, leaving the transcript as the only
+          centred element. The landing page keeps the marketing container. */}
+      <div className={isLoggedIn ? 'app-bar' : 'container h-full flex items-center justify-between'}>
+        <div className="flex items-center gap-1 sm:gap-3 select-none min-w-0">
+          {isLoggedIn && (
+            <button
+              type="button"
+              onClick={onToggleSidebar}
+              aria-label="Open research history"
+              className="md:hidden w-11 h-11 -ml-1 shrink-0 flex items-center justify-center rounded-lg text-secondary hover:text-accent hover:bg-card transition-colors cursor-pointer"
+            >
+              <Menu size={20} />
+            </button>
+          )}
+          <img src={logo} alt="" className="w-7 h-7 shrink-0 pointer-events-none" />
+          <span className="text-lg font-extrabold tracking-tight text-accent truncate">Lineage Nexus</span>
         </div>
 
         {/* Marketing links on landing page */}
         {!isLoggedIn && (
           <nav className="hidden md:flex gap-8 items-center opacity-60">
             <a href="#features" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Platform</a>
-            <a href="#about" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Privacy</a>
-            <a href="#" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Docs</a>
+            <Link to="/privacy" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Privacy</Link>
+            <Link to="/terms" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Terms</Link>
           </nav>
         )}
 

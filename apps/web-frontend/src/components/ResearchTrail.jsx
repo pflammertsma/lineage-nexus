@@ -34,11 +34,15 @@ const ResearchTrail = ({ steps }) => {
         )}
       </button>
 
+      {/* Rows wrap rather than compress: at phone widths the result column's
+          `ml-auto` used to squeeze the query into a one-character-per-line
+          ribbon. Below `sm` the result drops onto its own line instead, and
+          queries break at spaces (`break-words`) rather than mid-word. */}
       {open && (
-        <ol className="mt-2 border-l border-border pl-4 space-y-1.5">
+        <ol className="mt-2 border-l border-border pl-3 sm:pl-4 space-y-2">
           {steps.map((step, i) => (
-            <li key={i} className="flex items-baseline gap-2 text-xs leading-relaxed">
-              <span className="shrink-0 mt-0.5">
+            <li key={i} className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-xs leading-relaxed">
+              <span className="shrink-0 self-start mt-1">
                 {step.ok === false ? (
                   <AlertCircle size={11} className="text-amber-500" />
                 ) : (
@@ -47,12 +51,14 @@ const ResearchTrail = ({ steps }) => {
               </span>
               <span className="text-secondary shrink-0">{step.label || step.tool}</span>
               {step.detail && (
-                <span className="text-primary/90 font-mono text-[11px] break-all">
+                <span className="text-primary/90 font-mono text-[11px] break-words min-w-0">
                   {step.detail}
                 </span>
               )}
               {step.result && (
-                <span className="text-secondary/60 shrink-0 ml-auto pl-2">{step.result}</span>
+                <span className="text-secondary/60 basis-full sm:basis-auto sm:ml-auto pl-5 sm:pl-2 sm:text-right">
+                  {step.result}
+                </span>
               )}
             </li>
           ))}

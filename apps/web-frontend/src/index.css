@@ -47,6 +47,20 @@
   --h-control: 48px;
   --radius-md: 10px;
   --radius-lg: 16px;
+
+  /* ---- Layout metrics -----------------------------------------------------
+     One source of truth for the app shell. The composer is an absolutely
+     positioned overlay, so the scroll spacer beneath the transcript and the
+     scroll-to-bottom offset are both derived from its height; as three separate
+     hard-coded numbers they drifted apart whenever the input changed size.
+
+     --w-reading is the measure of the transcript. It is the axis everything on
+     /chat aligns to: the header wordmark sits over the sidebar, so the reading
+     column is the only centred element and there is no competing centre line. */
+  --h-header: 70px;
+  --w-sidebar: 272px;
+  --w-reading: 820px;
+  --h-composer: 168px;
 }
 
 /* Slate — dark mode. Surfaces are navy-tinted rather than neutral grey so the
@@ -83,6 +97,22 @@
 @layer components {
   .container {
     @apply max-w-[1100px] mx-auto px-6 w-full;
+  }
+
+  /* The transcript measure, and the composer that has to sit exactly above it.
+     Both use this so the input can never be wider or narrower than the text it
+     is answering. Padding widens with the viewport: on a phone the text needs
+     the room more than the margin does. */
+  .reading-column {
+    @apply w-full mx-auto px-4 sm:px-6 lg:px-8;
+    max-width: var(--w-reading);
+  }
+
+  /* Full-bleed header bar, used on /chat. The wordmark aligns to the sidebar's
+     own padding rather than to a centred container, which is what previously
+     put it on a different axis to the transcript. */
+  .app-bar {
+    @apply h-full w-full flex items-center justify-between px-4 sm:px-5;
   }
 
   .btn {

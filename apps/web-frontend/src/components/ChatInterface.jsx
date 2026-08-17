@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { User, Network, Check, Copy, History, Sparkles, AlertCircle, RotateCcw, ChevronDown } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import ResearchTrail from './ResearchTrail';
@@ -86,7 +86,10 @@ const CodeBlock = ({ node, inline, className, children, ...props }) => {
     try {
       localStorage.setItem('lineage_nexus_pending_bio', payloadWithMeta);
       localStorage.setItem('lineage_nexus_pending_vitals', JSON.stringify(vitals));
-    } catch (e) {}
+    } catch {
+      // Best-effort mirror for the extension. The clipboard write below is the
+      // path that actually matters, so a full quota must not block the handoff.
+    }
 
     navigator.clipboard.writeText(payloadWithMeta);
     window.postMessage({ type: 'LINEAGE_NEXUS_PUSH_BIO', biography: cleanBio, vitals }, '*');
@@ -283,12 +286,14 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
   const [copiedIdx, setCopiedIdx] = useState(null);
   const [visibleCount, setVisibleCount] = useState(INITIAL_VISIBLE_COUNT);
 
-  // Auto-reset when messages array resets
-  useEffect(() => {
-    if (messages.length <= INITIAL_VISIBLE_COUNT) {
-      setVisibleCount(INITIAL_VISIBLE_COUNT);
-    }
-  }, [messages.length]);
+  // Switching to a shorter session collapses the window back to one page.
+  // Adjusted during render rather than in an effect: an effect would render the
+  // expanded count once before correcting it, and React re-runs this pass before
+  // committing anything to the DOM.
+  // https://react.dev/learn/you-might-not-need-an-effect
+  if (messages.length <= INITIAL_VISIBLE_COUNT && visibleCount !== INITIAL_VISIBLE_COUNT) {
+    setVisibleCount(INITIAL_VISIBLE_COUNT);
+  }
 
   const handleCopy = (text, idx) => {
     navigator.clipboard.writeText(text);
@@ -310,7 +315,7 @@ const ChatInterface = ({ messages, isLoading, status, onRetry }) => {
 
   return (
     <section className="bg-surface section-divider">
-      <div className="container" style={{ maxWidth: '800px' }}>
+      <div className="reading-column">
         {/* Paginated Trimming: Load Earlier Messages Banner */}
         {hiddenCount > 0 && (
           <div className="flex justify-center mb-6">
