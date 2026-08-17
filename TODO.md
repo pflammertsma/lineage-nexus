@@ -1,25 +1,43 @@
 # Lineage Nexus Development Roadmap
 
 ## 🎯 Current Priorities (Next Session)
-- [ ] **Deploy for the first time**: see the Deployment section below. Nothing is released yet and the frontend has no hosting target at all.
+- [ ] **Ship to production**: work the Production Readiness Checklist below. Nothing is released yet and the frontend has no hosting target at all.
 - [ ] **Relationship graph**: generate a relationship graph component to show the relationships between the people in the conversation.
 - [ ] **Holocaust Records**: implement the `HolocaustAgent` toolset (ITS/Arolsen Archives, USHMM). Legacy prompts and API clients are in `adk-app/agent/holocaust.py` and `adk-app/api/` for reference.
 - [ ] **Wikitext Wizard**: refine 'Biography' output to include specific WikiTree citation templates (e.g., `<ref>` tags).
 - [ ] **Dynamic Resource Tuning**: add a UI slider to adjust `MAX_SEARCH_PER_TURN` for advanced research sessions.
 - [ ] **Auto-Focus Logic**: improve the `SYSTEM_INSTRUCTION` to strictly prioritize reading existing WikiTree context before any archival queries.
+- [ ] **Delete Profiles Confirmation**: Add a confirmation dialog before deleting a research profile.
+- [ ] **Standardize the Research Suggestion Chips** - All chips below the chat box should use the same styles and be generated using the same code. Currently, the "Holocaust" option incorrectly shows in pink. The size of these chips should be consistent and always on a single line, even on mobile as it scrolls horizontally.
 
-## 🚀 Deployment
+## 🚀 Production Readiness Checklist
 
-Neither app has ever been deployed. Substitute your own values for every
+Target: publish the web frontend on a custom domain with the API on Cloud Run.
+Nothing has ever been deployed. Substitute your own values for every
 `<placeholder>` below — nothing here is tied to a particular account or project.
+
+Work the phases in order: 0 and 1 are safety rails, and skipping them is how you
+deploy into the wrong project or ship a bundle that silently fakes sign-in.
+
+### 0. Safety rails (do these first)
+- [ ] ⚠️ **Check the active gcloud project.** `pnpm deploy` targets whatever
+  `gcloud config get-value project` returns and will silently deploy into an
+  unrelated project:
+  ```bash
+  gcloud config get-value project   # verify BEFORE deploying
+  gcloud config set project <your-gcp-project-id>
+  ```
+- [ ] Add a guard to the `deploy` script so it refuses to run unless the active
+  project matches an expected value. The check above is easy to forget; the
+  script should not be foot-gun-shaped.
+- [ ] Set a **billing budget + alert** on the project. The API is
+  `--allow-unauthenticated` with long-lived SSE turns; Gemini spend is on the
+  caller (BYOK) but Cloud Run CPU and egress are on you.
+- [ ] Decide `--max-instances` before first deploy (see Operational caveats).
 
 ### Prerequisites
 - One Google Cloud project for the app, with **Firebase added to that same project**, so Cloud Run, Auth and Firestore share a project and billing account.
 - `gcloud` and `firebase` CLIs installed and authenticated.
-- ⚠️ **Check the active project first.** `pnpm deploy` targets whatever `gcloud config get-value project` returns and will silently deploy into an unrelated project:
-  ```bash
-  gcloud config set project <your-gcp-project-id>
-  ```
 
 ### 1. Firebase console (one-time, manual)
 - [ ] Add Firebase to the GCP project.
@@ -43,10 +61,21 @@ pnpm deploy
   searches (~15s each) plus quota waits (~47s each), and the connection must stay
   open throughout or the stream is cut mid-research.
 - No secrets are needed on the service — BYOK means the Gemini key arrives per-request from the browser.
+- [ ] Set `--max-instances` in the same command. Combined with a 900s timeout and
+  open access, an unbounded instance ceiling is the main cost risk.
 
 ### 3. Frontend config
 - [ ] Copy `apps/web-frontend/.env.example` to `.env` and fill in `VITE_API_BASE_URL` (the Cloud Run URL) plus the `VITE_FIREBASE_*` values from **Project settings → Your apps**.
 - These are compiled into the bundle at build time, so changing them requires a rebuild. That is expected: Firebase web config is a public client identifier, and `firestore.rules` is what actually enforces access.
+- [ ] ⚠️ **Add a build-time guard.** Both fallbacks fail silently and are unsafe
+  in production:
+  - Unset `VITE_FIREBASE_*` → `isFirebaseConfigured === false` → `useAuth.js`
+    falls back to the **simulated login**, so "Sign in with Google" merely sets a
+    localStorage boolean and shows the visitor as "Researcher". Shipping that
+    publicly is worse than having no sign-in at all.
+  - Unset `VITE_API_BASE_URL` → the bundle calls `http://localhost:8081`, i.e.
+    the visitor's own machine, blocked as mixed content over HTTPS.
+  A production build should **fail loudly** rather than emit either.
 
 ### 4. Firestore rules
 ```bash
@@ -57,8 +86,107 @@ firebase deploy --only firestore:rules
 ### 5. Frontend hosting — still to be scaffolded
 - [ ] No `firebase.json` or `.firebaserc` exists yet; this is the main outstanding gap. Firebase Hosting is the natural fit (same project, custom domain, SPA rewrites).
 - [ ] Needs a hosting config pointing at `apps/web-frontend/dist`, a rewrite of all routes to `/index.html` (the app uses client-side routing, so deep links 404 without it), and a `deploy:web` script.
+- [ ] Decide how the project ID is stored. `.firebaserc` normally holds it
+  literally; since the repo is public, either gitignore it or pass `--project`
+  from an environment variable.
 
-### 6. Post-deploy verification
+### 6. Domain & DNS
+- [ ] Point the apex (and `www`, if used) at the chosen host; add both to
+  Firebase **Authorized domains** or sign-in fails.
+- [ ] ⚠️ **Do not proxy the API through a CDN that buffers responses.** Research
+  turns are long-lived SSE streams; a buffering proxy (or a short edge request
+  timeout) will cut them mid-turn. Keep the API on its Cloud Run URL, or set the
+  DNS record to DNS-only rather than proxied.
+- [ ] A proxying CDN in front of Firebase Hosting's own CDN and certificate is a
+  common source of redirect loops and cert errors. If it fights you, host the
+  static site on the CDN provider's own static hosting instead.
+- [ ] Force HTTPS; verify the certificate covers apex and `www`.
+
+### 7. UI optimization (mobile + desktop)
+
+The layout was built desktop-first at one window size and does not currently
+hold up at either end of the range.
+
+**Mobile — the sidebar must become an overlay**
+- [ ] Today `Sidebar` is `w-64` inside a flex row, so on a 375px viewport it eats
+  256px and leaves ~119px for the chat. The research trail degrades to roughly
+  one character per line.
+- [ ] Convert it to an overlay drawer below `md`: fixed, full height, slid out by
+  default, over the chat rather than beside it.
+- [ ] Dismiss on tap outside (backdrop), on Escape, and on selecting a session.
+- [ ] Add a hamburger toggle to `Header`, shown only on `/chat`.
+- [ ] Lock body scroll while the drawer is open.
+- [ ] Keep it a plain flex child at `md` and up — no behaviour change on desktop.
+- [ ] Fix `Sidebar`'s `h-screen`: its parent is `h-[calc(100vh-70px)]`, so the
+  sidebar is 70px taller than the row that contains it.
+- [ ] Switch `100vh` to `100dvh` so mobile browser chrome doesn't clip the input.
+- [ ] The per-session delete button is `opacity-0` until `group-hover`, which is
+  unreachable on touch. Make it always visible below `md`.
+- [ ] Audit tap targets to ~44px minimum.
+- [ ] `ResearchTrail`: rows use `ml-auto` for the result column and `break-all`
+  for the detail. Wrap the row and drop the auto margin on narrow widths, and
+  prefer `break-words` so queries break at spaces rather than mid-word.
+- [ ] Check the floating input overlay (`right-4`, `max-w-[800px] px-4`) and the
+  scroll-to-bottom button (`bottom-[200px] right-8`) at 375px.
+- [ ] Add safe-area insets for notched devices.
+
+**Desktop — the weighting is off**
+- [ ] **Two different centring axes.** `Header` uses `.container`
+  (`max-w-[1100px] mx-auto`) centred on the full viewport, while `ChatInterface`
+  uses `.container` capped to 800px centred inside `main`, which is the viewport
+  minus the 256px sidebar. The wordmark and the chat column therefore sit on
+  different centre lines. Pick one axis and use it for both.
+- [ ] On a wide window the 800px column leaves very large empty gutters. Consider
+  capping the whole app shell, or offsetting the reading column from the sidebar
+  instead of centring it in the leftover space.
+- [ ] The bottom spacer (`h-[280px]`) and scroll button offset (`bottom-[200px]`)
+  are magic numbers tied to the input's height. Derive them from one token so
+  they cannot drift apart.
+- [ ] Re-check vertical rhythm between message blocks, the wikitext card, and the
+  research trail once the horizontal weighting is settled.
+
+**Both**
+- [ ] Verify at 375, 768, 1280, and 2560px wide, in light and dark.
+- [ ] Confirm the page body never scrolls horizontally; wide wikitext must scroll
+  inside its own container.
+
+### 8. Legal & trust
+- [ ] Write a privacy policy and serve it at a real route. `Header.jsx` currently
+  links "Privacy" to `#about`, which does not exist.
+- [ ] Required because: the Google OAuth consent screen wants a privacy policy
+  URL; account data and research records are stored in Firestore for EU users;
+  and visitors hand over a Gemini API key that transits the backend.
+- [ ] State explicitly that the API key is used per-request and never stored
+  server-side, and that research sessions sync only after opt-in.
+- [ ] Add terms of use, and a note on the provenance of archival data
+  (OpenArchieven, WikiTree) and their attribution requirements.
+- [ ] Document how to delete data — the controls exist in Settings, but nothing
+  tells the user they do.
+
+### 9. Onboarding & abuse
+- [ ] **BYOK has no onboarding.** A visitor's first query pops the settings modal
+  with no prior explanation. Explain the key requirement on the landing page and
+  link to where a key is obtained.
+- [ ] Rate-limit `/api/v1/chat`, or require a Firebase ID token. Unauthenticated
+  and unmetered, it is an open proxy to WikiTree and OpenArchieven from your
+  Cloud Run IP, which risks getting `appId=LineageNexus` blocked.
+- [ ] Cap `ChatRequest.history` length and request body size — both are unbounded.
+- [ ] Remove the SSE `console.log` calls in `App.jsx` (~lines 245, 252); they dump
+  research content to the browser console in production.
+
+### 10. Observability & polish
+- [ ] Add error monitoring. Nothing currently reports that the site is broken.
+- [ ] Firestore documents cap at 1 MiB and `messages` is unbounded, so long
+  sessions will eventually fail to sync — and `useSyncedSessions` swallows the
+  failure into `syncState: 'error'`. Trim, chunk, or surface it properly.
+- [ ] Bundle is 1.0 MB (302 kB gzip) in a single chunk, mostly Firebase.
+  Lazy-load `firebase/firestore` behind sign-in.
+- [ ] Add Open Graph / Twitter card tags, a canonical URL, and `robots.txt`;
+  shared links currently render a blank card.
+- [ ] Remove `http://localhost:*/*` from the extension's `host_permissions`
+  before any Chrome Web Store submission.
+
+### 11. Post-deploy verification
 These paths have never executed — see "Unverified" below.
 - [ ] Google sign-in, end to end.
 - [ ] Consent dialog appears once per account; declining leaves sync off.
@@ -69,6 +197,13 @@ These paths have never executed — see "Unverified" below.
 
 ### Operational caveats
 - The backend keeps **in-process** state only: the OpenArchieven LRU cache and the global rate-limit clock. With more than one Cloud Run instance these are per-instance, so the archive pacing is no longer globally correct and cache hits drop. Consider `--max-instances=1` initially, or move both to shared storage.
+- ⚠️ **This does not scale to concurrent users, and that is a launch decision.**
+  The OpenArchieven limiter is a process-wide 2 req/s clock shared by everyone on
+  the instance, so N simultaneous researchers each get ~2/N req/s — a 30-record
+  search goes from ~15s to ~30s with just two users. Scaling out restores speed
+  but breaks the global pacing, which reintroduces the silent record-dropping bug
+  that pacing was added to fix. Resolve this before advertising the site: either
+  move the limiter and cache to shared storage (e.g. Redis), or queue requests.
 - Cold starts discard those caches entirely.
 
 ## ⚠️ Unverified
