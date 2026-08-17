@@ -353,7 +353,13 @@
 
   // Check if we are on a WikiTree page or Lineage Nexus app
   const isWikiTreePage = () => window.location.hostname.includes('wikitree.com');
-  const isLineageAppPage = () => window.location.hostname.includes('localhost') || window.location.hostname.includes('127.0.0.1');
+  // The deployed app, plus localhost for development. Only the postMessage
+  // listener below runs here — the WikiTree UI is gated on isWikiTreePage().
+  const isLineageAppPage = () =>
+    window.location.hostname === 'lineage.nexus' ||
+    window.location.hostname === 'www.lineage.nexus' ||
+    window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1';
 
   // If on Lineage Nexus web app, listen for Send to Extension messages and save to chrome.storage.local
   if (isLineageAppPage()) {

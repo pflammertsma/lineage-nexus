@@ -1,3 +1,7 @@
+// The deployed app. Override in development with:
+//   chrome.storage.local.set({ app_url: 'http://localhost:5173/chat' })
+const DEFAULT_APP_URL = 'https://lineage.nexus/chat';
+
 document.addEventListener('DOMContentLoaded', () => {
   const bioPreview = document.getElementById('bio-preview-container');
   const openAppBtn = document.getElementById('open-app-btn');
@@ -16,10 +20,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Open Lineage Nexus Web App
   openAppBtn.addEventListener('click', () => {
-    if (typeof chrome !== 'undefined' && chrome.tabs) {
-      chrome.tabs.create({ url: 'http://localhost:5173/chat' });
+    if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+      chrome.storage.local.get(['app_url'], (data) => {
+        const url = data.app_url || DEFAULT_APP_URL;
+        if (chrome.tabs) chrome.tabs.create({ url });
+        else window.open(url, '_blank');
+      });
     } else {
-      window.open('http://localhost:5173/chat', '_blank');
+      window.open(DEFAULT_APP_URL, '_blank');
     }
   });
 

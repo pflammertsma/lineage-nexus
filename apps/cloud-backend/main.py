@@ -1,13 +1,52 @@
+import hashlib
 import json
 import os
+import time
+from collections import deque
 from contextlib import asynccontextmanager
-from typing import List, Optional
+from typing import Deque, Dict, List, Optional
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from google import genai
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
+
+# --- Limits ---
+# The endpoint is unauthenticated (BYOK is not authentication), so every input is
+# bounded. Without these a single caller can pin an instance for the full 900s
+# request timeout with an arbitrarily large payload.
+MAX_MESSAGE_CHARS = 8_000
+MAX_HISTORY_MESSAGES = 60
+MAX_HISTORY_CHARS = 400_000
+MAX_BODY_BYTES = 1_000_000
+
+# Per-key sliding window. Keyed by a hash of the API key, so a shared IP (a
+# household, a university) is not collectively limited, and the key itself is
+# never held in memory. In-process only: with several Cloud Run instances this
+# is per-instance, which is a floor on abuse rather than a hard ceiling.
+RATE_LIMIT_REQUESTS = 20
+RATE_LIMIT_WINDOW_SECONDS = 300
+_rate_buckets: Dict[str, Deque[float]] = {}
+
+
+def _rate_limit_check(identity: str) -> Optional[int]:
+    """Returns seconds to wait if the caller is over the limit, else None."""
+    now = time.monotonic()
+    bucket = _rate_buckets.setdefault(identity, deque())
+    while bucket and now - bucket[0] > RATE_LIMIT_WINDOW_SECONDS:
+        bucket.popleft()
+
+    # Opportunistic sweep so idle callers do not accumulate forever.
+    if len(_rate_buckets) > 4096:
+        for key in [k for k, v in _rate_buckets.items() if not v]:
+            del _rate_buckets[key]
+
+    if len(bucket) >= RATE_LIMIT_REQUESTS:
+        return max(1, int(RATE_LIMIT_WINDOW_SECONDS - (now - bucket[0])))
+    bucket.append(now)
+    return None
+
 
 # --- Models ---
 class ChatMessage(BaseModel):
@@ -15,9 +54,32 @@ class ChatMessage(BaseModel):
     content: str
 
 class ChatRequest(BaseModel):
-    message: str
-    history: List[ChatMessage] = []
+    message: str = Field(min_length=1, max_length=MAX_MESSAGE_CHARS)
+    history: List[ChatMessage] = Field(default_factory=list)
     model: str = "gemini-flash-lite-latest"
+
+
+def trim_history(history: List[ChatMessage]) -> List[dict]:
+    """
+    Bounds the context sent to Gemini, keeping the most recent exchanges.
+
+    Trimming rather than rejecting: a long-running research session is the normal
+    case, not an attack, and a 422 partway through one would be indistinguishable
+    from the app breaking. Oldest messages go first, which is also what the model
+    needs least.
+    """
+    recent = history[-MAX_HISTORY_MESSAGES:]
+
+    kept: List[dict] = []
+    total = 0
+    for msg in reversed(recent):
+        content = msg.content or ""
+        if total + len(content) > MAX_HISTORY_CHARS:
+            break
+        kept.append({"role": msg.role, "content": content})
+        total += len(content)
+    kept.reverse()
+    return kept
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,6 +108,22 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    """
+    Rejects oversized payloads before they are parsed. Checked from the declared
+    Content-Length: this is a cheap first gate, not a defence against a lying
+    client, which the per-field limits below already cover.
+    """
+    declared = request.headers.get("content-length")
+    if declared and declared.isdigit() and int(declared) > MAX_BODY_BYTES:
+        return JSONResponse(
+            status_code=413,
+            content={"detail": f"Request body exceeds {MAX_BODY_BYTES // 1000}kB."},
+        )
+    return await call_next(request)
 
 # --- Endpoints ---
 @app.get("/")
@@ -84,7 +162,27 @@ async def chat(
 ):
     if not x_gemini_api_key and not x_gemini_fallback_api_key:
         raise HTTPException(status_code=401, detail="X-Gemini-API-Key header required (BYOK)")
-    
+
+    # Rate limited per key rather than per IP. The key is hashed so the limiter
+    # never holds credentials, and a caller cannot dodge the limit by changing
+    # networks — only by supplying a different key, which is the natural unit of
+    # quota here anyway.
+    identity = hashlib.sha256(
+        (x_gemini_api_key or x_gemini_fallback_api_key).encode("utf-8")
+    ).hexdigest()
+    retry_after = _rate_limit_check(identity)
+    if retry_after is not None:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Too many research requests. Limit is {RATE_LIMIT_REQUESTS} per "
+                f"{RATE_LIMIT_WINDOW_SECONDS // 60} minutes. Try again in {retry_after}s."
+            ),
+            headers={"Retry-After": str(retry_after)},
+        )
+
+    trimmed_history = trim_history(request.history)
+
     async def event_generator():
         try:
             client = genai.Client(api_key=x_gemini_api_key) if x_gemini_api_key else None
@@ -98,9 +196,7 @@ async def chat(
             from orchestrator import ResearchOrchestrator
             orchestrator = ResearchOrchestrator(client=client, fallback_client=fallback_client, model_name=request.model)
             
-            history_dicts = [{"role": msg.role, "content": msg.content} for msg in request.history]
-            
-            async for update in orchestrator.chat(message=request.message, history=history_dicts):
+            async for update in orchestrator.chat(message=request.message, history=trimmed_history):
                 # Padding must go before \n\n to stay within the same 'data' chunk.
                 # Clients trim the frame before parsing, so the filler is discarded.
                 payload = json.dumps(update)

@@ -4,6 +4,13 @@
 # Never include local .env secrets
 **/.env
 
+# Deployment target (project id, domain). Kept out of the repo because it is public.
+.deploy.env
+
+# Written by `firebase init`; we pass --project explicitly instead so no
+# project id is ever committed.
+.firebaserc
+
 # Don't include python virtual environment
 .venv/
 # or Python cache

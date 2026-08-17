@@ -10,7 +10,7 @@
   ],
   "host_permissions": [
     "*://*.wikitree.com/*",
-    "http://localhost:*/*"
+    "https://lineage.nexus/*"
   ],
   "icons": {
     "16": "assets/icon16.png",
@@ -29,7 +29,9 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.wikitree.com/*"
+        "*://*.wikitree.com/*",
+        "https://lineage.nexus/*",
+        "http://localhost/*"
       ],
       "js": [
         "content_script.js"

@@ -67,7 +67,7 @@ const SettingsModal = ({
       }
 
       if (notify) notify('All API keys validated successfully!', 'success');
-    } catch (err) {
+    } catch {
       if (notify) notify('Could not reach backend validation server.', 'error');
     } finally {
       setValidating(false);

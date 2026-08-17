@@ -1,0 +1,10 @@
+User-agent: *
+Allow: /$
+Allow: /privacy
+Allow: /terms
+
+# The app itself is per-account and requires sign-in; there is nothing there for
+# a crawler to index.
+Disallow: /chat
+
+Sitemap: https://lineage.nexus/sitemap.xml
