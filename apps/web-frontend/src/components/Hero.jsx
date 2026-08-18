@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Settings, KeyRound, ExternalLink } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Settings, KeyRound, ExternalLink, ArrowRight } from 'lucide-react';
 import { API_KEY_STORAGE, FALLBACK_API_KEY_STORAGE } from '../config';
 
 const Hero = ({ onSearch, onConfig }) => {
@@ -59,10 +60,14 @@ const Hero = ({ onSearch, onConfig }) => {
               <Settings size={20} className="text-secondary" />
             </button>
           </div>
-          <div className="mt-6 flex flex-wrap justify-center gap-8 opacity-60">
-            <span className="text-xs">OpenArchieven</span>
-            <span className="text-xs">WikiTree</span>
-            <span className="text-xs">National Archives</span>
+          <div className="mt-4 flex justify-center">
+            <Link
+              to="/sources"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-secondary hover:text-accent transition-colors"
+            >
+              <span>Discover our sources</span>
+              <ArrowRight size={14} />
+            </Link>
           </div>
         </form>
 

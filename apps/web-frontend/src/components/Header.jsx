@@ -81,6 +81,7 @@ const Header = ({
             ) : (
               <Link to="/" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Home</Link>
             )}
+            <Link to="/sources" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Sources</Link>
             <Link to="/privacy" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Privacy</Link>
             <Link to="/terms" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Terms</Link>
           </nav>
