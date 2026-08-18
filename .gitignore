@@ -23,10 +23,11 @@ __pycache__/
 node_modules/
 
 # Log files
-adk-app/*.log
+archived/adk-app/*.log
 
-# Plotly Dash
+# Plotly Dash (archived)
 cache/
+archived/dash-app/cache/
 
 # Written transiently by scripts/deploy.mjs
 .cloudrun-env.yaml

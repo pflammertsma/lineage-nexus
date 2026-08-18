@@ -43,8 +43,9 @@ correctness and observability now outrank new features. Grouped by that.
   blocks, the wikitext card and the research trail. Never eyeballed.
 
 ### C. Product features
+- [ ] **Self-Hosted Archival Engine (OCI)**: Replace OpenArchieven and WieWasWie HTTP dependencies with a self-hosted OCI search mirror to eliminate rate-limit bottlenecks and reduce search turn latency to <500ms. Architectural plan drafted in [`docs/self_hosted_archive_plan.md`](file:///c:/Users/pflam/StudioProjects/lineage-nexus/docs/self_hosted_archive_plan.md).
 - [ ] **Relationship graph**: generate a relationship graph component to show the relationships between the people in the conversation.
-- [ ] **Holocaust Records**: implement the `HolocaustAgent` toolset (ITS/Arolsen Archives, USHMM). Legacy prompts and API clients are in `adk-app/agent/holocaust.py` and `adk-app/api/` for reference.
+- [ ] **Holocaust Records**: implement the `HolocaustAgent` toolset (ITS/Arolsen Archives, USHMM). Legacy prompts and API clients are in `archived/adk-app/agent/holocaust.py` and `archived/adk-app/api/` for reference.
 - [ ] **Wikitext Wizard**: refine 'Biography' output to include specific WikiTree citation templates (e.g., `<ref>` tags).
 - [ ] **Dynamic Resource Tuning**: add a UI slider to adjust `MAX_SEARCH_PER_TURN` for advanced research sessions.
 - [ ] **Auto-Focus Logic**: improve the `SYSTEM_INSTRUCTION` to strictly prioritize reading existing WikiTree context before any archival queries.
@@ -455,7 +456,7 @@ These paths have never executed — see "Unverified" below.
   ("contact Open Archives to increase this value"). A single Cloud Run egress IP
   serving many researchers is exactly the case worth explaining, and it is far
   cheaper than re-architecting. Do this before considering the browser-routing
-  option below.
+  option or the self-hosted OCI mirror plan ([`docs/self_hosted_archive_plan.md`](file:///c:/Users/pflam/StudioProjects/lineage-nexus/docs/self_hosted_archive_plan.md)).
 - [ ] **Persist the record cache.** Currently an in-process LRU, lost on every
   cold start. Their responses are already cached server-side for a day and carry
   `max-age`, so a shared cache mostly avoids re-asking for what we have seen.
@@ -468,9 +469,9 @@ These paths have never executed — see "Unverified" below.
   which for a tool where users cluster on the same parishes and registries could
   mean *more* total load on the archive, not less. Ask them first.
 - [ ] **`model` is hardcoded**: the frontend always sends `gemini-flash-latest`; `ChatRequest` defaults to `gemini-flash-lite-latest`. Neither is user-selectable.
-- [ ] **No test coverage** on the cloud backend. The legacy `adk-app/test/` suite covers the old API clients only.
+- [ ] **No test coverage** on the cloud backend. The archived `archived/adk-app/test/` suite covers the old API clients only.
 - [ ] **WikiTree tool surface**: `get_person` and `get_relatives` are exposed to the model but undocumented in `WIKITREE_INSTRUCTIONS`, which still describes the legacy `get_person_info` / `get_relatives_info` names.
-- [ ] **Legacy `adk-app/` cannot be imported**: modules import `adk_app.*` while the directory is `adk-app`. Reference-only for now; needs a rename or path shim if it is ever run again.
+- [ ] **Archived `archived/adk-app/` cannot be imported**: modules import `adk_app.*` while the directory is `archived/adk-app`. Reference-only; needs a rename or path shim if it is ever run again.
 
 ## ✅ Completed Milestones
 - [x] **Opt-in Cross-Device Sync**: Google sign-in via Firebase Auth replaces the simulated boolean login. Sync is off until the user accepts a consent dialog shown once per account, which states how many existing sessions will be uploaded. localStorage remains the working copy and Firestore mirrors it, so the app is unchanged offline or with no project configured. Users can delete individual conversations (removed locally and in the cloud) or erase everything from Settings behind a confirmation. `firestore.rules` restricts every document to its owner and validates session shape. The Gemini API key is deliberately never synced.

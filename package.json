@@ -6,7 +6,7 @@
     "build": "cd apps/web-frontend && pnpm build",
     "backend": "pnpm backend:dev",
     "backend:dev": "cd apps/cloud-backend && uvicorn main:app --port 8081 --host 0.0.0.0 --reload",
-    "deploy": "node scripts/deploy.mjs all",
+    "deploy:all": "node scripts/deploy.mjs all",
     "deploy:api": "node scripts/deploy.mjs api",
     "deploy:web": "node scripts/deploy.mjs web",
     "deploy:rules": "node scripts/deploy.mjs rules"

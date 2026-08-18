@@ -8,8 +8,8 @@ before assuming which one you are working on.
 |---|---|---|
 | React 19 + Vite SPA | `apps/web-frontend/` | Current |
 | FastAPI + Gemini SDK | `apps/cloud-backend/` | Current |
-| Plotly Dash UI | `apps/lineage_app.py`, `apps/layout/`, `apps/callbacks/` | Legacy (client of the ADK API server) |
-| Google ADK multi-agent | `adk-app/` | Deprecated |
+| Plotly Dash UI | `archived/dash-app/` | Archived (client of the ADK API server) |
+| Google ADK multi-agent | `archived/adk-app/` | Archived |
 
 ## 🧠 Agent Architecture (Cloud Native)
 
@@ -79,9 +79,9 @@ payload shapes: `status`, `title`, `response`, `error`.
 
 An ADK **hierarchical multi-agent** system — the opposite design from the current one. To
 understand it:
-- **Core Orchestrator**: [`root_agent.py`](adk-app/root_agent.py) (`gemini-2.5-pro`) delegates via
+- **Core Orchestrator**: [`root_agent.py`](archived/adk-app/root_agent.py) (`gemini-2.5-pro`) delegates via
   ADK's transfer mechanism to four `sub_agents`.
-- **Specialized Agents**, in `adk-app/agent/`:
+- **Specialized Agents**, in `archived/adk-app/agent/`:
   - `OpenArchievenResearcher` — archival searches (~340 lines of prompt on query syntax,
     patronymics and multi-page paging).
   - `WikiTreeProfileAgent` — WikiTree integration.
@@ -94,9 +94,9 @@ understand it:
   ending every agent prompt; and extra sources (WieWasWie, ancestors/descendants) that the new
   backend dropped.
 - **Interfaces**: `adk web`, or `adk api_server` plus the Plotly Dash client
-  (`python apps/lineage_app.py`). Note the Dash app is Dash, not Streamlit, despite older docs.
+  (`python archived/dash-app/lineage_app.py`). Note the Dash app is Dash, not Streamlit, despite older docs.
 
-> **Caveat**: every legacy module does `from adk_app...` while the directory is `adk-app`. The
+> **Caveat**: every legacy module does `from adk_app...` while the directory is `archived/adk-app`. The
 > legacy stack is unrunnable as checked in without a rename or path shim.
 
 ### Next Steps for Multi-Agency
