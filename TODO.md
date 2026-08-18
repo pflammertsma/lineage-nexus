@@ -1,17 +1,64 @@
 # Lineage Nexus Development Roadmap
 
-## 🎯 Current Priorities (Next Session)
-- [x] **Ship to production**: deployed. Frontend on Firebase Hosting, API on
-  Cloud Run, Firestore rules released. Remaining launch items are tracked in the
-  checklist below — chiefly the custom-domain certificate, a billing budget, and
-  analytics.
+## 🎯 Current Priorities
+
+**The app is live at https://lineage.nexus with real users possible**, so
+correctness and observability now outrank new features. Grouped by that.
+
+### A. Live-site risks (do first)
+- [ ] **Firestore 1 MiB document ceiling** — `messages` is unbounded and each
+  session is one document. A long research session with several biographies will
+  cross the limit, the write will fail, and `useSyncedSessions` swallows it into
+  `syncState: 'error'` — so the user sees a vague indicator while new messages
+  silently stop syncing. Needs a size check before writing, plus either chunking
+  across documents or an explicit, honest message. *Highest risk item: it loses
+  user data quietly.*
+- [ ] **No error monitoring.** We are live and blind — nothing reports a broken
+  deploy, an SSE failure, or a Firestore rejection. Sentry (or equivalent) on
+  both the frontend and the Cloud Run service. Must be configured to scrub
+  research content, to keep the "we do not log your research" claim true.
+- [ ] **Billing budget** *(console — yours)*. On the Define step, turn the
+  **spend cap off**; a cap is limited to one project *and* one service, which is
+  what produced "Please select a service". A plain alert budget accepts
+  "All services".
+- [ ] **Branding appeal** — submitted, in review. No action.
+
+### B. Post-launch cleanups
+- [x] **Simplify API key management** *(implemented, not yet deployed)*. One
+  prominent "Gemini API key" field; the second key is now behind an understated
+  "Add a backup key" link, expanded automatically if one is already set. The
+  "Paid / Main" and "Optional Free Tier" badges are gone — they implied we bill
+  for something, when every key is the user's own Google account, and framed the
+  backup as expected rather than optional.
+- [ ] **Lazy-load Firestore.** The bundle is ~1 MB (307 kB gzip) in a single
+  chunk, mostly Firebase. `useAuth` calls `getFirebaseAuth()` synchronously, so
+  this needs an async init path rather than a config tweak.
+- [ ] **Ask Open Archives to raise the per-IP limit** — see Known Issues. Worth
+  doing now that we send a descriptive user-agent, since they can reach us.
+- [ ] **`www.lineage.nexus` does not resolve.** Only the apex is configured. If
+  wanted, it needs its own DNS record plus adding the domain in Firebase Hosting.
+- [ ] **Uncommitted work.** Analytics, consent banner, confirm dialog, chips,
+  hero, auth hardening and the deploy script are all live but uncommitted.
+- [ ] **Visual pass at 768 / 2560px**, and the vertical rhythm between message
+  blocks, the wikitext card and the research trail. Never eyeballed.
+
+### C. Product features
 - [ ] **Relationship graph**: generate a relationship graph component to show the relationships between the people in the conversation.
 - [ ] **Holocaust Records**: implement the `HolocaustAgent` toolset (ITS/Arolsen Archives, USHMM). Legacy prompts and API clients are in `adk-app/agent/holocaust.py` and `adk-app/api/` for reference.
 - [ ] **Wikitext Wizard**: refine 'Biography' output to include specific WikiTree citation templates (e.g., `<ref>` tags).
 - [ ] **Dynamic Resource Tuning**: add a UI slider to adjust `MAX_SEARCH_PER_TURN` for advanced research sessions.
 - [ ] **Auto-Focus Logic**: improve the `SYSTEM_INSTRUCTION` to strictly prioritize reading existing WikiTree context before any archival queries.
-- [ ] **Delete Profiles Confirmation**: Add a confirmation dialog before deleting a research profile.
-- [ ] **Standardize the Research Suggestion Chips** - All chips below the chat box should use the same styles and be generated using the same code. Currently, the "Holocaust" option incorrectly shows in pink. The size of these chips should be consistent and always on a single line, even on mobile as it scrolls horizontally.
+- [x] **Delete Profiles Confirmation**: `ConfirmDialog` names the conversation
+  being deleted, and says explicitly when sync is on that it will disappear from
+  other devices too. Cancel takes focus rather than Confirm, so a stray Enter
+  dismisses rather than destroys. *Verified: click does not delete; Cancel and
+  Escape both keep it; Confirm removes only the targeted session; body scroll
+  lock released in every path.*
+- [x] **Standardize the Research Suggestion Chips**: one `ACTIONS` array and one
+  render path replace four near-duplicate JSX blocks — which is how the Holocaust
+  chip drifted to a rose palette and read as a warning rather than a peer. All
+  four now share sizing and colour, with `shrink-0`/`whitespace-nowrap` keeping
+  them on a single horizontally-scrolling line on mobile.
 
 ## 🚀 Production Readiness Checklist
 
