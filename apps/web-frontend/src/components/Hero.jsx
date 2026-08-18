@@ -20,14 +20,13 @@ const Hero = ({ onSearch, onConfig }) => {
   return (
     <section className="py-24">
       <div className="container text-center">
-        {/* The app name has to be legible as a name on the page itself, not only
-            in the header wordmark: OAuth branding verification compares the
-            consent-screen app name against the home page, and a decorative
-            headline alone gave it nothing to match. */}
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-accent mb-4">
-          Lineage Nexus
+        <h1 className="sr-only">Lineage Nexus</h1>
+        <p
+          aria-hidden="true"
+          className="font-serif text-[40px] sm:text-[64px] font-semibold tracking-tight leading-[1.1] mb-6"
+        >
+          Uncover your <span className="accent-text">heritage.</span>
         </p>
-        <h1 className="mb-6">Uncover your <span className="accent-text">heritage.</span></h1>
         <p className="hero-sub mb-6">
           <strong className="font-semibold text-primary">Lineage Nexus</strong> is an AI research
           assistant for Dutch genealogy. It searches public historical archives — Open Archieven

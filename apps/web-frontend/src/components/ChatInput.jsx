@@ -2,6 +2,17 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Send, Search, FileText, Download, ShieldAlert } from 'lucide-react';
 import ActionPopovers from './ActionPopovers';
 
+// One definition per chip, rendered by one code path. These were four
+// near-identical JSX blocks, which is how the Holocaust chip drifted to a rose
+// palette while the rest stayed accent-coloured — it read as a warning rather
+// than a peer of the other three.
+const ACTIONS = [
+  { id: 'research', label: 'Research', Icon: Search },
+  { id: 'holocaust', label: 'Holocaust', Icon: ShieldAlert },
+  { id: 'biography', label: 'Biography', Icon: FileText },
+  { id: 'fetch_profile', label: 'Fetch Profile', Icon: Download },
+];
+
 const ChatInput = ({ onSearch, onStop, isLoading }) => {
   const textareaRef = useRef(null);
   const containerRef = useRef(null);
@@ -72,50 +83,28 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
           />
 
           <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 border-t border-border/50 bg-card/50">
-            <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-0.5 no-scrollbar">
-              <button 
-                type="button" 
-                onClick={() => togglePopover('research')}
-                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-2.5 sm:py-1 rounded-lg ${
-                  activePopover === 'research' ? 'bg-accent/20 text-accent opacity-100' : 'opacity-50 hover:opacity-100'
-                }`}
-              >
-                <Search size={14} />
-                <span>Research</span>
-              </button>
-              <div className="h-4 w-[1px] bg-border/50 shrink-0"></div>
-              <button 
-                type="button" 
-                onClick={() => togglePopover('holocaust')}
-                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-2.5 sm:py-1 rounded-lg ${
-                  activePopover === 'holocaust' ? 'bg-rose-500/20 text-rose-400 opacity-100' : 'opacity-50 hover:opacity-100 hover:text-rose-400'
-                }`}
-              >
-                <ShieldAlert size={14} />
-                <span>Holocaust</span>
-              </button>
-              <div className="h-4 w-[1px] bg-border/50 shrink-0"></div>
-              <button 
-                type="button" 
-                onClick={() => togglePopover('biography')}
-                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-2.5 sm:py-1 rounded-lg ${
-                  activePopover === 'biography' ? 'bg-accent/20 text-accent opacity-100' : 'opacity-50 hover:opacity-100'
-                }`}
-              >
-                <FileText size={14} />
-                <span>Biography</span>
-              </button>
-              <div className="h-4 w-[1px] bg-border/50 shrink-0"></div>
-              <button 
-                type="button" 
-                onClick={() => togglePopover('fetch_profile')}
-                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-2.5 sm:py-1 rounded-lg ${
-                  activePopover === 'fetch_profile' ? 'bg-accent/20 text-accent opacity-100' : 'opacity-50 hover:opacity-100'
-                }`}
-              >
-                <Download size={14} />
-                <span>Fetch Profile</span>
-              </button>
+            {/* One line always: `shrink-0` on each chip stops flex from
+                compressing them, and the row scrolls horizontally instead of
+                wrapping onto a second line on narrow screens. */}
+            <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto py-0.5 no-scrollbar">
+              {ACTIONS.map((action, i) => (
+                <React.Fragment key={action.id}>
+                  {i > 0 && <div className="h-4 w-[1px] bg-border/50 shrink-0" />}
+                  <button
+                    type="button"
+                    onClick={() => togglePopover(action.id)}
+                    aria-pressed={activePopover === action.id}
+                    className={`shrink-0 whitespace-nowrap flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2.5 py-2.5 sm:py-1.5 rounded-lg cursor-pointer ${
+                      activePopover === action.id
+                        ? 'bg-accent/20 text-accent opacity-100'
+                        : 'opacity-50 hover:opacity-100 hover:text-accent'
+                    }`}
+                  >
+                    <action.Icon size={14} className="shrink-0" />
+                    <span>{action.label}</span>
+                  </button>
+                </React.Fragment>
+              ))}
             </div>
 
             <div className="flex items-center gap-3 shrink-0">

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, AlertTriangle, ShieldCheck, RefreshCw } from 'lucide-react';
+import { X, AlertTriangle, ShieldCheck, RefreshCw, Plus } from 'lucide-react';
 import { API_KEY_STORAGE, FALLBACK_API_KEY_STORAGE, API_BASE_URL } from '../config';
 
 const SettingsModal = ({
@@ -17,6 +17,10 @@ const SettingsModal = ({
   const [apiKey, setApiKey] = useState(() => localStorage.getItem(API_KEY_STORAGE) || '');
   const [fallbackApiKey, setFallbackApiKey] = useState(() => localStorage.getItem(FALLBACK_API_KEY_STORAGE) || '');
   const [validating, setValidating] = useState(false);
+  // Expanded when a backup key already exists, so it is never hidden from someone who set one.
+  const [showBackup, setShowBackup] = useState(
+    () => Boolean(localStorage.getItem(FALLBACK_API_KEY_STORAGE))
+  );
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -116,9 +120,8 @@ const SettingsModal = ({
 
         <div className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
-            <label htmlFor="gemini-key" className="text-xs font-bold text-primary flex items-center justify-between">
-              <span>Primary Gemini API key</span>
-              <span className="text-[10px] text-accent uppercase tracking-wider font-normal">Paid / Main</span>
+            <label htmlFor="gemini-key" className="text-xs font-bold text-primary">
+              Gemini API key
             </label>
             <input
               id="gemini-key"
@@ -126,7 +129,7 @@ const SettingsModal = ({
               name="gemini-api-key"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
-              placeholder="Paste primary key here"
+              placeholder="Paste your key here"
               className="input-field font-mono text-[13px]"
               autoComplete="off"
               autoCorrect="off"
@@ -136,34 +139,57 @@ const SettingsModal = ({
               data-lpignore="true"
             />
             <p className="text-xs text-secondary">
-              Main key used for fast, unthrottled research execution.
+              Used for all research. Stored only in this browser and never synced between
+              your devices.
             </p>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <label htmlFor="gemini-fallback-key" className="text-xs font-bold text-primary flex items-center justify-between">
-              <span>Backup / Fallback API key</span>
-              <span className="text-[10px] text-green-500 uppercase tracking-wider font-normal">Optional Free Tier</span>
-            </label>
-            <input
-              id="gemini-fallback-key"
-              type="text"
-              name="gemini-fallback-key"
-              value={fallbackApiKey}
-              onChange={(e) => setFallbackApiKey(e.target.value)}
-              placeholder="Paste free-tier backup key here"
-              className="input-field font-mono text-[13px]"
-              autoComplete="off"
-              autoCorrect="off"
-              autoCapitalize="off"
-              spellCheck={false}
-              data-1p-ignore
-              data-lpignore="true"
-            />
-            <p className="text-xs text-secondary">
-              If your primary key reaches a budget cap or quota limit, research automatically switches to this backup key without interrupting your session.
-            </p>
-          </div>
+          {/* Opt-in, and understated. Two equally-weighted fields implied a
+              second key was expected, and the old "Paid / Main" vs "Optional
+              Free Tier" labels suggested we bill for one of them. We never
+              charge for anything: every key is the user's own Google account. */}
+          {!showBackup ? (
+            <button
+              type="button"
+              onClick={() => setShowBackup(true)}
+              className="self-start inline-flex items-center gap-1.5 text-xs text-secondary hover:text-accent transition-colors cursor-pointer"
+            >
+              <Plus size={13} />
+              Add a backup key
+            </button>
+          ) : (
+            <div className="flex flex-col gap-2">
+              <label htmlFor="gemini-fallback-key" className="text-xs font-bold text-primary flex items-center justify-between">
+                <span>Backup key</span>
+                <button
+                  type="button"
+                  onClick={() => { setFallbackApiKey(''); setShowBackup(false); }}
+                  className="text-[10px] uppercase tracking-wider font-normal text-secondary hover:text-accent transition-colors cursor-pointer"
+                >
+                  Remove
+                </button>
+              </label>
+              <input
+                id="gemini-fallback-key"
+                type="text"
+                name="gemini-fallback-key"
+                value={fallbackApiKey}
+                onChange={(e) => setFallbackApiKey(e.target.value)}
+                placeholder="Paste a second key here"
+                className="input-field font-mono text-[13px]"
+                autoComplete="off"
+                autoCorrect="off"
+                autoCapitalize="off"
+                spellCheck={false}
+                data-1p-ignore
+                data-lpignore="true"
+              />
+              <p className="text-xs text-secondary">
+                If the key above hits a rate limit or quota, research continues on this one
+                instead of stopping mid-session.
+              </p>
+            </div>
+          )}
 
           <div className="flex items-center gap-2 pt-2">
             <button

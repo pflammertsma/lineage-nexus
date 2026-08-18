@@ -9,6 +9,7 @@ import SyncConsentModal from './components/SyncConsentModal';
 import ChatInterface from './components/ChatInterface';
 import { PrivacyPage, TermsPage } from './components/LegalPage';
 import ConsentBanner from './components/ConsentBanner';
+import ConfirmDialog from './components/ConfirmDialog';
 import ChatInput from './components/ChatInput';
 import Notification from './components/Notification';
 import { ArrowDown } from 'lucide-react';
@@ -60,6 +61,9 @@ function App() {
   const [hasNewUnread, setHasNewUnread] = useState(false);
   // Drawer state, mobile only. At `md` and up the sidebar ignores this entirely.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Session queued for deletion, pending confirmation. Deleting a conversation
+  // removes it from every signed-in device, so it is not undoable.
+  const [pendingDelete, setPendingDelete] = useState(null);
   // null = never asked. Analytics stay unloaded until this is 'granted'.
   const [analyticsConsent, setAnalyticsConsent] = useState(() => readAnalyticsConsent());
   const location = useLocation();
@@ -464,13 +468,8 @@ function App() {
                 activeSessionId={activeSessionId}
                 onSelectSession={(id) => setActiveSessionId(id)}
                 onDeleteSession={(id) => {
-                  // Removes the local copy and the cloud document, so deleting a
-                  // conversation on one device deletes it everywhere.
-                  if (activeSessionId === id) {
-                    setActiveSessionId(null);
-                    setMessages([]);
-                  }
-                  deleteSession(id);
+                  const session = sessions.find(s => s.id === id);
+                  setPendingDelete({ id, title: session?.title || 'this conversation' });
                 }}
                 onNewChat={() => {
                   setActiveSessionId(null);
@@ -556,6 +555,28 @@ function App() {
 
       {/* Asked once, and only when analytics could actually run: unconfigured
           builds and browsers sending Do Not Track never see it. */}
+      {pendingDelete && (
+        <ConfirmDialog
+          title="Delete this research?"
+          message={`"${pendingDelete.title}" and its full message history will be removed.`}
+          detail={syncConsent === true
+            ? 'This also deletes it from your other signed-in devices. It cannot be undone.'
+            : 'This cannot be undone.'}
+          confirmLabel="Delete research"
+          onCancel={() => setPendingDelete(null)}
+          onConfirm={() => {
+            // Removes the local copy and the cloud document, so deleting a
+            // conversation on one device deletes it everywhere.
+            if (activeSessionId === pendingDelete.id) {
+              setActiveSessionId(null);
+              setMessages([]);
+            }
+            deleteSession(pendingDelete.id);
+            setPendingDelete(null);
+          }}
+        />
+      )}
+
       {analyticsAvailable() && analyticsConsent === null && (
         <ConsentBanner
           onAccept={() => { writeAnalyticsConsent('granted'); setAnalyticsConsent('granted'); }}
