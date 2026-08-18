@@ -141,6 +141,17 @@
 }
 
 @layer utilities {
+  /* Used by the composer's action row, which scrolls horizontally on a phone
+     because the four labels cannot fit. The class was referenced there but had
+     never been defined, so the scrollbar showed through. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
   .toast-container {
     @apply fixed top-8 right-8 z-[2000] flex flex-col gap-4;
   }

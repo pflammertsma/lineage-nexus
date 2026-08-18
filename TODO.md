@@ -20,24 +20,27 @@ Work the phases in order: 0 and 1 are safety rails, and skipping them is how you
 deploy into the wrong project or ship a bundle that silently fakes sign-in.
 
 ### 0. Safety rails (do these first)
-- [ ] ⚠️ **Check the active gcloud project.** `pnpm deploy` targets whatever
-  `gcloud config get-value project` returns and will silently deploy into an
-  unrelated project:
-  ```bash
-  gcloud config get-value project   # verify BEFORE deploying
-  gcloud config set project <your-gcp-project-id>
-  ```
-- [ ] Add a guard to the `deploy` script so it refuses to run unless the active
-  project matches an expected value. The check above is easy to forget; the
-  script should not be foot-gun-shaped.
-- [ ] Set a **billing budget + alert** on the project. The API is
-  `--allow-unauthenticated` with long-lived SSE turns; Gemini spend is on the
-  caller (BYOK) but Cloud Run CPU and egress are on you.
-- [ ] Decide `--max-instances` before first deploy (see Operational caveats).
+- [x] ⚠️ **Guard against deploying into the wrong project.** `gcloud` deploys to
+  whatever `gcloud config get-value project` returns; at the time this was
+  written that was an unrelated project, so `pnpm deploy` would have shipped the
+  API into it. Every command in `scripts/deploy.mjs` now refuses to run unless
+  the configured project is also the active one, and prints the fix.
+  *Verified: it caught exactly that mismatch and exited 1 without deploying.*
+- [x] Configuration lives in a gitignored `.deploy.env` (template:
+  `.deploy.env.example`), so no project id, domain or account detail is committed
+  to this public repository. `firebase --project` is passed explicitly, so no
+  `.firebaserc` is needed either.
+- [x] `--max-instances` decided and wired in — defaults to 2, overridable via
+  `LINEAGE_MAX_INSTANCES`.
+- [ ] Set a **billing budget + alert** on the project *(console — cannot be done
+  from the repo)*. The API is `--allow-unauthenticated` with long-lived SSE
+  turns; Gemini spend is on the caller (BYOK) but Cloud Run CPU and egress are
+  on you.
 
 ### Prerequisites
 - One Google Cloud project for the app, with **Firebase added to that same project**, so Cloud Run, Auth and Firestore share a project and billing account.
 - `gcloud` and `firebase` CLIs installed and authenticated.
+- Copy `.deploy.env.example` to `.deploy.env` and fill it in.
 
 ### 1. Firebase console (one-time, manual)
 - [ ] Add Firebase to the GCP project.
@@ -47,48 +50,53 @@ deploy into the wrong project or ship a bundle that silently fakes sign-in.
 
 ### 2. Backend → Cloud Run
 ```bash
-gcloud config set project <your-gcp-project-id>
-pnpm deploy
+pnpm deploy:api
 ```
-- [ ] First run prompts to enable the Cloud Run and Cloud Build APIs.
-- [ ] Note the service URL it prints — it becomes `VITE_API_BASE_URL`.
-- [ ] Lock down CORS (it defaults to `*`) and raise the request timeout, because SSE research turns are long-lived:
-  ```bash
-  gcloud run services update lineage-nexus-api --region <region> \
-    --set-env-vars ALLOWED_ORIGINS=https://<your-domain> --timeout=900
-  ```
+- [x] CORS, the 900s timeout and `--max-instances` are all applied by the deploy
+  script, which also refuses to run if `LINEAGE_ALLOWED_ORIGINS` is unset —
+  the backend defaults CORS to `*`, and that default must never reach production.
   The default 300s timeout is not enough: a turn can span several paced archive
   searches (~15s each) plus quota waits (~47s each), and the connection must stay
   open throughout or the stream is cut mid-research.
+- [ ] First run prompts to enable the Cloud Run and Cloud Build APIs.
+- [ ] Note the service URL it prints — it becomes `VITE_API_BASE_URL`.
 - No secrets are needed on the service — BYOK means the Gemini key arrives per-request from the browser.
-- [ ] Set `--max-instances` in the same command. Combined with a 900s timeout and
-  open access, an unbounded instance ceiling is the main cost risk.
 
 ### 3. Frontend config
-- [ ] Copy `apps/web-frontend/.env.example` to `.env` and fill in `VITE_API_BASE_URL` (the Cloud Run URL) plus the `VITE_FIREBASE_*` values from **Project settings → Your apps**.
-- These are compiled into the bundle at build time, so changing them requires a rebuild. That is expected: Firebase web config is a public client identifier, and `firestore.rules` is what actually enforces access.
-- [ ] ⚠️ **Add a build-time guard.** Both fallbacks fail silently and are unsafe
-  in production:
+- [x] ⚠️ **Build-time guard added** (`vite.config.js`). Both config fallbacks fail
+  silently and are unsafe in production, so a production build now refuses to
+  emit either:
   - Unset `VITE_FIREBASE_*` → `isFirebaseConfigured === false` → `useAuth.js`
     falls back to the **simulated login**, so "Sign in with Google" merely sets a
     localStorage boolean and shows the visitor as "Researcher". Shipping that
     publicly is worse than having no sign-in at all.
   - Unset `VITE_API_BASE_URL` → the bundle calls `http://localhost:8081`, i.e.
     the visitor's own machine, blocked as mixed content over HTTPS.
-  A production build should **fail loudly** rather than emit either.
+
+  Also rejects a non-HTTPS API URL. Escape hatch for a deliberate local-only
+  build: `VITE_ALLOW_INCOMPLETE_CONFIG=true`.
+  *Verified: `pnpm build` fails with both problems listed, and succeeds with the
+  escape hatch set.*
+- [ ] Copy `apps/web-frontend/.env.example` to `.env` and fill in `VITE_API_BASE_URL` (the Cloud Run URL) plus the `VITE_FIREBASE_*` values from **Project settings → Your apps**. *(Blocked on step 1.)*
+- These are compiled into the bundle at build time, so changing them requires a rebuild. That is expected: Firebase web config is a public client identifier, and `firestore.rules` is what actually enforces access.
 
 ### 4. Firestore rules
 ```bash
-firebase deploy --only firestore:rules
+pnpm deploy:rules
 ```
 - [ ] Required. Until this runs, default rules deny every read and write, and sync fails silently.
 
-### 5. Frontend hosting — still to be scaffolded
-- [ ] No `firebase.json` or `.firebaserc` exists yet; this is the main outstanding gap. Firebase Hosting is the natural fit (same project, custom domain, SPA rewrites).
-- [ ] Needs a hosting config pointing at `apps/web-frontend/dist`, a rewrite of all routes to `/index.html` (the app uses client-side routing, so deep links 404 without it), and a `deploy:web` script.
-- [ ] Decide how the project ID is stored. `.firebaserc` normally holds it
-  literally; since the repo is public, either gitignore it or pass `--project`
-  from an environment variable.
+### 5. Frontend hosting
+- [x] `firebase.json` added: serves `apps/web-frontend/dist`, rewrites all routes
+  to `/index.html` (client-side routing would otherwise 404 on deep links and
+  refreshes), caches hashed assets immutably while keeping `index.html`
+  uncached, and sets `X-Content-Type-Options`, `Referrer-Policy` and
+  `X-Frame-Options`.
+- [x] `pnpm deploy:web` builds and deploys; `pnpm deploy` does rules, API, then
+  web, in that order — rules first, because sync fails silently against
+  default deny-all rules and should never lag behind the client.
+- [x] Project id stays out of the repo (see phase 0).
+- [ ] Run it. *(Blocked on step 1.)*
 
 ### 6. Domain & DNS
 - [ ] Point the apex (and `www`, if used) at the chosen host; add both to
@@ -101,90 +109,128 @@ firebase deploy --only firestore:rules
   common source of redirect loops and cert errors. If it fights you, host the
   static site on the CDN provider's own static hosting instead.
 - [ ] Force HTTPS; verify the certificate covers apex and `www`.
+- [ ] If the production domain ever changes, update it in `index.html`
+  (canonical + OG), `public/robots.txt`, `public/sitemap.xml`, the extension's
+  `manifest.json` and `popup/popup.js`, and `content_script.js`'s
+  `isLineageAppPage()`.
 
 ### 7. UI optimization (mobile + desktop)
 
-The layout was built desktop-first at one window size and does not currently
-hold up at either end of the range.
+**Mobile — sidebar is now an overlay**
+- [x] `Sidebar` was `w-64` inside a flex row, so on a 375px viewport it took
+  256px and left ~119px for the chat, which wrapped the research trail to
+  roughly one character per line.
+- [x] Below `md` it is a fixed drawer over the transcript; at `md` and up it is
+  an ordinary flex child again, so desktop behaviour is unchanged.
+- [x] Dismisses on backdrop tap, Escape, choosing a session, and starting a new
+  one. Also auto-closes when the viewport crosses the breakpoint, so a resize
+  cannot strand the scroll lock on a desktop layout.
+- [x] Hamburger toggle added to `Header`, shown only when signed in.
+- [x] Body scroll locked while open, restoring the previous value on close.
+- [x] `Sidebar`'s `h-screen` fixed — it was 70px taller than its own row.
+- [x] `100vh` → `100dvh` so mobile browser chrome no longer clips the composer.
+- [x] Per-session delete is always visible below `md` (hover is not a gesture a
+  phone has) and is a 40px target; drawer controls are 44px.
+- [x] `ResearchTrail` rows wrap: below `sm` the result drops to its own line
+  instead of being pushed by `ml-auto`, and `break-all` → `break-words`.
+- [x] Safe-area insets on the composer and the sidebar footer.
+- [x] `ChatInput` action row: `.no-scrollbar` was **referenced but never
+  defined**, so the row showed a raw scrollbar on a phone (the same failure mode
+  as the missing colour tokens). Defined it, tightened the gutters, and raised
+  the action buttons from 24px to 36px tall on touch while leaving the dense
+  desktop row unchanged.
 
-**Mobile — the sidebar must become an overlay**
-- [ ] Today `Sidebar` is `w-64` inside a flex row, so on a 375px viewport it eats
-  256px and leaves ~119px for the chat. The research trail degrades to roughly
-  one character per line.
-- [ ] Convert it to an overlay drawer below `md`: fixed, full height, slid out by
-  default, over the chat rather than beside it.
-- [ ] Dismiss on tap outside (backdrop), on Escape, and on selecting a session.
-- [ ] Add a hamburger toggle to `Header`, shown only on `/chat`.
-- [ ] Lock body scroll while the drawer is open.
-- [ ] Keep it a plain flex child at `md` and up — no behaviour change on desktop.
-- [ ] Fix `Sidebar`'s `h-screen`: its parent is `h-[calc(100vh-70px)]`, so the
-  sidebar is 70px taller than the row that contains it.
-- [ ] Switch `100vh` to `100dvh` so mobile browser chrome doesn't clip the input.
-- [ ] The per-session delete button is `opacity-0` until `group-hover`, which is
-  unreachable on touch. Make it always visible below `md`.
-- [ ] Audit tap targets to ~44px minimum.
-- [ ] `ResearchTrail`: rows use `ml-auto` for the result column and `break-all`
-  for the detail. Wrap the row and drop the auto margin on narrow widths, and
-  prefer `break-words` so queries break at spaces rather than mid-word.
-- [ ] Check the floating input overlay (`right-4`, `max-w-[800px] px-4`) and the
-  scroll-to-bottom button (`bottom-[200px] right-8`) at 375px.
-- [ ] Add safe-area insets for notched devices.
+**Desktop — weighting**
+- [x] **The two competing centre lines are gone.** `Header` used `.container`
+  (max 1100px, centred on the viewport) while the transcript was capped to 800px
+  centred inside `main` — i.e. the viewport minus the sidebar — leaving the
+  wordmark ~320px left of the column it sat above. On `/chat` the header is now
+  full-bleed with the wordmark over the sidebar, so the transcript is the only
+  centred element.
+- [x] Magic numbers replaced by tokens: `--h-header`, `--w-sidebar`,
+  `--w-reading`, `--h-composer` in `index.css`. The scroll spacer and the
+  scroll-to-bottom offset are both derived from the composer height, and the
+  composer shares `.reading-column` with the transcript so it can never be a
+  different width from the text it answers.
+- [x] Measure widened 800 → 820px with padding that grows at `sm`/`lg`.
 
-**Desktop — the weighting is off**
-- [ ] **Two different centring axes.** `Header` uses `.container`
-  (`max-w-[1100px] mx-auto`) centred on the full viewport, while `ChatInterface`
-  uses `.container` capped to 800px centred inside `main`, which is the viewport
-  minus the 256px sidebar. The wordmark and the chat column therefore sit on
-  different centre lines. Pick one axis and use it for both.
-- [ ] On a wide window the 800px column leaves very large empty gutters. Consider
-  capping the whole app shell, or offsetting the reading column from the sidebar
-  instead of centring it in the leftover space.
-- [ ] The bottom spacer (`h-[280px]`) and scroll button offset (`bottom-[200px]`)
-  are magic numbers tied to the input's height. Derive them from one token so
-  they cannot drift apart.
-- [ ] Re-check vertical rhythm between message blocks, the wikitext card, and the
-  research trail once the horizontal weighting is settled.
+**Verified in the browser**
+- [x] 375px: drawer overlays the transcript with a dimmed backdrop; closes on
+  backdrop tap, Escape, and choosing a session, releasing the body scroll lock
+  each time. When closed it is `visibility: hidden`, so it is out of the tab
+  order rather than merely off-screen.
+- [x] 375px: the research trail is readable — label, query, then the result on
+  its own line. Previously one character per line.
+- [x] 1440px: sidebar reverts to `static` (272px flex child); transcript and
+  composer both span exactly 438→1258px, i.e. perfectly aligned at 820px wide;
+  the wordmark sits at x=60 over the sidebar instead of competing with the
+  column at x=450. Gutters are symmetric (166 / 182px).
+- [x] No horizontal document overflow at either width; the wikitext block
+  scrolls inside its own container as intended.
+- [x] `pnpm lint` clean, `pnpm build` succeeds, and the generated CSS contains
+  every new token and component class.
 
-**Both**
-- [ ] Verify at 375, 768, 1280, and 2560px wide, in light and dark.
-- [ ] Confirm the page body never scrolls horizontally; wide wikitext must scroll
-  inside its own container.
+**Still to eyeball** *(subjective, or not yet exercised)*
+- [ ] Light mode, and 768 / 2560px.
+- [ ] Vertical rhythm between message blocks, the wikitext card and the trail.
+- [ ] `/privacy` and `/terms` rendering.
 
 ### 8. Legal & trust
-- [ ] Write a privacy policy and serve it at a real route. `Header.jsx` currently
-  links "Privacy" to `#about`, which does not exist.
-- [ ] Required because: the Google OAuth consent screen wants a privacy policy
-  URL; account data and research records are stored in Firestore for EU users;
-  and visitors hand over a Gemini API key that transits the backend.
-- [ ] State explicitly that the API key is used per-request and never stored
-  server-side, and that research sessions sync only after opt-in.
-- [ ] Add terms of use, and a note on the provenance of archival data
-  (OpenArchieven, WikiTree) and their attribution requirements.
-- [ ] Document how to delete data — the controls exist in Settings, but nothing
-  tells the user they do.
+- [x] `/privacy` and `/terms` added (`components/LegalPage.jsx`) and routed;
+  the header's dead `#about` link now points at `/privacy`, and the landing
+  footer links both.
+- [x] Privacy covers: the API key (browser-local, per-request, never stored,
+  never synced), research storage and opt-in sync, what Google sign-in provides,
+  the third parties queried, no analytics/ads/training, and a note on the living
+  people who appear in genealogical records.
+- [x] Deletion documented — per-conversation, delete-everything, and clearing
+  site data.
+- [x] Terms cover: verify-before-publish (model output can be wrong), that the
+  Gemini key and its costs are the user's, fair use of the archives, source
+  attribution, availability, and liability.
+- [ ] Read them and correct anything that misstates your intent — these are a
+  drafted starting point, not legal advice, and they make claims about your
+  practices that only you can confirm.
 
 ### 9. Onboarding & abuse
-- [ ] **BYOK has no onboarding.** A visitor's first query pops the settings modal
-  with no prior explanation. Explain the key requirement on the landing page and
-  link to where a key is obtained.
-- [ ] Rate-limit `/api/v1/chat`, or require a Firebase ID token. Unauthenticated
-  and unmetered, it is an open proxy to WikiTree and OpenArchieven from your
-  Cloud Run IP, which risks getting `appId=LineageNexus` blocked.
-- [ ] Cap `ChatRequest.history` length and request body size — both are unbounded.
-- [ ] Remove the SSE `console.log` calls in `App.jsx` (~lines 245, 252); they dump
-  research content to the browser console in production.
+- [x] BYOK explained on the landing page, with a link to Google AI Studio and an
+  inline way to add the key. Previously the first search silently bounced into
+  the settings modal, which reads as an error rather than a setup step. Hidden
+  once a key is present.
+- [x] `/api/v1/chat` rate-limited: 20 requests per 5 minutes per key, in a
+  sliding window, returning 429 with `Retry-After`. Keyed on a SHA-256 of the
+  API key rather than the IP, so the limiter never holds a credential and a
+  shared network is not collectively punished.
+- [x] Request caps: 8k chars per message, 60 messages and 400k chars of history,
+  1MB body. History is **trimmed rather than rejected** — a long research session
+  is the normal case, and a 422 partway through one is indistinguishable from the
+  app breaking.
+  *Verified: 5 unit tests on trimming and the limiter.*
+- [x] SSE `console.log` calls removed from `App.jsx`.
+- [ ] Consider requiring a Firebase ID token as well. The rate limit bounds abuse
+  per key but the endpoint is still open, and the in-process bucket is
+  per-instance.
 
 ### 10. Observability & polish
+- [x] Open Graph / Twitter tags, canonical URL, per-scheme `theme-color`,
+  `robots.txt` and `sitemap.xml` added.
+- [x] Extension: `http://localhost:*/*` removed from `host_permissions`, replaced
+  with the production origin. The app-page bridge (`isLineageAppPage`) now
+  recognises the real domain instead of only localhost, so the direct
+  "Send to extension" push works in production rather than being dead code, and
+  the popup's hardcoded `localhost:5173` link is now the deployed URL with a
+  `chrome.storage` override for development.
+- [x] `pnpm lint` clean again — fixed an unused `isAtBottom` state, two empty
+  catch blocks, a stale `useEffect` import, and a `setState`-in-effect that now
+  adjusts during render instead.
 - [ ] Add error monitoring. Nothing currently reports that the site is broken.
 - [ ] Firestore documents cap at 1 MiB and `messages` is unbounded, so long
   sessions will eventually fail to sync — and `useSyncedSessions` swallows the
   failure into `syncState: 'error'`. Trim, chunk, or surface it properly.
-- [ ] Bundle is 1.0 MB (302 kB gzip) in a single chunk, mostly Firebase.
-  Lazy-load `firebase/firestore` behind sign-in.
-- [ ] Add Open Graph / Twitter card tags, a canonical URL, and `robots.txt`;
-  shared links currently render a blank card.
-- [ ] Remove `http://localhost:*/*` from the extension's `host_permissions`
-  before any Chrome Web Store submission.
+- [ ] Bundle is 1.0 MB (306 kB gzip) in a single chunk, mostly Firebase.
+  Lazy-load `firebase/firestore` behind sign-in. Not attempted: `useAuth` calls
+  `getFirebaseAuth()` synchronously, so this needs an async init path rather
+  than a config tweak.
 
 ### 11. Post-deploy verification
 These paths have never executed — see "Unverified" below.

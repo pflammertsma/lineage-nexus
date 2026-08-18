@@ -68,15 +68,15 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
             ref={textareaRef}
             onKeyDown={handleKeyDown}
             placeholder="Ask about your ancestors…"
-            className="w-full bg-transparent px-6 py-4 pr-16 focus:outline-none text-sm leading-relaxed resize-none min-h-[56px] transition-all"
+            className="w-full bg-transparent px-4 sm:px-6 py-4 pr-16 focus:outline-none text-sm leading-relaxed resize-none min-h-[56px] transition-all"
           />
 
-          <div className="flex items-center justify-between px-6 py-3 border-t border-border/50 bg-card/50">
+          <div className="flex items-center justify-between px-3 sm:px-6 py-2 sm:py-3 border-t border-border/50 bg-card/50">
             <div className="flex items-center gap-2 sm:gap-4 overflow-x-auto py-0.5 no-scrollbar">
               <button 
                 type="button" 
                 onClick={() => togglePopover('research')}
-                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-1 rounded-lg ${
+                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-2.5 sm:py-1 rounded-lg ${
                   activePopover === 'research' ? 'bg-accent/20 text-accent opacity-100' : 'opacity-50 hover:opacity-100'
                 }`}
               >
@@ -87,7 +87,7 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
               <button 
                 type="button" 
                 onClick={() => togglePopover('holocaust')}
-                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-1 rounded-lg ${
+                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-2.5 sm:py-1 rounded-lg ${
                   activePopover === 'holocaust' ? 'bg-rose-500/20 text-rose-400 opacity-100' : 'opacity-50 hover:opacity-100 hover:text-rose-400'
                 }`}
               >
@@ -98,7 +98,7 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
               <button 
                 type="button" 
                 onClick={() => togglePopover('biography')}
-                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-1 rounded-lg ${
+                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-2.5 sm:py-1 rounded-lg ${
                   activePopover === 'biography' ? 'bg-accent/20 text-accent opacity-100' : 'opacity-50 hover:opacity-100'
                 }`}
               >
@@ -109,7 +109,7 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
               <button 
                 type="button" 
                 onClick={() => togglePopover('fetch_profile')}
-                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-1 rounded-lg ${
+                className={`flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest transition-all px-2 py-2.5 sm:py-1 rounded-lg ${
                   activePopover === 'fetch_profile' ? 'bg-accent/20 text-accent opacity-100' : 'opacity-50 hover:opacity-100'
                 }`}
               >
