@@ -30,3 +30,6 @@ cache/
 
 # Written transiently by scripts/deploy.mjs
 .cloudrun-env.yaml
+
+# Firebase CLI deploy cache — local build artefact, not source
+.firebase/

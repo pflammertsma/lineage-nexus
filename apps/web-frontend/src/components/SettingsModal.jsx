@@ -122,11 +122,18 @@ const SettingsModal = ({
             </label>
             <input
               id="gemini-key"
-              type="password"
+              type="text"
+              name="gemini-api-key"
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               placeholder="Paste primary key here"
-              className="input-field"
+              className="input-field font-mono text-[13px]"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-1p-ignore
+              data-lpignore="true"
             />
             <p className="text-xs text-secondary">
               Main key used for fast, unthrottled research execution.
@@ -140,11 +147,18 @@ const SettingsModal = ({
             </label>
             <input
               id="gemini-fallback-key"
-              type="password"
+              type="text"
+              name="gemini-fallback-key"
               value={fallbackApiKey}
               onChange={(e) => setFallbackApiKey(e.target.value)}
               placeholder="Paste free-tier backup key here"
-              className="input-field"
+              className="input-field font-mono text-[13px]"
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="off"
+              spellCheck={false}
+              data-1p-ignore
+              data-lpignore="true"
             />
             <p className="text-xs text-secondary">
               If your primary key reaches a budget cap or quota limit, research automatically switches to this backup key without interrupting your session.
