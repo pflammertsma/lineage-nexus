@@ -83,6 +83,7 @@ function App() {
     deleteAllData,
     syncState,
     storageError,
+    syncWarning,
   } = useSyncedSessions({ uid: auth.uid, syncEnabled: syncConsent === true });
 
   const needsSyncDecision = auth.canSync && auth.isSignedIn && auth.uid && syncConsent === null;
@@ -101,6 +102,13 @@ function App() {
   useEffect(() => {
     if (storageError) notify(storageError, 'error');
   }, [storageError]);
+
+  // A session that has outgrown Firestore's per-document limit. Reported rather
+  // than swallowed: the user would otherwise keep researching, believing their
+  // work was backed up.
+  useEffect(() => {
+    if (syncWarning) notify(syncWarning, 'error');
+  }, [syncWarning]);
 
   useEffect(() => {
     localStorage.setItem('lineage_active_session_id', activeSessionId || '');

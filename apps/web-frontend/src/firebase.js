@@ -1,6 +1,5 @@
 import { initializeApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
 import { firebaseConfig, isFirebaseConfigured } from './config';
 
 // Initialised lazily so an unconfigured checkout never touches the SDK. Every consumer
@@ -23,10 +22,20 @@ export function getFirebaseAuth() {
   return authInstance;
 }
 
-export function getDb() {
+// Firestore is the single largest dependency in the bundle, and most visitors
+// never reach it: it is only needed after signing in *and* opting in to sync.
+// Importing it dynamically keeps it out of the initial download.
+let firestoreModule = null;
+
+/**
+ * Resolves to the Firestore SDK plus a `db` handle, or null when Firebase is
+ * unconfigured. Every caller must handle null — that is the local-only path.
+ */
+export async function loadFirestore() {
   if (!ensureApp()) return null;
-  if (!dbInstance) dbInstance = getFirestore(app);
-  return dbInstance;
+  if (!firestoreModule) firestoreModule = await import('firebase/firestore');
+  if (!dbInstance) dbInstance = firestoreModule.getFirestore(app);
+  return { db: dbInstance, ...firestoreModule };
 }
 
 export function googleProvider() {

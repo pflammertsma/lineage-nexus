@@ -1,16 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDocs,
-  onSnapshot,
-  setDoc,
-  writeBatch,
-} from 'firebase/firestore';
-import { getDb } from './firebase';
+import { loadFirestore } from './firebase';
 import { SESSIONS_STORAGE, SYNC_CONSENT_STORAGE } from './config';
 import { mergeSessions, sessionFingerprint } from './lib/mergeSessions';
+import { estimateSessionSize, formatBytes, isSessionTooLarge } from './lib/sessionSize';
 
 const PUSH_DEBOUNCE_MS = 800;
 
@@ -55,6 +47,10 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
   const pushedAtRef = useRef({});
   const fingerprintsRef = useRef({});
   const pushTimerRef = useRef(null);
+  // Sessions already reported as too large, so the warning is raised once per
+  // session rather than on every debounced push.
+  const oversizeNotifiedRef = useRef({});
+  const [syncWarning, setSyncWarning] = useState(null);
 
   const active = Boolean(uid && syncEnabled);
 
@@ -68,29 +64,35 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
       setSyncState('idle');
       return;
     }
-    const db = getDb();
-    if (!db) return;
-
     setSyncState('syncing');
-    const ref = collection(db, 'users', uid, 'sessions');
-    const unsubscribe = onSnapshot(
-      ref,
-      (snapshot) => {
-        const remote = snapshot.docs.map(d => d.data());
-        setSessions(local => mergeSessions(local, remote, pushedAtRef.current));
-        setSyncState('synced');
-      },
-      () => setSyncState('error')
-    );
-    return unsubscribe;
+
+    // The SDK now arrives asynchronously, so the subscription is set up inside an
+    // async body. `cancelled` guards the case where the effect is torn down
+    // before the import resolves, which would otherwise leak a live listener.
+    let unsubscribe = null;
+    let cancelled = false;
+    (async () => {
+      const fs = await loadFirestore();
+      if (!fs || cancelled) return;
+      unsubscribe = fs.onSnapshot(
+        fs.collection(fs.db, 'users', uid, 'sessions'),
+        (snapshot) => {
+          const remote = snapshot.docs.map(d => d.data());
+          setSessions(local => mergeSessions(local, remote, pushedAtRef.current));
+          setSyncState('synced');
+        },
+        () => setSyncState('error')
+      );
+    })();
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+    };
   }, [active, uid]);
 
   // Push: mirror locally-changed sessions upward, debounced.
   useEffect(() => {
     if (!active) return;
-    const db = getDb();
-    if (!db) return;
-
     clearTimeout(pushTimerRef.current);
     pushTimerRef.current = setTimeout(async () => {
       const changed = sessions.filter(
@@ -98,19 +100,38 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
       );
       if (!changed.length) return;
 
+      const fs = await loadFirestore();
+      if (!fs) return;
+
       try {
         await Promise.all(changed.map(async (session) => {
           const updatedAt = Date.now();
-          await setDoc(
-            doc(db, 'users', uid, 'sessions', session.id),
-            {
-              id: session.id,
-              title: session.title || 'Untitled research',
-              messages: session.messages || [],
-              updatedAt,
-            },
-            { merge: true }
-          );
+          const payload = {
+            id: session.id,
+            title: session.title || 'Untitled research',
+            messages: session.messages || [],
+            updatedAt,
+          };
+
+          // Checked before writing: Firestore rejects an oversized document, and
+          // that rejection is indistinguishable from a network failure once it
+          // reaches the catch below. The local copy is always complete, so the
+          // honest thing is to keep it and say plainly what is not syncing.
+          if (isSessionTooLarge(payload)) {
+            if (!oversizeNotifiedRef.current[session.id]) {
+              oversizeNotifiedRef.current[session.id] = true;
+              setSyncWarning(
+                `"${payload.title}" is ${formatBytes(estimateSessionSize(payload))} and too large to sync ` +
+                `(the limit is 1 MB per conversation). It is still saved on this device. ` +
+                `Start a new research session to keep syncing.`
+              );
+            }
+            // Deliberately leaves the fingerprint untouched, so trimming the
+            // session later lets it sync again on the next change.
+            return;
+          }
+
+          await fs.setDoc(fs.doc(fs.db, 'users', uid, 'sessions', session.id), payload, { merge: true });
           pushedAtRef.current[session.id] = updatedAt;
           fingerprintsRef.current[session.id] = sessionFingerprint(session);
         }));
@@ -128,10 +149,10 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
     delete pushedAtRef.current[id];
     delete fingerprintsRef.current[id];
     if (!active) return;
-    const db = getDb();
-    if (!db) return;
+    const fs = await loadFirestore();
+    if (!fs) return;
     try {
-      await deleteDoc(doc(db, 'users', uid, 'sessions', id));
+      await fs.deleteDoc(fs.doc(fs.db, 'users', uid, 'sessions', id));
     } catch {
       setSyncState('error');
     }
@@ -143,18 +164,18 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
    */
   const deleteAllData = useCallback(async (scope = 'all') => {
     if (uid) {
-      const db = getDb();
-      if (db) {
+      const fs = await loadFirestore();
+      if (fs) {
         try {
-          const snapshot = await getDocs(collection(db, 'users', uid, 'sessions'));
+          const snapshot = await fs.getDocs(fs.collection(fs.db, 'users', uid, 'sessions'));
           // Batches cap at 500 operations.
           const docs = snapshot.docs;
           for (let i = 0; i < docs.length; i += 450) {
-            const batch = writeBatch(db);
+            const batch = fs.writeBatch(fs.db);
             docs.slice(i, i + 450).forEach(d => batch.delete(d.ref));
             await batch.commit();
           }
-          await deleteDoc(doc(db, 'users', uid)).catch(() => {});
+          await fs.deleteDoc(fs.doc(fs.db, 'users', uid)).catch(() => {});
         } catch {
           setSyncState('error');
           throw new Error('Could not delete your cloud data. Please try again.');
@@ -173,6 +194,7 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
     deleteAllData,
     syncState,
     storageError,
+    syncWarning,
   };
 }
 

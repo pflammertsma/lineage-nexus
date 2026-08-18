@@ -37,3 +37,8 @@ export const isFirebaseConfigured = Boolean(
 export const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID || '';
 export const isAnalyticsConfigured = Boolean(GA_MEASUREMENT_ID);
 export const ANALYTICS_CONSENT_STORAGE = 'lineage_analytics_consent';
+
+// Error monitoring. Unset means nothing is loaded and nothing is reported.
+// See src/monitoring.js — reports are scrubbed of research content before send.
+export const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN || '';
+export const isMonitoringConfigured = Boolean(SENTRY_DSN);
