@@ -20,9 +20,23 @@ const Hero = ({ onSearch, onConfig }) => {
   return (
     <section className="py-24">
       <div className="container text-center">
+        {/* The app name has to be legible as a name on the page itself, not only
+            in the header wordmark: OAuth branding verification compares the
+            consent-screen app name against the home page, and a decorative
+            headline alone gave it nothing to match. */}
+        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-accent mb-4">
+          Lineage Nexus
+        </p>
         <h1 className="mb-6">Uncover your <span className="accent-text">heritage.</span></h1>
-        <p className="hero-sub mb-12">
-          Harness advanced AI orchestration to explore archives and automate professional genealogical record-keeping.
+        <p className="hero-sub mb-6">
+          <strong className="font-semibold text-primary">Lineage Nexus</strong> is an AI research
+          assistant for Dutch genealogy. It searches public historical archives — Open Archieven
+          and WikiTree — for birth, marriage and death records, then drafts fully sourced
+          biographies you can publish to a family tree.
+        </p>
+        <p className="hero-sub mb-12 text-sm">
+          Signing in with Google is optional, and is used only to sync your research between your
+          own devices. We never contact you or share your account with anyone.
         </p>
 
         <form onSubmit={handleSubmit} className="mb-12 max-w-[640px] mx-auto text-center">

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Routes, Route, Link, useNavigate, Navigate } from 'react-router-dom';
+import { Routes, Route, Link, useNavigate, useLocation, Navigate } from 'react-router-dom';
 import Header from './components/Header';
 import Hero from './components/Hero';
 import FeatureGrid from './components/FeatureGrid';
@@ -8,6 +8,7 @@ import SettingsModal from './components/SettingsModal';
 import SyncConsentModal from './components/SyncConsentModal';
 import ChatInterface from './components/ChatInterface';
 import { PrivacyPage, TermsPage } from './components/LegalPage';
+import ConsentBanner from './components/ConsentBanner';
 import ChatInput from './components/ChatInput';
 import Notification from './components/Notification';
 import { ArrowDown } from 'lucide-react';
@@ -15,6 +16,13 @@ import { API_BASE_URL, API_KEY_STORAGE, FALLBACK_API_KEY_STORAGE } from './confi
 import useTheme from './useTheme';
 import useAuth from './useAuth';
 import useSyncedSessions, { readSyncConsent, writeSyncConsent } from './useSyncedSessions';
+import {
+  analyticsAvailable,
+  loadAnalytics,
+  readAnalyticsConsent,
+  trackPageView,
+  writeAnalyticsConsent,
+} from './analytics';
 import './index.css';
 
 /**
@@ -52,6 +60,9 @@ function App() {
   const [hasNewUnread, setHasNewUnread] = useState(false);
   // Drawer state, mobile only. At `md` and up the sidebar ignores this entirely.
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // null = never asked. Analytics stay unloaded until this is 'granted'.
+  const [analyticsConsent, setAnalyticsConsent] = useState(() => readAnalyticsConsent());
+  const location = useLocation();
   const isLoggedIn = auth.isSignedIn;
   const [activeSessionId, setActiveSessionId] = useState(() => {
     return localStorage.getItem('lineage_active_session_id');
@@ -352,6 +363,17 @@ function App() {
     if (auth.error) notify(auth.error, 'error');
   }, [auth.error]);
 
+  // Only now is the gtag script fetched — never before consent.
+  useEffect(() => {
+    if (analyticsConsent === 'granted') loadAnalytics();
+  }, [analyticsConsent]);
+
+  // Single-page navigation does not reload the document, so route changes have
+  // to be reported explicitly or every visit looks like one page view.
+  useEffect(() => {
+    if (analyticsConsent === 'granted') trackPageView(location.pathname);
+  }, [location.pathname, analyticsConsent]);
+
   // Escape closes the drawer, and the page behind it must not scroll while it is
   // open — on iOS a scrollable body under an overlay is what makes a drawer feel
   // broken. Both are undone as soon as it closes, including on unmount.
@@ -531,6 +553,15 @@ function App() {
             rather than on a 404 page. */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+
+      {/* Asked once, and only when analytics could actually run: unconfigured
+          builds and browsers sending Do Not Track never see it. */}
+      {analyticsAvailable() && analyticsConsent === null && (
+        <ConsentBanner
+          onAccept={() => { writeAnalyticsConsent('granted'); setAnalyticsConsent('granted'); }}
+          onDecline={() => { writeAnalyticsConsent('denied'); setAnalyticsConsent('denied'); }}
+        />
+      )}
 
       {configOpen && (
         <SettingsModal

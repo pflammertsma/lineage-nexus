@@ -121,17 +121,22 @@ export const PrivacyPage = () => (
       include what you searched for.
     </p>
     <p>
-      For product analytics we use <strong>Google Analytics</strong>, and nothing else. It
-      records which pages and features are used, not what you research: queries,
-      biographies, names and archive results are never sent to it. Google Analytics sets
-      cookies and processes an identifier for your device, so in regions where consent is
-      required we ask for it first and it stays off until you agree. Advertising features
-      and ads data sharing are disabled.
+      For product analytics we use <strong>Google Analytics</strong>, and nothing else.
+      It is <strong>off until you agree</strong>: the script is not fetched at all unless
+      you accept the banner shown on your first visit, and declining leaves nothing
+      loaded. If your browser sends a Do Not Track or Global Privacy Control signal we
+      treat that as a decline and never ask.
+    </p>
+    <p>
+      When it is on, it receives the page you are on (<code>/chat</code>,
+      <code>/privacy</code>) and the page title — never your research. Queries, names,
+      biographies and archive results are not sent to it, in any field. Advertising
+      features and ad personalisation are disabled, and IP addresses are anonymised.
     </p>
 
     <h2>What we do not do</h2>
     <ul>
-      <li>No advertising on this site, and no third-party trackers beyond the analytics named above.</li>
+      <li>No advertising on this site, and no third-party trackers.</li>
       <li>No selling or sharing of personal data.</li>
       <li>No use of your research to train models — by us.</li>
     </ul>

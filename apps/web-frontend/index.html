@@ -7,7 +7,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Lineage Nexus: Heritage AI Research</title>
   <meta name="description"
-    content="An advanced AI-powered genealogical research assistant for exploring Dutch archives and WikiTree profiles." />
+    content="Lineage Nexus is an AI research assistant for Dutch genealogy. It searches Open Archieven and WikiTree for birth, marriage and death records, then drafts fully sourced biographies for your family tree." />
   <link rel="canonical" href="https://lineage.nexus/" />
 
   <!-- Theme colours are the light/dark surface tokens from index.css, so the
@@ -45,7 +45,36 @@
 </head>
 
 <body>
-  <div id="root"></div>
+  <!--
+    Static fallback inside #root, replaced by React on first render.
+
+    Anything that does not execute JavaScript — Google's OAuth branding
+    verification, link unfurlers, crawlers — otherwise receives an empty <div>,
+    which is why verification reported "home page does not explain the purpose
+    of your app" and "app name does not match the app name on your home page":
+    there was no name and no text to read.
+
+    It doubles as the loading state, so a slow connection shows a branded card
+    instead of a blank page.
+  -->
+  <div id="root">
+    <div style="max-width:640px;margin:0 auto;padding:15vh 24px 24px;font-family:system-ui,-apple-system,sans-serif;line-height:1.6">
+      <h1 style="font-size:28px;margin:0 0 12px">Lineage Nexus</h1>
+      <p style="margin:0 0 16px">
+        Lineage Nexus is an AI research assistant for Dutch genealogy. It searches public
+        historical archives — Open Archieven and WikiTree — for birth, marriage and death
+        records, then drafts fully sourced biographies you can publish to a family tree.
+      </p>
+      <p style="margin:0 0 16px">
+        Signing in with your Google account is optional. It is used only to identify you so
+        your research history can sync between your own devices; it is never used to contact
+        you or shared with anyone.
+      </p>
+      <p style="margin:0">
+        <a href="/privacy">Privacy</a> &middot; <a href="/terms">Terms of Use</a>
+      </p>
+    </div>
+  </div>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 

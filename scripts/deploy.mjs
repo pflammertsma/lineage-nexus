@@ -27,7 +27,7 @@
  *     `.firebaserc` is needed.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -143,19 +143,32 @@ function deployApi(config) {
   }
 
   step('Deploying backend to Cloud Run');
-  run('gcloud', [
-    'run', 'deploy', SERVICE,
-    '--source', 'apps/cloud-backend',
-    '--project', config.project,
-    '--region', config.region,
-    '--allow-unauthenticated',
-    // A research turn spans paced archive searches and in-place quota waits; the
-    // default 300s cuts the SSE stream mid-research.
-    '--timeout=900',
-    // Bounds the cost of an unauthenticated endpoint that holds connections open.
-    `--max-instances=${config.maxInstances}`,
-    `--set-env-vars=ALLOWED_ORIGINS=${config.origins}`,
-  ]);
+
+  // Env vars go through a file rather than --set-env-vars. ALLOWED_ORIGINS is a
+  // comma-separated list, and gcloud reads commas as separators between dict
+  // entries, so the value has to be escaped with a `^delim^` prefix — which then
+  // has to survive a Windows shell, where `^` is itself the escape character.
+  // A YAML file sidesteps both layers of quoting.
+  const envFile = '.cloudrun-env.yaml';
+  writeFileSync(join(ROOT, envFile), `ALLOWED_ORIGINS: ${JSON.stringify(config.origins)}
+`, 'utf8');
+  try {
+    run('gcloud', [
+      'run', 'deploy', SERVICE,
+      '--source', 'apps/cloud-backend',
+      '--project', config.project,
+      '--region', config.region,
+      '--allow-unauthenticated',
+      // A research turn spans paced archive searches and in-place quota waits; the
+      // default 300s cuts the SSE stream mid-research.
+      '--timeout=900',
+      // Bounds the cost of an unauthenticated endpoint that holds connections open.
+      `--max-instances=${config.maxInstances}`,
+      `--env-vars-file=${envFile}`,
+    ]);
+  } finally {
+    rmSync(join(ROOT, envFile), { force: true });
+  }
 
   const url = capture('gcloud', [
     'run', 'services', 'describe', SERVICE,

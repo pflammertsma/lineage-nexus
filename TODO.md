@@ -1,7 +1,10 @@
 # Lineage Nexus Development Roadmap
 
 ## 🎯 Current Priorities (Next Session)
-- [ ] **Ship to production**: work the Production Readiness Checklist below. Nothing is released yet and the frontend has no hosting target at all.
+- [x] **Ship to production**: deployed. Frontend on Firebase Hosting, API on
+  Cloud Run, Firestore rules released. Remaining launch items are tracked in the
+  checklist below — chiefly the custom-domain certificate, a billing budget, and
+  analytics.
 - [ ] **Relationship graph**: generate a relationship graph component to show the relationships between the people in the conversation.
 - [ ] **Holocaust Records**: implement the `HolocaustAgent` toolset (ITS/Arolsen Archives, USHMM). Legacy prompts and API clients are in `adk-app/agent/holocaust.py` and `adk-app/api/` for reference.
 - [ ] **Wikitext Wizard**: refine 'Biography' output to include specific WikiTree citation templates (e.g., `<ref>` tags).
@@ -13,11 +16,14 @@
 ## 🚀 Production Readiness Checklist
 
 Target: publish the web frontend on a custom domain with the API on Cloud Run.
-Nothing has ever been deployed. Substitute your own values for every
-`<placeholder>` below — nothing here is tied to a particular account or project.
+**Both are now live**; what remains is listed unchecked below. Substitute your
+own values for every `<placeholder>` — nothing here is tied to a particular
+account or project.
 
-Work the phases in order: 0 and 1 are safety rails, and skipping them is how you
-deploy into the wrong project or ship a bundle that silently fakes sign-in.
+Phases 0 and 1 are the safety rails: skipping them is how you deploy into the
+wrong project or ship a bundle that silently fakes sign-in. Both proved their
+worth — the project guard caught a real mismatch, and the simulated login had
+already fooled us into thinking there was no login at all.
 
 ### 0. Safety rails (do these first)
 - [x] ⚠️ **Guard against deploying into the wrong project.** `gcloud` deploys to
@@ -30,8 +36,9 @@ deploy into the wrong project or ship a bundle that silently fakes sign-in.
   `.deploy.env.example`), so no project id, domain or account detail is committed
   to this public repository. `firebase --project` is passed explicitly, so no
   `.firebaserc` is needed either.
-- [x] `--max-instances` decided and wired in — defaults to 2, overridable via
-  `LINEAGE_MAX_INSTANCES`.
+- [x] `--max-instances` defaults to **1**, overridable via
+  `LINEAGE_MAX_INSTANCES`, which warns when raised. This is a correctness
+  requirement, not a cost tweak — see Operational caveats.
 - [ ] Set a **billing budget + alert** on the project *(console — cannot be done
   from the repo)*. The API is `--allow-unauthenticated` with long-lived SSE
   turns; Gemini spend is on the caller (BYOK) but Cloud Run CPU and egress are
@@ -50,15 +57,23 @@ only because no project is configured, in which case the hook falls back to the
 simulated local login. These console steps are all that stand between the
 existing code and a working login.
 
-- [ ] Add Firebase to the GCP project.
-- [ ] **Authentication → Sign-in method**: enable the **Google** provider.
-      (Skipping this gives `auth/operation-not-allowed`.)
-- [ ] **Authentication → Settings → Authorized domains**: add the production
-      domain and any preview domains. `localhost` is authorised by default.
-      (Skipping this gives `auth/unauthorized-domain`.)
-- [ ] Configure the **OAuth consent screen**: app name, support email, and the
-      `/privacy` and `/terms` URLs.
-- [ ] **Firestore**: create the database, in a region close to users.
+- [x] Firebase added to the GCP project.
+- [x] **Google provider enabled** — confirmed via the Identity Toolkit admin API
+      (`google.com -> enabled: True`), not assumed.
+- [x] **Authorized domains** include `lineage.nexus`, `localhost` and the two
+      default Firebase domains. (Missing these gives `auth/unauthorized-domain`.)
+- [x] **OAuth consent screen** configured in *Google Cloud Console* → Google Auth
+      Platform → Branding — it is **not** in the Firebase console, which is the
+      confusing part. App name, support email, home page and privacy URL set.
+- [x] **Firestore** database created.
+- [ ] **Publishing status must be "In production"** (Audience page). In Testing
+      only manually-added test users can sign in, which for a public site means
+      nobody.
+- [ ] Brand verification is pending, triggered *solely by uploading a logo*. The
+      failures listed were all "URL unresponsive", caused by nothing being
+      deployed yet; they should clear once the domain resolves. "Not registered
+      to you" needs domain ownership verification in Google Search Console.
+      Removing the logo skips this entirely.
 - [x] Client-side auth hardening done ahead of the above:
   - [x] **Popup → redirect fallback.** `signInWithPopup` fails outright in
     in-app browsers (a link opened from a mail or social app), behind popup
@@ -89,8 +104,12 @@ pnpm deploy:api
   The default 300s timeout is not enough: a turn can span several paced archive
   searches (~15s each) plus quota waits (~47s each), and the connection must stay
   open throughout or the stream is cut mid-research.
-- [ ] First run prompts to enable the Cloud Run and Cloud Build APIs.
-- [ ] Note the service URL it prints — it becomes `VITE_API_BASE_URL`.
+- [x] **Deployed.** Cloud Run, Cloud Build and Artifact Registry enabled;
+  service live at the printed URL, `max-instances=1`, 900s timeout.
+- [x] Service URL wired into `VITE_API_BASE_URL`.
+- [x] *Verified live:* health 200; CORS allows both deployed origins and
+  **rejects a foreign origin with 400**; `/api/v1/chat` returns 401 without a
+  key header; `/api/v1/validate-key` round-trips correctly.
 - No secrets are needed on the service — BYOK means the Gemini key arrives per-request from the browser.
 
 ### 3. Frontend config
@@ -108,14 +127,17 @@ pnpm deploy:api
   build: `VITE_ALLOW_INCOMPLETE_CONFIG=true`.
   *Verified: `pnpm build` fails with both problems listed, and succeeds with the
   escape hatch set.*
-- [ ] Copy `apps/web-frontend/.env.example` to `.env` and fill in `VITE_API_BASE_URL` (the Cloud Run URL) plus the `VITE_FIREBASE_*` values from **Project settings → Your apps**. *(Blocked on step 1.)*
+- [x] `.env` written. The `VITE_FIREBASE_*` values were pulled with
+  `firebase apps:sdkconfig WEB` rather than copied by hand. Note a Web app had
+  to be **registered first** (`firebase apps:create WEB`) — the config does not
+  exist until one does, which is why Project settings showed nothing.
 - These are compiled into the bundle at build time, so changing them requires a rebuild. That is expected: Firebase web config is a public client identifier, and `firestore.rules` is what actually enforces access.
 
 ### 4. Firestore rules
 ```bash
 pnpm deploy:rules
 ```
-- [ ] Required. Until this runs, default rules deny every read and write, and sync fails silently.
+- [x] Deployed — rules compiled and released.
 
 ### 5. Frontend hosting
 - [x] `firebase.json` added: serves `apps/web-frontend/dist`, rewrites all routes
@@ -127,11 +149,29 @@ pnpm deploy:rules
   web, in that order — rules first, because sync fails silently against
   default deny-all rules and should never lag behind the client.
 - [x] Project id stays out of the repo (see phase 0).
-- [ ] Run it. *(Blocked on step 1.)*
+- [x] **Live at the Firebase Hosting URL.** *Verified:* SPA rewrites serve
+  `/privacy`, `/terms`, `/chat` and unknown paths instead of 404ing;
+  robots.txt and sitemap.xml serve; security headers present.
+- [x] Fixed two cache-header bugs found only after deploying: the `no-cache`
+  rule targeted `/index.html`, which never matches because the rewritten path
+  stays `/privacy`, so HTML was served with `max-age=3600` and deploys would
+  take an hour to reach users. Then the catch-all overrode the asset rule —
+  Firebase applies **every** matching rule with the **last** winning, the
+  opposite of first-match. Final state confirmed by curl: HTML `no-cache`,
+  hashed assets `immutable`, security headers on both.
 
 ### 6. Domain & DNS
-- [ ] Point the apex (and `www`, if used) at the chosen host; add both to
-  Firebase **Authorized domains** or sign-in fails.
+- [x] Apex A + TXT records created; `lineage.nexus` already in Firebase
+  Authorized domains (verified via the Identity Toolkit API, along with the
+  Google provider being enabled).
+- [x] **Proxy disabled on the A record.** While proxied it resolved to the CDN
+  edge instead of Firebase, so Firebase served its default `firebaseapp.com`
+  certificate and a "Site Not Found" body — `https://lineage.nexus` failed with
+  a name-mismatch error. DNS-only now resolves to `199.36.158.100` on both
+  8.8.8.8 and 1.1.1.1, with no leftover AAAA records.
+- [ ] Waiting on Firebase to issue the certificate (async, minutes to ~24h).
+  Status moves Needs setup → Pending → **Connected**; only Connected means the
+  cert is live. Nothing else depends on this.
 - [ ] ⚠️ **Do not proxy the API through a CDN that buffers responses.** Research
   turns are long-lived SSE streams; a buffering proxy (or a short edge request
   timeout) will cut them mid-turn. Keep the API on its Cloud Run URL, or set the

@@ -31,3 +31,9 @@ export const firebaseConfig = {
 export const isFirebaseConfigured = Boolean(
   firebaseConfig.apiKey && firebaseConfig.projectId && firebaseConfig.appId
 );
+
+// Google Analytics. Unset means no analytics at all — the gtag script is never
+// fetched — so a local checkout and any fork stay untracked by default.
+export const GA_MEASUREMENT_ID = import.meta.env.VITE_GA_MEASUREMENT_ID || '';
+export const isAnalyticsConfigured = Boolean(GA_MEASUREMENT_ID);
+export const ANALYTICS_CONSENT_STORAGE = 'lineage_analytics_consent';
