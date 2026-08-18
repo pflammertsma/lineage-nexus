@@ -34,3 +34,8 @@ archived/dash-app/cache/
 
 # Firebase CLI deploy cache — local build artefact, not source
 .firebase/
+
+# SSH keys and local SSH configs
+.ssh/
+*.key
+*.pem

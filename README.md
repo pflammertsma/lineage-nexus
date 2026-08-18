@@ -148,8 +148,12 @@ this is the day-to-day version.
 pnpm deploy:api      # backend  -> Cloud Run
 pnpm deploy:rules    # firestore.rules
 pnpm deploy:web      # frontend -> Firebase Hosting
-pnpm deploy          # all three: rules, then api, then web
+pnpm deploy:all      # all three: rules, then api, then web
 ```
+
+> Note the `:all` suffix. `pnpm deploy` is a **built-in pnpm command** for deploying a
+> workspace package to a directory, so a script named plainly `deploy` is shadowed and
+> silently never runs. Every script here is namespaced to avoid that.
 
 Every command **refuses to run unless the active `gcloud` project matches
 `LINEAGE_GCP_PROJECT`**. `gcloud` otherwise deploys to whatever project happens to be
