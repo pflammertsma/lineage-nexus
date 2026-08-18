@@ -4,6 +4,7 @@ import Header from './components/Header';
 import Hero from './components/Hero';
 import FeatureGrid from './components/FeatureGrid';
 import SourcesPage from './components/SourcesPage';
+import AiTransparencyPage from './components/AiTransparencyPage';
 import Sidebar from './components/Sidebar';
 import SettingsModal from './components/SettingsModal';
 import SyncConsentModal from './components/SyncConsentModal';
@@ -455,6 +456,7 @@ function App() {
                   <span className="text-xl font-extrabold tracking-tight text-accent">Lineage Nexus</span>
                   <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[10px] font-bold uppercase tracking-widest opacity-60">
                     <Link to="/sources" className="hover:text-accent transition-colors">Sources</Link>
+                    <Link to="/ai-transparency" className="hover:text-accent transition-colors">AI Transparency</Link>
                     <Link to="/privacy" className="hover:text-accent transition-colors">Privacy</Link>
                     <Link to="/terms" className="hover:text-accent transition-colors">Terms</Link>
                   </nav>
@@ -556,6 +558,7 @@ function App() {
 
         {/* Reachable signed in or out, and linkable from the OAuth consent screen. */}
         <Route path="/sources" element={<SourcesPage />} />
+        <Route path="/ai-transparency" element={<AiTransparencyPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
 

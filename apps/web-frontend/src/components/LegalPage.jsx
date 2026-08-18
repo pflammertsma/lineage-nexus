@@ -2,12 +2,21 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 
+// Every policy page links to the others, so adding one here is the only change
+// needed for it to appear in each footer.
+const POLICY_PAGES = [
+  { path: '/sources', label: 'Sources' },
+  { path: '/ai-transparency', label: 'AI Transparency' },
+  { path: '/privacy', label: 'Privacy' },
+  { path: '/terms', label: 'Terms of Use' },
+];
+
 /**
  * Shell for the policy pages. Plain prose, one measure, no chrome — these exist
  * to be read and to be linkable from the Google OAuth consent screen, not to
  * look like the app.
  */
-export const LegalPage = ({ title, updated, sibling, children }) => (
+export const LegalPage = ({ title, updated, path, children }) => (
   <main className="overflow-y-auto">
     <div className="reading-column py-12 sm:py-16">
       {/* Full-strength secondary throughout, not the muted variants used as app
@@ -31,11 +40,11 @@ export const LegalPage = ({ title, updated, sibling, children }) => (
       </div>
 
       <nav className="mt-14 pt-6 border-t border-border flex flex-wrap gap-x-6 gap-y-2 text-[10px] font-bold uppercase tracking-widest text-secondary">
-        {sibling === 'terms' ? (
-          <Link to="/terms" className="hover:text-accent transition-colors">Terms of Use</Link>
-        ) : (
-          <Link to="/privacy" className="hover:text-accent transition-colors">Privacy</Link>
-        )}
+        {POLICY_PAGES.filter((page) => page.path !== path).map((page) => (
+          <Link key={page.path} to={page.path} className="hover:text-accent transition-colors">
+            {page.label}
+          </Link>
+        ))}
         <Link to="/" className="hover:text-accent transition-colors">Back to the app</Link>
       </nav>
     </div>
@@ -45,7 +54,7 @@ export const LegalPage = ({ title, updated, sibling, children }) => (
 const UPDATED = '18 August 2026';
 
 export const PrivacyPage = () => (
-  <LegalPage title="Privacy" updated={UPDATED} sibling="terms">
+  <LegalPage title="Privacy" updated={UPDATED} path="/privacy">
     <p>
       Lineage Nexus is a genealogical research assistant. This page describes exactly what it
       stores, where, and how to remove it. It is deliberately short, because the app collects
@@ -158,7 +167,7 @@ export const PrivacyPage = () => (
 );
 
 export const TermsPage = () => (
-  <LegalPage title="Terms of Use" updated={UPDATED} sibling="privacy">
+  <LegalPage title="Terms of Use" updated={UPDATED} path="/terms">
     <h2>What this is</h2>
     <p>
       Lineage Nexus is a research aid, provided free and as-is. It uses a language model to

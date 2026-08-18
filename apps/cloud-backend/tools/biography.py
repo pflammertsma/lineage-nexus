@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from google.genai import types
 
 WIKITREE_FORMAT_INSTRUCTIONS = r"""
@@ -623,4 +625,33 @@ async def format_wikitree_biography(client, model_name, research_data, user_inst
             temperature=0.4
         )
     )
-    return response.text
+    return add_ai_generation_marker(response.text, model_name)
+
+
+# EU AI Act Article 50(2) requires a provider of a system generating synthetic text
+# to mark its output as artificially generated, in a machine-readable form. The
+# obligation has applied since 2 August 2026.
+#
+# Added here, deterministically, rather than asked of the model: a prompt
+# instruction would be followed most of the time, and "most of the time" is not a
+# marking scheme. This runs on the single return path of the formatter, so every
+# biography carries it.
+#
+# It rides in an HTML comment for the same reason LINEAGE_NEXUS_DATA does — it
+# survives copy/paste and the extension handoff, and travels with the text when
+# it is published to WikiTree, which is where the disclosure actually matters.
+AI_MARKER_PREFIX = "<!-- AI_GENERATED:"
+
+
+def add_ai_generation_marker(text: str, model_name: str) -> str:
+    """Prepends a machine-readable AI-generation marker, unless one is present."""
+    if not text or AI_MARKER_PREFIX in text:
+        return text
+
+    marker = (
+        f'{AI_MARKER_PREFIX} {{"generator":"Lineage Nexus","model":"{model_name}",'
+        f'"generatedAt":"{datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")}",'
+        f'"disclosure":"https://lineage.nexus/ai-transparency",'
+        f'"notice":"Drafted by an AI system from archival records. Verify against the cited sources before publishing."}} -->'
+    )
+    return marker + "\n" + text.lstrip()

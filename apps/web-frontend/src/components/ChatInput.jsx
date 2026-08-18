@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { Send, Search, FileText, Download, ShieldAlert } from 'lucide-react';
 import ActionPopovers from './ActionPopovers';
 
@@ -131,7 +132,11 @@ const ChatInput = ({ onSearch, onStop, isLoading }) => {
       </form>
 
       <p className="mt-4 text-[10px] text-center opacity-30 tracking-tight">
-        Lineage Nexus uses Gemini to search archives. Results may vary depending on results from sourced archives.
+        You are chatting with an AI. Archive records are retrieved, but biographies are
+        AI-generated — verify them against the cited sources before publishing.{' '}
+        <Link to="/ai-transparency" className="underline hover:text-accent transition-colors">
+          How this works
+        </Link>
       </p>
     </div>
   );
