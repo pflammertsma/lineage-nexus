@@ -1,12 +1,53 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  getRedirectResult,
   onAuthStateChanged,
   signInWithPopup,
+  signInWithRedirect,
   signOut as firebaseSignOut,
 } from 'firebase/auth';
 import { getFirebaseAuth, googleProvider, isFirebaseConfigured } from './firebase';
 
 const LEGACY_LOGIN_FLAG = 'lineage_is_logged_in';
+
+// A popup is the better experience where it works, but it is not always available:
+// in-app browsers (opening a link from a mail or social app), popup blockers, and
+// some privacy modes all refuse it. Falling back to a full-page redirect means
+// sign-in still completes instead of failing with a message the user cannot act on.
+const POPUP_UNAVAILABLE = new Set([
+  'auth/popup-blocked',
+  'auth/operation-not-supported-in-this-environment',
+  'auth/web-storage-unsupported',
+]);
+
+// Closing the popup, or clicking sign-in twice, is a deliberate user action.
+const USER_DISMISSED = new Set([
+  'auth/popup-closed-by-user',
+  'auth/cancelled-popup-request',
+]);
+
+/**
+ * Firebase's raw messages are written for developers ("Firebase: Error
+ * (auth/unauthorized-domain)."), which is no help to someone trying to sign in.
+ * The two configuration failures are called out by name because they are the ones
+ * that will appear on a fresh deployment, and knowing which it is saves an hour.
+ */
+function describeAuthError(e) {
+  switch (e?.code) {
+    case 'auth/unauthorized-domain':
+      return 'This site is not authorised for sign-in. Add its domain under Firebase Authentication → Settings → Authorized domains.';
+    case 'auth/operation-not-allowed':
+      return 'Google sign-in is not enabled for this project. Enable the Google provider in Firebase Authentication.';
+    case 'auth/network-request-failed':
+      return 'Could not reach the sign-in service. Check your connection and try again.';
+    case 'auth/too-many-requests':
+      return 'Too many sign-in attempts. Please wait a moment and try again.';
+    case 'auth/account-exists-with-different-credential':
+      return 'An account already exists with this email using a different sign-in method.';
+    default:
+      return e?.message || 'Sign-in failed.';
+  }
+}
 
 /**
  * Google sign-in via Firebase Auth.
@@ -29,6 +70,12 @@ export default function useAuth() {
     if (!isFirebaseConfigured) return;
     const auth = getFirebaseAuth();
     if (!auth) return;
+
+    // Completes a redirect sign-in. onAuthStateChanged delivers the session on its
+    // own; this call exists to surface an error that would otherwise be swallowed,
+    // leaving the user back on the landing page with no explanation.
+    getRedirectResult(auth).catch((e) => setError(describeAuthError(e)));
+
     return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       setReady(true);
@@ -46,13 +93,22 @@ export default function useAuth() {
       setLocalSignedIn(true);
       return;
     }
+    const auth = getFirebaseAuth();
     try {
-      await signInWithPopup(getFirebaseAuth(), googleProvider());
+      await signInWithPopup(auth, googleProvider());
     } catch (e) {
-      // A closed popup is a deliberate user action, not a failure worth showing.
-      if (e?.code !== 'auth/popup-closed-by-user' && e?.code !== 'auth/cancelled-popup-request') {
-        setError(e?.message || 'Sign-in failed.');
+      if (USER_DISMISSED.has(e?.code)) return;
+      if (POPUP_UNAVAILABLE.has(e?.code)) {
+        // Navigates away; the result is picked up by getRedirectResult on return.
+        try {
+          await signInWithRedirect(auth, googleProvider());
+          return;
+        } catch (redirectError) {
+          setError(describeAuthError(redirectError));
+          return;
+        }
       }
+      setError(describeAuthError(e));
     }
   }, []);
 
@@ -76,6 +132,9 @@ export default function useAuth() {
     email: user?.email || (localSignedIn ? 'local@device' : null),
     photoURL: user?.photoURL || null,
     isSignedIn: isFirebaseConfigured ? Boolean(user) : localSignedIn,
+    // True when the session is a local stand-in rather than a real Google account.
+    // The UI must say so: a fake sign-in that looks real is worse than none.
+    isSimulated: !isFirebaseConfigured && localSignedIn,
     ready,
     error,
     signIn,

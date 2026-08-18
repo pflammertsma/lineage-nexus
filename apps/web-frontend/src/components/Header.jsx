@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Sun, Moon, Monitor, Settings, LogOut, Menu, ShieldCheck } from 'lucide-react';
+import { Sun, Moon, Monitor, Settings, LogOut, Menu, ShieldCheck, AlertTriangle } from 'lucide-react';
 import logo from '../assets/logo.svg';
 
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
@@ -27,6 +27,7 @@ const Header = ({
   onCycleTheme,
   onOpenSettings,
   onToggleSidebar,
+  isSimulated = false,
 }) => {
   const ThemeIcon = THEME_ICON[themePreference] || Monitor;
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -86,6 +87,19 @@ const Header = ({
         )}
 
         <div className="flex items-center gap-3">
+          {/* Firebase is unconfigured, so "sign in" set a localStorage flag rather
+              than authenticating anyone. Saying so out loud is the point: an
+              indistinguishable fake login is how you ship one to production. */}
+          {isSimulated && (
+            <span
+              title="No Firebase project is configured, so sign-in is simulated and sync is unavailable. Set VITE_FIREBASE_* in .env to enable real Google sign-in."
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border border-amber-500/40 bg-amber-500/10 text-amber-500 text-[10px] font-bold uppercase tracking-widest cursor-help"
+            >
+              <AlertTriangle size={11} />
+              Simulated login
+            </span>
+          )}
+
           <button
             onClick={onCycleTheme}
             title={THEME_LABEL[themePreference]}

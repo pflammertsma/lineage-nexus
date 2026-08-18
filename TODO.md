@@ -43,10 +43,41 @@ deploy into the wrong project or ship a bundle that silently fakes sign-in.
 - Copy `.deploy.env.example` to `.deploy.env` and fill it in.
 
 ### 1. Firebase console (one-time, manual)
+
+Google sign-in is **already implemented** — `useAuth.js` uses `signInWithPopup`
+with `GoogleAuthProvider`, plus `onAuthStateChanged` and `signOut`. It is inert
+only because no project is configured, in which case the hook falls back to the
+simulated local login. These console steps are all that stand between the
+existing code and a working login.
+
 - [ ] Add Firebase to the GCP project.
 - [ ] **Authentication → Sign-in method**: enable the **Google** provider.
-- [ ] **Authentication → Settings → Authorized domains**: add the production domain (and any preview domains). Sign-in fails on unlisted domains.
+      (Skipping this gives `auth/operation-not-allowed`.)
+- [ ] **Authentication → Settings → Authorized domains**: add the production
+      domain and any preview domains. `localhost` is authorised by default.
+      (Skipping this gives `auth/unauthorized-domain`.)
+- [ ] Configure the **OAuth consent screen**: app name, support email, and the
+      `/privacy` and `/terms` URLs.
 - [ ] **Firestore**: create the database, in a region close to users.
+- [x] Client-side auth hardening done ahead of the above:
+  - [x] **Popup → redirect fallback.** `signInWithPopup` fails outright in
+    in-app browsers (a link opened from a mail or social app), behind popup
+    blockers, and in some privacy modes. Those cases now fall back to
+    `signInWithRedirect`, with `getRedirectResult` on mount to surface errors
+    that would otherwise strand the user back on the landing page.
+  - [x] **Actionable error messages.** Firebase's raw text is written for
+    developers; the two configuration failures above are now named explicitly,
+    since they are exactly what a fresh deployment hits.
+  - [x] **Fixed a routing race that would have appeared on day one.** The routes
+    read `isSignedIn` before `onAuthStateChanged` had fired, so a signed-in user
+    reloading `/chat` was bounced to the landing page and only then redirected
+    back — a visible flash and a lost deep link. Routing now waits on
+    `auth.ready`, which is true immediately when Firebase is unconfigured.
+  - [x] **The simulated login is now labelled.** It was indistinguishable from a
+    real session, which is how it gets shipped by accident — and it is why the
+    app appeared to have no login process at all. The header shows an amber
+    "Simulated login" badge whenever Firebase is unconfigured. *Verified in the
+    browser.*
 
 ### 2. Backend → Cloud Run
 ```bash

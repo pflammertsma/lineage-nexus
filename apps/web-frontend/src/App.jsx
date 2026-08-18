@@ -17,6 +17,23 @@ import useAuth from './useAuth';
 import useSyncedSessions, { readSyncConsent, writeSyncConsent } from './useSyncedSessions';
 import './index.css';
 
+/**
+ * Shown while Firebase resolves whether there is an existing session.
+ *
+ * Without this the routes read `isSignedIn` before `onAuthStateChanged` has fired,
+ * so a signed-in user reloading /chat is bounced to the landing page and then
+ * redirected back — a visible flash, and a lost deep link. Never appears when
+ * Firebase is unconfigured, where `ready` is true from the first render.
+ */
+const AuthPending = () => (
+  <div className="h-[calc(100dvh-var(--h-header))] flex items-center justify-center">
+    <div className="flex flex-col items-center gap-4 animate-in">
+      <img src="/logo.svg" alt="" className="w-12 h-12 opacity-40 animate-pulse" />
+      <p className="text-xs uppercase tracking-widest text-secondary">Restoring your session…</p>
+    </div>
+  </div>
+);
+
 function App() {
   const navigate = useNavigate();
   const { preference: themePreference, cycleTheme } = useTheme();
@@ -373,6 +390,7 @@ function App() {
         onCycleTheme={cycleTheme}
         onOpenSettings={() => setConfigOpen(true)}
         onToggleSidebar={() => setSidebarOpen(v => !v)}
+        isSimulated={auth.isSimulated}
       />
 
       <div className="toast-container overflow-visible z-50">
@@ -389,6 +407,7 @@ function App() {
 
       <Routes>
         <Route path="/" element={
+          !auth.ready ? <AuthPending /> :
           isLoggedIn ? <Navigate to="/chat" replace /> : (
             <main className="overflow-y-auto">
               <Hero onSearch={(q) => {
@@ -411,6 +430,7 @@ function App() {
         } />
 
         <Route path="/chat" element={
+          !auth.ready ? <AuthPending /> :
           !isLoggedIn ? <Navigate to="/" replace /> : (
             // dvh, not vh: mobile browser chrome shrinks the visual viewport and
             // vh does not follow it, which clipped the composer off-screen.
