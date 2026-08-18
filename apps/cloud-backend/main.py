@@ -212,7 +212,11 @@ async def chat(
                 error_msg = "Invalid Gemini API Key. Please update your key in Settings."
             else:
                 import traceback
-                print(traceback.format_exc())
+                from tools.utils import debug_log
+                # Full traceback only when research logging is opted in: it can
+                # quote the request payload, and Cloud Run persists stdout.
+                debug_log(traceback.format_exc())
+                print(f"Research request failed: {type(e).__name__}")
                 error_msg = f"An unexpected error occurred: {error_str}"
             
             chunk = f"data: {json.dumps({'error': error_msg, 'retry': True})}\n\n"

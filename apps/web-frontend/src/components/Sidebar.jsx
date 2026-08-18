@@ -1,12 +1,14 @@
-import { Plus, MessageSquare, Trash2, X } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { Plus, MessageSquare, Trash2 } from 'lucide-react';
 
 /**
  * Research history.
  *
  * Below `md` this is an overlay drawer: it sits above the transcript and is
- * dismissed by the backdrop, Escape, or picking a session. Laying it out beside
- * the chat at phone widths left the transcript around 119px wide, which wrapped
- * the research trail to roughly one character per line.
+ * dismissed by the backdrop, Escape, the header's hamburger, or picking a
+ * session. Laying it out beside the chat at phone widths left the transcript
+ * around 119px wide, which wrapped the research trail to roughly one character
+ * per line.
  *
  * At `md` and up it is an ordinary flex child again, so desktop is unchanged.
  */
@@ -53,24 +55,16 @@ const Sidebar = ({
           md:static md:z-auto md:h-full md:max-w-none md:translate-x-0 md:visible md:shrink-0
         `}
       >
-        <div className="p-4 border-b border-border flex items-center gap-2">
+        <div className="p-4 border-b border-border">
           <button
             onClick={() => {
               onNewChat();
               onClose();
             }}
-            className="flex-1 flex items-center justify-center gap-2 btn btn-primary py-3"
+            className="w-full flex items-center justify-center gap-2 btn btn-primary py-3"
           >
             <Plus size={18} />
             <span>New Research</span>
-          </button>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close history"
-            className="md:hidden w-11 h-11 shrink-0 flex items-center justify-center rounded-lg text-secondary hover:text-accent hover:bg-card transition-colors cursor-pointer"
-          >
-            <X size={18} />
           </button>
         </div>
 
@@ -117,8 +111,18 @@ const Sidebar = ({
           )}
         </nav>
 
-        <div className="p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-border flex items-center justify-between text-[11px] text-secondary/60">
-          <span>Sync: {syncLabel}</span>
+        {/* The policy pages are otherwise unreachable once signed in: the header's
+            marketing nav and the landing footer both disappear, and `/` redirects
+            straight to `/chat`. */}
+        <div className="p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] border-t border-border flex items-center justify-between gap-2 text-[11px] text-secondary/60">
+          <span className="truncate">Sync: {syncLabel}</span>
+          <Link
+            to="/privacy"
+            onClick={onClose}
+            className="shrink-0 hover:text-accent transition-colors"
+          >
+            Privacy
+          </Link>
         </div>
       </aside>
     </>

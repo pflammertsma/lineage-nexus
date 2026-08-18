@@ -1,4 +1,5 @@
 import httpx
+import os
 import re
 import copy
 import asyncio
@@ -16,12 +17,32 @@ MAX_CACHE_ENTRIES = 256
 _SEARCH_CACHE: "OrderedDict[str, Any]" = OrderedDict()
 _CACHE_LOCK = asyncio.Lock()
 
-# The archive enforces a requests-per-second budget ("Rate limit exceeded: $limit requests
-# per second allowed", Retry-After: 1). The cap is global rather than per-connection, so
-# lowering concurrency does not help — requests have to be *paced*. Measured empirically:
-# 2 req/s sustains a full 14-record fetch with no throttling, while unpaced bursts lose
-# roughly two thirds of the records.
-MIN_REQUEST_INTERVAL = 0.5
+# Open Archives asks callers to identify themselves:
+#
+#   "Please use a descriptive user-agent (with project url or e-mail) in your requests
+#    so we can contact you in case of curiousity or problems."
+#    — https://www.openarchieven.nl/api
+#
+# This is the only form of registration the API has for the free methods, and it is what
+# makes a courtesy email possible instead of a silent block. Set OPENARCH_CONTACT to add
+# an address if you would rather be reachable directly than via the project page.
+_CONTACT = os.environ.get("OPENARCH_CONTACT", "").strip()
+USER_AGENT = (
+    f"LineageNexus/0.1 (+https://lineage.nexus; {_CONTACT})"
+    if _CONTACT
+    else "LineageNexus/0.1 (+https://lineage.nexus)"
+)
+DEFAULT_HEADERS = {"User-Agent": USER_AGENT}
+
+# The archive throttles "per IP address to 4 requests per second" (their documentation),
+# returning "Rate limit exceeded: $limit requests per second allowed" with Retry-After: 1.
+# The budget is per-IP rather than per-connection, so lowering concurrency does not help —
+# requests have to be *paced*, and unpaced bursts lose roughly two thirds of the records.
+#
+# We pace at ~3.3 req/s rather than the full 4: this clock stamps when a request is
+# *issued*, so network jitter can bunch arrivals at the far end, and there is no benefit
+# to riding the exact edge of someone else's limit.
+MIN_REQUEST_INTERVAL = 0.3
 FETCH_RETRIES = 3
 
 _RATE_LIMIT_LOCK = asyncio.Lock()
@@ -159,7 +180,7 @@ async def open_archives_get_record(url: str) -> dict:
     base_url = "https://api.openarchieven.nl/1.1/records/show.json"
     params = {"archive": archive, "identifier": identifier, "lang": "en"}
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(headers=DEFAULT_HEADERS) as client:
         try:
             await _throttle()
             response = await client.get(base_url, params=params, timeout=15.0)
@@ -222,7 +243,7 @@ async def open_archives_search(
     
     base_url = "https://api.openarchieven.nl/1.1/records/search.json"
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(headers=DEFAULT_HEADERS) as client:
         try:
             await _throttle()
             response = await client.get(base_url, params=params, timeout=20.0)

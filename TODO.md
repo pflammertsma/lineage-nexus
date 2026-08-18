@@ -122,10 +122,12 @@ pnpm deploy:rules
   roughly one character per line.
 - [x] Below `md` it is a fixed drawer over the transcript; at `md` and up it is
   an ordinary flex child again, so desktop behaviour is unchanged.
-- [x] Dismisses on backdrop tap, Escape, choosing a session, and starting a new
-  one. Also auto-closes when the viewport crosses the breakpoint, so a resize
-  cannot strand the scroll lock on a desktop layout.
-- [x] Hamburger toggle added to `Header`, shown only when signed in.
+- [x] Dismisses on backdrop tap, Escape, the hamburger, choosing a session, and
+  starting a new one. Also auto-closes when the viewport crosses the breakpoint,
+  so a resize cannot strand the scroll lock on a desktop layout.
+- [x] Hamburger toggle added to `Header`, shown only when signed in. It toggles
+  rather than only opening, and the drawer starts below the header, so it stays
+  reachable while the drawer is open — no in-drawer close button needed.
 - [x] Body scroll locked while open, restoring the previous value on close.
 - [x] `Sidebar`'s `h-screen` fixed — it was 70px taller than its own row.
 - [x] `100vh` → `100dvh` so mobile browser chrome no longer clips the composer.
@@ -170,15 +172,34 @@ pnpm deploy:rules
 - [x] `pnpm lint` clean, `pnpm build` succeeds, and the generated CSS contains
   every new token and component class.
 
-**Still to eyeball** *(subjective, or not yet exercised)*
-- [ ] Light mode, and 768 / 2560px.
+- [x] **Theme toggle left stale colours** (found while checking the policy page,
+  but it affected the whole app). Elements with `transition-colors` take their
+  colour from a theme custom property; changing the property does not restart a
+  running transition, so they kept the outgoing palette. Switching light → dark
+  left small links at the light colour on a dark ground — about 2:1, effectively
+  invisible — and it persisted rather than settling. `applyPreference()` now
+  suppresses transitions for one frame across the swap, with a forced reflow so
+  the browser cannot coalesce the two class changes. *Verified across a full
+  light → dark → system → light cycle: no stale colours.*
+- [x] `/privacy` and `/terms` render, all routes resolve, unknown paths fall back
+  to `/`, and contrast passes AA in both themes (prose 13.7–16.4:1, links
+  5.8–8.9:1, small print 5.1–7.6:1). Raised the page's small text from the muted
+  chrome tokens, which measured 3.4–4.3:1.
+
+**Still to eyeball** *(subjective)*
+- [ ] 768 / 2560px.
 - [ ] Vertical rhythm between message blocks, the wikitext card and the trail.
-- [ ] `/privacy` and `/terms` rendering.
 
 ### 8. Legal & trust
-- [x] `/privacy` and `/terms` added (`components/LegalPage.jsx`) and routed;
-  the header's dead `#about` link now points at `/privacy`, and the landing
-  footer links both.
+- [x] `/privacy` and `/terms` added (`components/LegalPage.jsx`) and routed.
+- [x] **Linked from everywhere**, which it was not at first — the header's
+  marketing nav and the landing footer both disappear once signed in, and `/`
+  redirects to `/chat`, so a signed-in user had no route to the policy at all.
+  Now also in the sidebar footer and the account dropdown, and the two pages
+  cross-link each other.
+- [x] Fixed the header nav on non-landing routes: "Platform" was `href="#features"`,
+  which resolved against the current path (`/privacy#features`) and went nowhere.
+  It is now "Home" → `/` off the landing page, and the wordmark is a home link.
 - [x] Privacy covers: the API key (browser-local, per-request, never stored,
   never synced), research storage and opt-in sync, what Google sign-in provides,
   the third parties queried, no analytics/ads/training, and a note on the living
@@ -188,9 +209,44 @@ pnpm deploy:rules
 - [x] Terms cover: verify-before-publish (model output can be wrong), that the
   Gemini key and its costs are the user's, fair use of the archives, source
   attribution, availability, and liability.
-- [ ] Read them and correct anything that misstates your intent — these are a
-  drafted starting point, not legal advice, and they make claims about your
-  practices that only you can confirm.
+- [x] Claims checked against the code. Two proposed wordings were **false** and
+  have been corrected or made true:
+  - *"We don't have access to your keys, they are passed directly to Gemini"* —
+    **not true, and not fixable without a rearchitecture.** The orchestrator runs
+    server-side, so `main.py` receives the key in a header and constructs
+    `genai.Client(api_key=...)` on our server. The policy now says plainly that
+    the key reaches our server, is held in memory for the request only, and is
+    never stored or logged. Making the original claim true would mean calling
+    Gemini from the browser, which the tool-calling loop cannot do.
+  - *"We don't track your research, not even in our server logs"* — was false,
+    **now true.** `orchestrator.py` printed the full user query, and
+    `report_status` printed every status line (names, archives, queries) to
+    stdout, which Cloud Run persists to Cloud Logging. Content-bearing output now
+    goes through `debug_log()`, off unless `LOG_RESEARCH_CONTENT=true`. Error
+    paths log the exception *type* only. *Verified: suppressed by default,
+    emitted when opted in.*
+  - *"We don't train on your research"* — true of us, with a caveat now stated:
+    queries are processed by Google under the user's own key, and Google's free
+    API tier may use submitted content to improve its services.
+  - *"Only Google Analytics for analytics"* — policy updated to name it. The
+    previous blanket "no analytics" claim is gone.
+- [ ] **Google Analytics is not integrated yet** — the policy now describes it,
+  so either add it or drop that paragraph before launch. When adding:
+  - [ ] **A consent banner is now required**, and GA must stay off until the
+    visitor agrees. GA sets cookies and processes a device identifier, so under
+    EU ePrivacy rules consent is needed before it loads — this is a harder
+    requirement than a cookieless EU-hosted tool would have been, and it is new
+    work the PostHog plan did not need.
+  - [ ] Disable Google Signals and ads data sharing, or the "no advertising"
+    line in the policy stops being true.
+  - [ ] Send page views only. Never pass the query, a biography, a person's name
+    or an archive result into an event parameter or a custom dimension — that
+    would contradict the "we do not log your research" claim made two paragraphs
+    earlier in the same policy.
+  - [ ] Note `/chat` is `Disallow`ed in robots.txt but still reports page views;
+    that is fine, the URL carries no research content.
+- [ ] Read the pages and correct anything that still misstates your intent —
+  these are a drafted starting point, not legal advice.
 
 ### 9. Onboarding & abuse
 - [x] BYOK explained on the landing page, with a link to Google AI Studio and an
@@ -243,13 +299,21 @@ These paths have never executed — see "Unverified" below.
 
 ### Operational caveats
 - The backend keeps **in-process** state only: the OpenArchieven LRU cache and the global rate-limit clock. With more than one Cloud Run instance these are per-instance, so the archive pacing is no longer globally correct and cache hits drop. Consider `--max-instances=1` initially, or move both to shared storage.
-- ⚠️ **This does not scale to concurrent users, and that is a launch decision.**
-  The OpenArchieven limiter is a process-wide 2 req/s clock shared by everyone on
-  the instance, so N simultaneous researchers each get ~2/N req/s — a 30-record
-  search goes from ~15s to ~30s with just two users. Scaling out restores speed
-  but breaks the global pacing, which reintroduces the silent record-dropping bug
-  that pacing was added to fix. Resolve this before advertising the site: either
-  move the limiter and cache to shared storage (e.g. Redis), or queue requests.
+- ⚠️ **`--max-instances=1` is a correctness requirement, not a cost tweak.**
+  All archive traffic egresses from Cloud Run, so Open Archives sees a single IP
+  for every user of the site — and their throttle is documented as **per IP
+  address**. The pacing clock is per-process: with one instance it stays globally
+  correct no matter how many people are researching, but each additional instance
+  adds an independent clock, so N instances hit the archive at up to N x the
+  documented rate from one address, risking a **block** rather than merely slow
+  research. The deploy script defaults to 1 and warns if raised.
+  - The cost is concurrency: simultaneous researchers share the budget, so a
+    30-record search slows roughly in proportion to the number of active users.
+  - To scale out safely, the limiter and cache must move to shared storage
+    (e.g. Redis) so the rate is enforced across instances rather than per
+    process. Until then, leave the ceiling at 1.
+  - Their docs invite a request to raise the per-IP limit. Worth asking, now
+    that we identify ourselves — see below.
 - Cold starts discard those caches entirely.
 
 ## ⚠️ Unverified
@@ -258,7 +322,33 @@ These paths have never executed — see "Unverified" below.
 
 ## 🐞 Known Issues / Tech Debt
 - [ ] **Resume across a dropped turn**: quota pauses are now absorbed in-process, but if the wait budget is exhausted the turn still unwinds and `current_history` is lost, so Retry re-runs the research from scratch. Needs a resume token: stash `current_history` + `turn_count` + `seen_queries` server-side (or return them to the client), and accept it back on the next request. Requires an API contract change.
-- [ ] **Archival latency**: OpenArchieven allows ~2 requests/second, so a 30-record search now takes ~15s. Consider persisting the record cache (currently an in-process LRU, lost on restart) or fetching detail lazily.
+- [x] **Archival pacing corrected against the published limit.** Open Archives
+  documents 4 req/s per IP; we had been pacing at 2 req/s from an empirical
+  guess, i.e. half the allowance. Now ~3.3 req/s, keeping headroom because the
+  clock stamps when a request is *issued* and jitter can bunch arrivals. A
+  30-record search drops from ~15s to ~9s.
+- [x] **We now identify ourselves.** Their docs ask for "a descriptive
+  user-agent (with project url or e-mail) ... so we can contact you in case of
+  curiousity or problems", and we were sending httpx's default — anonymous.
+  Requests now carry `LineageNexus/0.1 (+https://lineage.nexus)`, with an
+  optional contact address via `OPENARCH_CONTACT`. This is what makes a courtesy
+  email possible instead of a silent block.
+- [ ] **Ask Open Archives to raise the per-IP limit.** Their docs invite it
+  ("contact Open Archives to increase this value"). A single Cloud Run egress IP
+  serving many researchers is exactly the case worth explaining, and it is far
+  cheaper than re-architecting. Do this before considering the browser-routing
+  option below.
+- [ ] **Persist the record cache.** Currently an in-process LRU, lost on every
+  cold start. Their responses are already cached server-side for a day and carry
+  `max-age`, so a shared cache mostly avoids re-asking for what we have seen.
+- [ ] **Optional: route archive fetches through the user's browser.** Viable —
+  the API sends `Access-Control-Allow-Origin: *`, allows `GET, OPTIONS`, and
+  needs no credentials for search/show, and the throttle being per-IP means each
+  user would spend their own budget rather than a shared one. Costs: the tool
+  loop is server-side and synchronous, so it would need inverting over a
+  WebSocket (SSE cannot carry results back); and it forfeits the shared cache,
+  which for a tool where users cluster on the same parishes and registries could
+  mean *more* total load on the archive, not less. Ask them first.
 - [ ] **`model` is hardcoded**: the frontend always sends `gemini-flash-latest`; `ChatRequest` defaults to `gemini-flash-lite-latest`. Neither is user-selectable.
 - [ ] **No test coverage** on the cloud backend. The legacy `adk-app/test/` suite covers the old API clients only.
 - [ ] **WikiTree tool surface**: `get_person` and `get_relatives` are exposed to the model but undocumented in `WIKITREE_INSTRUCTIONS`, which still describes the legacy `get_person_info` / `get_relatives_info` names.

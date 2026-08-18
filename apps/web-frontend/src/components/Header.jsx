@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link } from 'react-router-dom';
-import { Sun, Moon, Monitor, Settings, LogOut, Menu } from 'lucide-react';
+import { Link, useLocation } from 'react-router-dom';
+import { Sun, Moon, Monitor, Settings, LogOut, Menu, ShieldCheck } from 'lucide-react';
 import logo from '../assets/logo.svg';
 
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
@@ -31,6 +31,11 @@ const Header = ({
   const ThemeIcon = THEME_ICON[themePreference] || Monitor;
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
+  // "Platform" is a jump link to a section of the landing page, so it only means
+  // anything there. On any other route it resolved against the current path
+  // (/privacy#features) and went nowhere; off the landing page the useful
+  // destination is the landing page itself.
+  const onLandingPage = useLocation().pathname === '/';
 
   const initials = initialsFor(displayName, email);
 
@@ -61,14 +66,20 @@ const Header = ({
               <Menu size={20} />
             </button>
           )}
-          <img src={logo} alt="" className="w-7 h-7 shrink-0 pointer-events-none" />
-          <span className="text-lg font-extrabold tracking-tight text-accent truncate">Lineage Nexus</span>
+          <Link to="/" className="flex items-center gap-3 min-w-0" aria-label="Lineage Nexus home">
+            <img src={logo} alt="" className="w-7 h-7 shrink-0 pointer-events-none" />
+            <span className="text-lg font-extrabold tracking-tight text-accent truncate">Lineage Nexus</span>
+          </Link>
         </div>
 
         {/* Marketing links on landing page */}
         {!isLoggedIn && (
           <nav className="hidden md:flex gap-8 items-center opacity-60">
-            <a href="#features" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Platform</a>
+            {onLandingPage ? (
+              <a href="#features" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Platform</a>
+            ) : (
+              <Link to="/" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Home</Link>
+            )}
             <Link to="/privacy" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Privacy</Link>
             <Link to="/terms" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Terms</Link>
           </nav>
@@ -134,6 +145,15 @@ const Header = ({
                       <Settings size={15} className="shrink-0" />
                       <span>Settings & API Keys</span>
                     </button>
+
+                    <Link
+                      to="/privacy"
+                      onClick={() => setDropdownOpen(false)}
+                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-secondary hover:text-accent hover:bg-card transition-colors cursor-pointer"
+                    >
+                      <ShieldCheck size={15} className="shrink-0" />
+                      <span>Privacy & Terms</span>
+                    </Link>
 
                     <button
                       type="button"

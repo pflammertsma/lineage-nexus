@@ -8,7 +8,7 @@ from tools.openarchieven import open_archives_search, open_archives_get_record, 
 from tools.wikitree import search_profiles, get_profile, get_person, get_relatives, WIKITREE_INSTRUCTIONS
 from tools.holocaust import joods_monument_search, joods_monument_get_document, oorlogsbronnen_search, oorlogsbronnen_get_document, HOLOCAUST_INSTRUCTIONS
 from tools.biography import format_wikitree_biography
-from tools.utils import get_ts, generate_with_quota_retry
+from tools.utils import get_ts, debug_log, generate_with_quota_retry
 
 ROOT_STRATEGY = """
 You are the **Lineage Nexus Heritage Research Orchestrator**. Your primary role is to conduct professional
@@ -146,7 +146,7 @@ def restore_metadata_comment(response_text: str, formatted_biography: Optional[s
 
     # Exactly one unambiguous target, or we decline to guess.
     if len(matching) != 1:
-        print(f"[{get_ts()}] WARN: metadata comment not restored; "
+        debug_log(f"WARN: metadata comment not restored; "
               f"{len(matching)} candidate biography blocks matched the subject.")
         return response_text
 
@@ -229,7 +229,7 @@ class ResearchOrchestrator:
 
     async def chat(self, message: str, history: List[Dict[str, Any]]) -> AsyncGenerator[Dict[str, Any], None]:
         """Entry point for the chat session, managing the dual-task status consumer loop."""
-        print(f"[{get_ts()}] DEBUG: Starting research orchestration for query: '{message}'")
+        debug_log(f"DEBUG: Starting research orchestration for query: '{message}'")
         
         from tools.utils import register_status_queue, unregister_status_queue, report_status
         status_queue = asyncio.Queue()
@@ -269,7 +269,7 @@ class ResearchOrchestrator:
                 yield final_result
                 
                 # Post-research step: Generate a meaningful title if needed
-                print(f"[{get_ts()}] STATUS: Generating research session title...")
+                debug_log("STATUS: Generating research session title...")
                 try:
                     # Compile a summary of history for title context
                     title_context = f"User Request: {message}\n"
@@ -291,11 +291,15 @@ class ResearchOrchestrator:
                         if clean_title:
                             yield {"title": clean_title}
                 except Exception as e:
-                    print(f"[{get_ts()}] DEBUG: Title generation failed (non-critical): {e}")
+                    debug_log(f"DEBUG: Title generation failed (non-critical): {e}")
 
             except Exception as e:
                 import traceback
-                print(f"[{get_ts()}] CRITICAL: Research task failed:\n{traceback.format_exc()}")
+                # The traceback can quote the prompt, which carries the query and
+                # the findings, so the full text is debug-only. The exception
+                # type alone is enough to know something broke.
+                debug_log(f"CRITICAL: Research task failed:\n{traceback.format_exc()}")
+                print(f"[{get_ts()}] CRITICAL: Research task failed: {type(e).__name__}")
                 yield {"error": str(e), "retry": True}
             
         finally:
@@ -430,7 +434,8 @@ class ResearchOrchestrator:
                         step["ok"] = not (isinstance(result, dict) and result.get("status") == "error")
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"result": result}))
                     except Exception as e:
-                        print(f"[{get_ts()}] ERROR: Tool {fc.name} failed: {e}")
+                        debug_log(f"ERROR: Tool {fc.name} failed: {e}")
+                        print(f"[{get_ts()}] ERROR: Tool {fc.name} failed: {type(e).__name__}")
                         step["ok"] = False
                         step["result"] = _truncate(str(e), 80)
                         tool_parts.append(types.Part.from_function_response(name=fc.name, response={"error": str(e)}))

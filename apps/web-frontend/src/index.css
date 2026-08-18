@@ -92,6 +92,17 @@
     @apply font-sans bg-background text-primary antialiased leading-relaxed;
   }
   * { @apply border-border; }
+
+  /* Applied for a single frame while the palette is swapped — see applyPreference()
+     in useTheme.js. A colour transition that is already running does not restart
+     when the custom property behind it changes, so without this some elements keep
+     the outgoing palette's colour indefinitely. */
+  :root.theme-switching,
+  :root.theme-switching *,
+  :root.theme-switching *::before,
+  :root.theme-switching *::after {
+    transition: none !important;
+  }
 }
 
 @layer components {

@@ -67,7 +67,8 @@ function loadConfig() {
     project: process.env.LINEAGE_GCP_PROJECT || config.LINEAGE_GCP_PROJECT || '',
     region: process.env.LINEAGE_REGION || config.LINEAGE_REGION || 'europe-west4',
     origins: process.env.LINEAGE_ALLOWED_ORIGINS || config.LINEAGE_ALLOWED_ORIGINS || '',
-    maxInstances: process.env.LINEAGE_MAX_INSTANCES || config.LINEAGE_MAX_INSTANCES || '2',
+    // Defaults to 1 deliberately — see the warning in deployApi().
+    maxInstances: process.env.LINEAGE_MAX_INSTANCES || config.LINEAGE_MAX_INSTANCES || '1',
   };
 }
 
@@ -125,6 +126,19 @@ function deployApi(config) {
       `CORS defaults to ${YELLOW}*${RESET} when unset, which would leave the API callable from any origin.\n` +
       `Set it to your site's origin, e.g.\n\n` +
       `    LINEAGE_ALLOWED_ORIGINS=https://your-domain\n`
+    );
+  }
+
+  // Archive traffic egresses from Cloud Run, so OpenArchieven sees one IP for
+  // every user. The 2 req/s pacing is a per-process clock, correct only while
+  // there is exactly one process. Each extra instance multiplies the real rate
+  // against that shared IP, which risks a ban rather than merely slow research.
+  if (config.maxInstances !== '1') {
+    console.warn(
+      `\n${YELLOW}⚠ max-instances is ${config.maxInstances}, not 1.${RESET}\n` +
+      `  The OpenArchieven rate limiter is per-process, so ${config.maxInstances} instances hit the\n` +
+      `  archive at up to ${config.maxInstances}x the agreed 2 req/s from a single IP. Move the limiter to\n` +
+      `  shared storage before scaling out, or you risk being blocked.\n`
     );
   }
 

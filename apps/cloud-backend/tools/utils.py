@@ -1,4 +1,5 @@
 import asyncio
+import os
 import re
 from datetime import datetime
 from typing import Any, Optional, Dict
@@ -6,8 +7,27 @@ from typing import Any, Optional, Dict
 # Registry to map asyncio tasks to their status queues
 _status_registry: Dict[int, asyncio.Queue] = {}
 
+# Research content — the query, the names searched, the archive results — must
+# not reach the server logs. On Cloud Run anything written to stdout is captured
+# into Cloud Logging and retained, so an ordinary debug `print` is a durable
+# record of what a user researched. Off unless explicitly enabled for local
+# debugging; the status stream to the browser is unaffected either way.
+LOG_RESEARCH_CONTENT = os.environ.get("LOG_RESEARCH_CONTENT", "").strip().lower() in ("1", "true", "yes")
+
+
 def get_ts():
     return datetime.now().strftime("%H:%M:%S")
+
+
+def debug_log(message: str):
+    """
+    Console output that may contain user research. Suppressed in production.
+
+    Use this for anything derived from the user's query or the records returned.
+    Operational messages that cannot contain research content may use `print`.
+    """
+    if LOG_RESEARCH_CONTENT:
+        print(f"[{get_ts()}] {message}")
 
 def register_status_queue(queue: asyncio.Queue, task: Optional[asyncio.Task] = None):
     """Registers a queue for a specific task's status updates (defaults to current task)."""
@@ -34,8 +54,9 @@ async def report_status(message: str):
 
     if queue:
         await queue.put(message)
-    # Also log to console for backend visibility
-    print(f"[{get_ts()}] STATUS: {message}")
+    # Status text names the people and archives being searched, so it is
+    # research content and stays out of the logs by default.
+    debug_log(f"STATUS: {message}")
 
 
 # --- Quota handling -------------------------------------------------------
