@@ -42,3 +42,7 @@ export const ANALYTICS_CONSENT_STORAGE = 'lineage_analytics_consent';
 // See src/monitoring.js — reports are scrubbed of research content before send.
 export const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN || '';
 export const isMonitoringConfigured = Boolean(SENTRY_DSN);
+
+// The archival/admin service (separate from the research API above). Unset means
+// the admin dashboard reports that it is not configured rather than guessing a host.
+export const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_BASE_URL || '';

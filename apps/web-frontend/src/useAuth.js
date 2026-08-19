@@ -58,6 +58,13 @@ function describeAuthError(e) {
  */
 export default function useAuth() {
   const [user, setUser] = useState(null);
+  // Read from the signed ID token's custom claims, not from a Firestore document:
+  // a claim is inside the token the API already verifies, so the same fact drives
+  // the UI and the server without a second lookup that could disagree.
+  //
+  // This gates VISIBILITY ONLY. It is a value from the client, so the API must
+  // verify the claim itself on every admin request and never trust this.
+  const [isAdmin, setIsAdmin] = useState(false);
   const [ready, setReady] = useState(!isFirebaseConfigured);
   const [error, setError] = useState(null);
 
@@ -76,9 +83,20 @@ export default function useAuth() {
     // leaving the user back on the landing page with no explanation.
     getRedirectResult(auth).catch((e) => setError(describeAuthError(e)));
 
-    return onAuthStateChanged(auth, (nextUser) => {
+    return onAuthStateChanged(auth, async (nextUser) => {
       setUser(nextUser);
       setReady(true);
+      if (!nextUser) {
+        setIsAdmin(false);
+        return;
+      }
+      try {
+        const token = await nextUser.getIdTokenResult();
+        setIsAdmin(token.claims.admin === true);
+      } catch {
+        // A failed claim read must not grant access.
+        setIsAdmin(false);
+      }
     });
   }, []);
 
@@ -112,6 +130,21 @@ export default function useAuth() {
     }
   }, []);
 
+  /**
+   * A fresh ID token for calling an authenticated API. Firebase refreshes it
+   * automatically when it is close to expiry, so this is cheap to call per request
+   * and always returns something currently valid.
+   */
+  const getIdToken = useCallback(async () => {
+    const auth = getFirebaseAuth();
+    if (!auth?.currentUser) return null;
+    try {
+      return await auth.currentUser.getIdToken();
+    } catch {
+      return null;
+    }
+  }, []);
+
   const signOut = useCallback(async () => {
     setError(null);
     if (!isFirebaseConfigured) {
@@ -135,6 +168,10 @@ export default function useAuth() {
     // True when the session is a local stand-in rather than a real Google account.
     // The UI must say so: a fake sign-in that looks real is worse than none.
     isSimulated: !isFirebaseConfigured && localSignedIn,
+    // Never true without a real Firebase session — the simulated login cannot
+    // grant admin, or anyone could set a localStorage flag and see the dashboard.
+    isAdmin: isFirebaseConfigured && isAdmin,
+    getIdToken,
     ready,
     error,
     signIn,

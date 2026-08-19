@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Sun, Moon, Monitor, Settings, LogOut, Menu, ShieldCheck, AlertTriangle } from 'lucide-react';
+import { Sun, Moon, Monitor, Settings, LogOut, Menu, ShieldCheck, AlertTriangle, Gauge } from 'lucide-react';
 import logo from '../assets/logo.svg';
 
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
@@ -28,6 +28,7 @@ const Header = ({
   onOpenSettings,
   onToggleSidebar,
   isSimulated = false,
+  isAdmin = false,
 }) => {
   const ThemeIcon = THEME_ICON[themePreference] || Monitor;
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -161,6 +162,17 @@ const Header = ({
                       <Settings size={15} className="shrink-0" />
                       <span>Settings & API Keys</span>
                     </button>
+
+                    {isAdmin && (
+                      <Link
+                        to="/admin"
+                        onClick={() => setDropdownOpen(false)}
+                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-secondary hover:text-accent hover:bg-card transition-colors cursor-pointer"
+                      >
+                        <Gauge size={15} className="shrink-0" />
+                        <span>Admin dashboard</span>
+                      </Link>
+                    )}
 
                     <Link
                       to="/privacy"

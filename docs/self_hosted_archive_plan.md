@@ -43,7 +43,12 @@
 
 ## 3. Storage & Infrastructure Requirements
 
-- **Hosting Target**: Oracle Cloud Infrastructure (OCI) Ampere A1 (ARM64, 4 OCPU, 24 GB RAM, 300 GB NVMe Storage).
+- **Hosting Target**: Oracle Cloud Infrastructure (OCI) Ampere A1 (ARM64 Ubuntu 24.04 LTS).
+- **Verified Host Details**:
+  - **Public IP**: `<OCI_HOST_IP>`
+  - **SSH User**: `ubuntu`
+  - **SSH Key**: `.ssh/ssh-key-2026-08-18.key`
+  - **Connect Command**: `ssh -i .ssh/ssh-key-2026-08-18.key ubuntu@<OCI_HOST_IP>`
 - **Data Volume**: ~250M–350M historical records (Births, Marriages, Deaths, DTB, Population Registers).
 - **Storage Footprint**: ~150 GB – 250 GB compressed search index.
 

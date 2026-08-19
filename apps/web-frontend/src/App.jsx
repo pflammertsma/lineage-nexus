@@ -5,6 +5,7 @@ import Hero from './components/Hero';
 import FeatureGrid from './components/FeatureGrid';
 import SourcesPage from './components/SourcesPage';
 import AiTransparencyPage from './components/AiTransparencyPage';
+import AdminDashboard from './components/AdminDashboard';
 import Sidebar from './components/Sidebar';
 import SettingsModal from './components/SettingsModal';
 import SyncConsentModal from './components/SyncConsentModal';
@@ -427,6 +428,7 @@ function App() {
         onOpenSettings={() => setConfigOpen(true)}
         onToggleSidebar={() => setSidebarOpen(v => !v)}
         isSimulated={auth.isSimulated}
+        isAdmin={auth.isAdmin}
       />
 
       <div className="toast-container overflow-visible z-50">
@@ -559,6 +561,15 @@ function App() {
         {/* Reachable signed in or out, and linkable from the OAuth consent screen. */}
         <Route path="/sources" element={<SourcesPage />} />
         <Route path="/ai-transparency" element={<AiTransparencyPage />} />
+
+        {/* Visibility guard only — the archival API verifies the token and claim
+            itself. Someone who forces this route sees an empty dashboard and 403s. */}
+        <Route path="/admin" element={
+          !auth.ready ? <AuthPending /> :
+          !isLoggedIn ? <Navigate to="/" replace /> :
+          !auth.isAdmin ? <Navigate to="/chat" replace /> :
+          <AdminDashboard getIdToken={auth.getIdToken} />
+        } />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
 
