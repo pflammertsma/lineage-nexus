@@ -195,7 +195,26 @@ function deployRules(config) {
   run('firebase', ['deploy', '--only', 'firestore:rules', '--project', config.project]);
 }
 
-const TARGETS = { api: deployApi, web: deployWeb, rules: deployRules };
+function deployArchival(config) {
+  step('Deploying Self-Hosted Archival Gateway API to OCI');
+  const ociHost = process.env.LINEAGE_OCI_HOST || config.ociHost || '140.238.212.86';
+  const ociUser = process.env.LINEAGE_OCI_USER || config.ociUser || 'ubuntu';
+  const keyPath = process.env.LINEAGE_OCI_KEY || join(ROOT, '.ssh', 'ssh-key-2026-08-18.key');
+
+  if (!existsSync(keyPath)) {
+    fail(`SSH Key not found at ${keyPath}. Ensure key is present in .ssh/ or set LINEAGE_OCI_KEY.`);
+  }
+
+  const targetRemote = `${ociUser}@${ociHost}`;
+  step(`Syncing archival harvester service to ${targetRemote}:/opt/archival-harvester/`);
+  run('scp', ['-i', keyPath, '-r', 'services/archival-harvester/*', `${targetRemote}:/opt/archival-harvester/`]);
+
+  step('Rebuilding and restarting gateway container on OCI host');
+  const remoteCmd = 'cd /opt/archival-harvester && sudo docker stop gateway || true; sudo docker rm gateway || true; sudo docker build -t archival-gateway . && sudo docker run -d --name gateway -e MEILI_MASTER_KEY=lineage_nexus_archival_key_2026 -e ADMIN_SECRET_TOKEN=lineage_admin_secret_998877 --restart always --net=host archival-gateway';
+  run('ssh', ['-i', keyPath, targetRemote, `"${remoteCmd}"`]);
+}
+
+const TARGETS = { api: deployApi, web: deployWeb, rules: deployRules, archival: deployArchival };
 
 const target = process.argv[2];
 if (!target || (!TARGETS[target] && target !== 'all')) {
@@ -204,7 +223,9 @@ if (!target || (!TARGETS[target] && target !== 'all')) {
 }
 
 const config = loadConfig();
-preflight(config);
+if (target !== 'archival') {
+  preflight(config);
+}
 
 if (target === 'all') {
   // Rules first: sync fails silently against default deny-all rules, so they
@@ -212,6 +233,7 @@ if (target === 'all') {
   deployRules(config);
   deployApi(config);
   deployWeb(config);
+  deployArchival(config);
 } else {
   TARGETS[target](config);
 }

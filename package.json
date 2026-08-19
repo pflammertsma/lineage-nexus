@@ -9,6 +9,7 @@
     "deploy:all": "node scripts/deploy.mjs all",
     "deploy:api": "node scripts/deploy.mjs api",
     "deploy:web": "node scripts/deploy.mjs web",
-    "deploy:rules": "node scripts/deploy.mjs rules"
+    "deploy:rules": "node scripts/deploy.mjs rules",
+    "deploy:archival": "node scripts/deploy.mjs archival"
   }
 }
