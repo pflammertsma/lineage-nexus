@@ -39,3 +39,6 @@ archived/dash-app/cache/
 .ssh/
 *.key
 *.pem
+
+# Written transiently by scripts/deploy.mjs (archival secrets)
+.archival-env

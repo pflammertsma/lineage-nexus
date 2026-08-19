@@ -69,6 +69,14 @@ function loadConfig() {
     origins: process.env.LINEAGE_ALLOWED_ORIGINS || config.LINEAGE_ALLOWED_ORIGINS || '',
     // Defaults to 1 deliberately — see the warning in deployApi().
     maxInstances: process.env.LINEAGE_MAX_INSTANCES || config.LINEAGE_MAX_INSTANCES || '1',
+
+    // Archival host. No defaults: a hostname is infrastructure detail and the two
+    // secrets below are credentials, none of which belong in a public repository.
+    ociHost: process.env.LINEAGE_OCI_HOST || config.LINEAGE_OCI_HOST || '',
+    ociUser: process.env.LINEAGE_OCI_USER || config.LINEAGE_OCI_USER || 'ubuntu',
+    ociKey: process.env.LINEAGE_OCI_KEY || config.LINEAGE_OCI_KEY || join(ROOT, '.ssh', 'id_oci'),
+    meiliMasterKey: process.env.LINEAGE_MEILI_MASTER_KEY || config.LINEAGE_MEILI_MASTER_KEY || '',
+    adminToken: process.env.LINEAGE_ADMIN_TOKEN || config.LINEAGE_ADMIN_TOKEN || '',
   };
 }
 
@@ -195,23 +203,70 @@ function deployRules(config) {
   run('firebase', ['deploy', '--only', 'firestore:rules', '--project', config.project]);
 }
 
-function deployArchival(config) {
-  step('Deploying Self-Hosted Archival Gateway API to OCI');
-  const ociHost = process.env.LINEAGE_OCI_HOST || config.ociHost || '140.238.212.86';
-  const ociUser = process.env.LINEAGE_OCI_USER || config.ociUser || 'ubuntu';
-  const keyPath = process.env.LINEAGE_OCI_KEY || join(ROOT, '.ssh', 'ssh-key-2026-08-18.key');
+function archivalConfigProblem(config) {
+  const missing = [];
+  if (!config.ociHost) missing.push('LINEAGE_OCI_HOST');
+  if (!config.meiliMasterKey) missing.push('LINEAGE_MEILI_MASTER_KEY');
+  if (!config.adminToken) missing.push('LINEAGE_ADMIN_TOKEN');
+  if (missing.length) return `not configured (missing ${missing.join(', ')})`;
+  if (!existsSync(config.ociKey)) return `SSH key not found at ${config.ociKey}`;
+  return null;
+}
 
-  if (!existsSync(keyPath)) {
-    fail(`SSH Key not found at ${keyPath}. Ensure key is present in .ssh/ or set LINEAGE_OCI_KEY.`);
+function deployArchival(config) {
+  const problem = archivalConfigProblem(config);
+  if (problem) {
+    fail(
+      `Cannot deploy the archival gateway: ${problem}.`,
+      `Add the following to ${YELLOW}.deploy.env${RESET} (gitignored):
+
+` +
+      `    LINEAGE_OCI_HOST=your-host
+` +
+      `    LINEAGE_OCI_USER=ubuntu
+` +
+      `    LINEAGE_OCI_KEY=path/to/private-key
+` +
+      `    LINEAGE_MEILI_MASTER_KEY=...
+` +
+      `    LINEAGE_ADMIN_TOKEN=...
+`
+    );
   }
 
-  const targetRemote = `${ociUser}@${ociHost}`;
-  step(`Syncing archival harvester service to ${targetRemote}:/opt/archival-harvester/`);
-  run('scp', ['-i', keyPath, '-r', 'services/archival-harvester/*', `${targetRemote}:/opt/archival-harvester/`]);
+  step('Deploying self-hosted archival gateway');
+  const target = `${config.ociUser}@${config.ociHost}`;
 
-  step('Rebuilding and restarting gateway container on OCI host');
-  const remoteCmd = 'cd /opt/archival-harvester && sudo docker stop gateway || true; sudo docker rm gateway || true; sudo docker build -t archival-gateway . && sudo docker run -d --name gateway -e MEILI_MASTER_KEY=lineage_nexus_archival_key_2026 -e ADMIN_SECRET_TOKEN=lineage_admin_secret_998877 --restart always --net=host archival-gateway';
-  run('ssh', ['-i', keyPath, targetRemote, `"${remoteCmd}"`]);
+  step(`Syncing service to ${target}:/opt/archival-harvester/`);
+  run('scp', ['-i', config.ociKey, '-r', 'services/archival-harvester/*', `${target}:/opt/archival-harvester/`]);
+
+  // Secrets travel in a file, never on the command line. An `-e SECRET=...` in a
+  // docker run would be visible in the remote host's process list to any user on
+  // the box, and would be written into shell history on both ends.
+  const envFile = '.archival-env';
+  const localEnv = join(ROOT, envFile);
+  writeFileSync(
+    localEnv,
+    `MEILI_MASTER_KEY=${config.meiliMasterKey}` + String.fromCharCode(10) +
+    `ADMIN_SECRET_TOKEN=${config.adminToken}` + String.fromCharCode(10),
+    { encoding: 'utf8', mode: 0o600 }
+  );
+
+  try {
+    run('scp', ['-i', config.ociKey, localEnv, `${target}:/opt/archival-harvester/.env`]);
+    const remote = [
+      'cd /opt/archival-harvester',
+      'sudo docker stop gateway || true',
+      'sudo docker rm gateway || true',
+      'sudo docker build -t archival-gateway .',
+      'sudo docker run -d --name gateway --env-file /opt/archival-harvester/.env --restart always --net=host archival-gateway',
+      // The container has the values now; leave nothing readable at rest.
+      'shred -u /opt/archival-harvester/.env 2>/dev/null || rm -f /opt/archival-harvester/.env',
+    ].join(' && ');
+    run('ssh', ['-i', config.ociKey, target, `"${remote}"`]);
+  } finally {
+    rmSync(localEnv, { force: true });
+  }
 }
 
 const TARGETS = { api: deployApi, web: deployWeb, rules: deployRules, archival: deployArchival };
@@ -233,7 +288,14 @@ if (target === 'all') {
   deployRules(config);
   deployApi(config);
   deployWeb(config);
-  deployArchival(config);
+  // Different infrastructure and separate credentials, so a contributor without
+  // them gets a warning rather than a failed deploy of everything else.
+  const archivalProblem = archivalConfigProblem(config);
+  if (archivalProblem) {
+    console.warn(`${YELLOW}⚠ Skipping archival gateway: ${archivalProblem}.${RESET}`);
+  } else {
+    deployArchival(config);
+  }
 } else {
   TARGETS[target](config);
 }
