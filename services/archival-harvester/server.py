@@ -283,3 +283,40 @@ def admin_query(
     },
     "hits": hits,
   }
+
+
+@app.get("/api/v1/admin/coverage", dependencies=[Depends(require_admin)])
+def admin_coverage():
+  """
+  What is actually in the index, broken down by archive and record type.
+
+  Uses Meilisearch facets rather than counting documents, so it stays O(1) as the
+  index grows. This is the answer to "have we harvested X yet" — the same
+  question the research tools need in order to know when to fall back to the live
+  Open Archieven API.
+  """
+  index = meili_client.index(INDEX_NAME)
+  try:
+    stats = index.get_stats()
+    facets = index.search("", {"limit": 0, "facets": ["archive", "kind"]})
+    distribution = facets.get("facetDistribution", {}) or {}
+  except Exception as exc:
+    return {"status": "error", "error_message": str(exc)}
+
+  by_archive = distribution.get("archive", {}) or {}
+  by_kind = distribution.get("kind", {}) or {}
+
+  return {
+    "status": "success",
+    "total_records": stats.number_of_documents,
+    "is_indexing": stats.is_indexing,
+    "archive_count": len(by_archive),
+    "by_archive": sorted(
+      ({"archive": k, "records": v} for k, v in by_archive.items()),
+      key=lambda r: -r["records"],
+    ),
+    "by_kind": sorted(
+      ({"kind": k, "records": v} for k, v in by_kind.items()),
+      key=lambda r: -r["records"],
+    ),
+  }

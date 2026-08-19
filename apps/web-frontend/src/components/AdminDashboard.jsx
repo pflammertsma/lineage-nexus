@@ -7,6 +7,7 @@ import {
 import { ADMIN_API_BASE_URL } from '../config';
 import MetricChart from './MetricChart';
 import ArchiveQuery from './ArchiveQuery';
+import ArchiveCoverage from './ArchiveCoverage';
 
 const REFRESH_MS = 15_000;
 
@@ -63,6 +64,7 @@ const Meter = ({ icon: Icon, label, percent, detail }) => (
 const AdminDashboard = ({ getIdToken }) => {
   const [status, setStatus] = useState(null);
   const [history, setHistory] = useState([]);
+  const [coverage, setCoverage] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);
@@ -105,8 +107,13 @@ const AdminDashboard = ({ getIdToken }) => {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (h.ok) setHistory((await h.json()).points || []);
+
+        const c = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/coverage`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (c.ok) setCoverage(await c.json());
       } catch {
-        // A missing chart is not worth failing the whole dashboard for.
+        // A missing chart or coverage panel is not worth failing the dashboard for.
       }
     } catch {
       // A CORS rejection and a dead host are indistinguishable from here.
@@ -202,10 +209,12 @@ const AdminDashboard = ({ getIdToken }) => {
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-3 mb-8">
-              <MetricChart points={history} field="cpu" label="CPU · 6 hours" colour="var(--color-accent)" />
-              <MetricChart points={history} field="mem" label="Memory · 6 hours" colour="#10B981" />
-              <MetricChart points={history} field="disk" label="Disk · 6 hours" colour="#C8A464" />
+            <div className="mb-8">
+              <MetricChart points={history} />
+            </div>
+
+            <div className="mb-8">
+              <ArchiveCoverage coverage={coverage} />
             </div>
 
             <div className="mb-8">
