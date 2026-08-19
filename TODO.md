@@ -13,7 +13,8 @@ correctness and observability now outrank new features. Grouped by that.
   silently stop syncing. Needs a size check before writing, plus either chunking
   across documents or an explicit, honest message. *Highest risk item: it loses
   user data quietly.*
-- [ ] **No error monitoring.** We are live and blind — nothing reports a broken
+- [x] **Error monitoring built** (`monitoring.js`), scrubbed of research content and
+  inert until `VITE_SENTRY_DSN` is set — supply a DSN to switch it on. Original note: We are live and blind — nothing reports a broken
   deploy, an SSE failure, or a Firestore rejection. Sentry (or equivalent) on
   both the frontend and the Cloud Run service. Must be configured to scrub
   research content, to keep the "we do not log your research" claim true.
@@ -61,12 +62,15 @@ searches are served from our own index.
   check Open Archieven's terms on bulk retrieval before starting.
 
 ### B. Post-launch cleanups
-- [ ] **Rotate the archival secrets.** `MEILI_MASTER_KEY` and
+- [x] **Admin dashboard** at `/admin`, gated on a Firebase `admin` custom claim,
+  with the gateway verifying the ID token against Google's public certs — no
+  service account key on the VM, and no shared secret in the browser.
+- [x] **Rotated the archival secrets.** `MEILI_MASTER_KEY` and
   `ADMIN_SECRET_TOKEN` were pasted into a chat transcript and were briefly staged
   for commit to a public repository. They are gitignored now, but the values are
   burned. Generate new ones, update `.deploy.env`, redeploy the gateway.
-- [ ] **`services/archival-harvester/server.py:33` compares the admin token with
-  `!=`**, which is not constant-time and leaks length/prefix information through
+- [x] **Admin token comparison is now constant-time** (`secrets.compare_digest`); it was
+  a plain `!=`, which is not constant-time and leaks length/prefix information through
   timing. Use `secrets.compare_digest`.
 - [x] **Simplify API key management** *(implemented, not yet deployed)*. One
   prominent "Gemini API key" field; the second key is now behind an understated
@@ -74,7 +78,8 @@ searches are served from our own index.
   "Paid / Main" and "Optional Free Tier" badges are gone — they implied we bill
   for something, when every key is the user's own Google account, and framed the
   backup as expected rather than optional.
-- [ ] **Lazy-load Firestore.** The bundle is ~1 MB (307 kB gzip) in a single
+- [x] **Firestore lazy-loaded** — first load dropped 307 kB -> 182 kB gzip (-41%).
+  Superseded note: The bundle is ~1 MB (307 kB gzip) in a single
   chunk, mostly Firebase. `useAuth` calls `getFirebaseAuth()` synchronously, so
   this needs an async init path rather than a config tweak.
 - [ ] **Ask Open Archives to raise the per-IP limit** — see Known Issues. Worth
@@ -158,7 +163,7 @@ existing code and a working login.
       Platform → Branding — it is **not** in the Firebase console, which is the
       confusing part. App name, support email, home page and privacy URL set.
 - [x] **Firestore** database created.
-- [ ] **Publishing status must be "In production"** (Audience page). In Testing
+- [x] **Publishing status is "In production"** (Audience page). In Testing
       only manually-added test users can sign in, which for a public site means
       nobody.
 - [ ] Brand verification is pending, triggered *solely by uploading a logo*. The
@@ -261,7 +266,7 @@ pnpm deploy:rules
   certificate and a "Site Not Found" body — `https://lineage.nexus` failed with
   a name-mismatch error. DNS-only now resolves to `199.36.158.100` on both
   8.8.8.8 and 1.1.1.1, with no leftover AAAA records.
-- [ ] Waiting on Firebase to issue the certificate (async, minutes to ~24h).
+- [x] Certificate issued and live (`CN=lineage.nexus`). Was: waiting on Firebase (async, minutes to ~24h).
   Status moves Needs setup → Pending → **Connected**; only Connected means the
   cert is live. Nothing else depends on this.
 - [ ] ⚠️ **Do not proxy the API through a CDN that buffers responses.** Research
