@@ -5,6 +5,8 @@ import {
   Database, RefreshCw, AlertTriangle, CheckCircle2,
 } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
+import MetricChart from './MetricChart';
+import ArchiveQuery from './ArchiveQuery';
 
 const REFRESH_MS = 15_000;
 
@@ -60,6 +62,7 @@ const Meter = ({ icon: Icon, label, percent, detail }) => (
  */
 const AdminDashboard = ({ getIdToken }) => {
   const [status, setStatus] = useState(null);
+  const [history, setHistory] = useState([]);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);
@@ -94,6 +97,17 @@ const AdminDashboard = ({ getIdToken }) => {
       setStatus(await res.json());
       setError(null);
       setFetchedAt(new Date());
+
+      // Separate call: history is a ring buffer on the server, so it survives a
+      // page reload where client-side accumulation would not.
+      try {
+        const h = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/history?minutes=360`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (h.ok) setHistory((await h.json()).points || []);
+      } catch {
+        // A missing chart is not worth failing the whole dashboard for.
+      }
     } catch {
       // A CORS rejection and a dead host are indistinguishable from here.
       setError('Could not reach the archival API. It may be offline, or not permit this origin.');
@@ -186,6 +200,16 @@ const AdminDashboard = ({ getIdToken }) => {
                 percent={disk?.percent}
                 detail={disk ? `${disk.used_gb?.toFixed(1)} of ${disk.total_gb?.toFixed(1)} GB` : '—'}
               />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3 mb-8">
+              <MetricChart points={history} field="cpu" label="CPU · 6 hours" colour="var(--color-accent)" />
+              <MetricChart points={history} field="mem" label="Memory · 6 hours" colour="#10B981" />
+              <MetricChart points={history} field="disk" label="Disk · 6 hours" colour="#C8A464" />
+            </div>
+
+            <div className="mb-8">
+              <ArchiveQuery getIdToken={getIdToken} />
             </div>
 
             {engine && (

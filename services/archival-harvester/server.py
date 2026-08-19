@@ -1,11 +1,13 @@
+import asyncio
 import os
 import time
 import psutil
+from collections import deque
 import meilisearch
 from fastapi import FastAPI, Query, HTTPException, Header, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from typing import Optional, List, Dict, Any
+from typing import Any, Deque, Dict, List, Optional
 
 app = FastAPI(
   title="Lineage Nexus Archival Gateway Engine",
@@ -140,3 +142,129 @@ def get_admin_status():
 if __name__ == "__main__":
   import uvicorn
   uvicorn.run(app, host="0.0.0.0", port=8090)
+
+
+# --- Metrics history ------------------------------------------------------
+# /api/v1/admin/status is a single instant, which cannot draw a line. A ring
+# buffer of samples gives the dashboard six hours of history without a
+# time-series database: 6h at 15s is 1440 points, a few hundred kB.
+#
+# In memory only, so it resets when the container restarts. That is a fair trade
+# for the complexity avoided; if history needs to survive deploys, this is the
+# point to swap in real storage.
+METRICS_INTERVAL_SECONDS = 15
+METRICS_WINDOW_SECONDS = 6 * 60 * 60
+METRICS_CAPACITY = METRICS_WINDOW_SECONDS // METRICS_INTERVAL_SECONDS
+
+_metrics: Deque[Dict[str, Any]] = deque(maxlen=METRICS_CAPACITY)
+
+
+async def _sample_metrics() -> None:
+  """Records one sample per interval for the lifetime of the process."""
+  while True:
+    try:
+      mem = psutil.virtual_memory()
+      disk = psutil.disk_usage("/")
+      docs = None
+      indexing = None
+      try:
+        stats = meili_client.index(INDEX_NAME).get_stats()
+        docs = stats.number_of_documents
+        indexing = stats.is_indexing
+      except Exception:
+        # Meilisearch being unreachable should not stop CPU/memory history.
+        pass
+
+      _metrics.append({
+        "t": int(time.time()),
+        # interval=None so the first call does not block for a second.
+        "cpu": psutil.cpu_percent(interval=None),
+        "mem": round(mem.percent, 1),
+        "disk": round(disk.percent, 1),
+        "docs": docs,
+        "indexing": indexing,
+      })
+    except Exception:
+      pass
+    await asyncio.sleep(METRICS_INTERVAL_SECONDS)
+
+
+@app.on_event("startup")
+async def _start_metrics() -> None:
+  psutil.cpu_percent(interval=None)  # prime the counter; the first read is always 0
+  asyncio.create_task(_sample_metrics())
+
+
+@app.get("/api/v1/admin/history", dependencies=[Depends(require_admin)])
+def admin_history(minutes: int = Query(360, ge=5, le=360)):
+  """Samples from the last `minutes`, oldest first."""
+  cutoff = time.time() - minutes * 60
+  points = [p for p in _metrics if p["t"] >= cutoff]
+  return {
+    "status": "success",
+    "interval_seconds": METRICS_INTERVAL_SECONDS,
+    "window_minutes": minutes,
+    "count": len(points),
+    "points": points,
+  }
+
+
+@app.get("/api/v1/admin/query", dependencies=[Depends(require_admin)])
+def admin_query(
+  q: str = Query(..., min_length=1, description="Free-text name or place"),
+  archive: Optional[str] = Query(None, description="Restrict to one archive code"),
+  kind: Optional[str] = Query(None, description="Restrict to one record type"),
+  limit: int = Query(20, ge=1, le=100),
+):
+  """
+  Raw index search for validating coverage. No AI, no orchestration.
+
+  Reports where each hit came from — archive, record type and institution — so a
+  result can be traced to the export it was ingested from. That is the point of
+  this endpoint: answering "is this record actually in there, and from where".
+  """
+  index = meili_client.index(INDEX_NAME)
+
+  filters = []
+  if archive:
+    filters.append(f"archive = '{archive}'")
+  if kind:
+    filters.append(f"kind = '{kind}'")
+
+  params: Dict[str, Any] = {"limit": limit}
+  if filters:
+    params["filter"] = " AND ".join(filters)
+
+  started = time.time()
+  try:
+    results = index.search(q, params)
+  except Exception as exc:
+    return {"status": "error", "error_message": str(exc)}
+
+  hits = []
+  for hit in results.get("hits", []):
+    hits.append({
+      "id": hit.get("id"),
+      "names": hit.get("names", ""),
+      "persons": hit.get("persons", []),
+      "event_type": hit.get("event_type", ""),
+      "event_date": hit.get("event_date", ""),
+      "event_place": hit.get("event_place", ""),
+      # Provenance: which export this document came from.
+      "source": {
+        "archive": hit.get("archive", ""),
+        "kind": hit.get("kind", ""),
+        "institution": hit.get("institution", ""),
+        "index": INDEX_NAME,
+      },
+      "url": hit.get("url", ""),
+    })
+
+  return {
+    "status": "success",
+    "query": q,
+    "took_ms": round((time.time() - started) * 1000, 1),
+    "estimated_total": results.get("estimatedTotalHits", len(hits)),
+    "returned": len(hits),
+    "hits": hits,
+  }
