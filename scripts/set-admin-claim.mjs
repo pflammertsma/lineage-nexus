@@ -12,7 +12,7 @@
  * Requires application default credentials with access to the Firebase project:
  *
  *   gcloud auth application-default login
- *   npm i firebase-admin      # not a project dependency; admin-only tooling
+ *   pnpm add -D -w firebase-admin    # already installed in this repo
  *
  * The claim is applied to the account's *next* token. Firebase refreshes hourly,
  * so sign out and back in to see it immediately.
@@ -49,21 +49,22 @@ if (!project) {
   process.exit(1);
 }
 
-let admin;
+// firebase-admin v12+ exposes modular subpath entry points; the older
+// `admin.credential.applicationDefault()` shape does not exist here.
+let initializeApp, applicationDefault, getAuth;
 try {
-  admin = await import('firebase-admin');
+  ({ initializeApp, applicationDefault } = await import('firebase-admin/app'));
+  ({ getAuth } = await import('firebase-admin/auth'));
 } catch {
-  console.error('firebase-admin is not installed. Run:  npm i firebase-admin');
+  console.error('firebase-admin is not installed. Run:  pnpm add -D -w firebase-admin');
   process.exit(1);
 }
 
-const app = admin.default.initializeApp({
-  projectId: project,
-  credential: admin.default.credential.applicationDefault(),
-});
+const app = initializeApp({ projectId: project, credential: applicationDefault() });
+const auth = getAuth(app);
 
 try {
-  const user = await admin.default.auth(app).getUserByEmail(email);
+  const user = await auth.getUserByEmail(email);
   const existing = user.customClaims || {};
 
   // Merge rather than overwrite: blowing away other claims while granting admin
@@ -72,7 +73,7 @@ try {
   if (revoke) delete claims.admin;
   else claims.admin = true;
 
-  await admin.default.auth(app).setCustomUserClaims(user.uid, claims);
+  await auth.setCustomUserClaims(user.uid, claims);
 
   console.log(`${revoke ? 'Revoked' : 'Granted'} admin for ${email} (${user.uid}) on ${project}.`);
   console.log('Claims are now:', JSON.stringify(claims));

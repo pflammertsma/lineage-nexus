@@ -245,10 +245,14 @@ function deployArchival(config) {
   // the box, and would be written into shell history on both ends.
   const envFile = '.archival-env';
   const localEnv = join(ROOT, envFile);
+  const NL = String.fromCharCode(10);
   writeFileSync(
     localEnv,
-    `MEILI_MASTER_KEY=${config.meiliMasterKey}` + String.fromCharCode(10) +
-    `ADMIN_SECRET_TOKEN=${config.adminToken}` + String.fromCharCode(10),
+    `MEILI_MASTER_KEY=${config.meiliMasterKey}` + NL +
+    `ADMIN_SECRET_TOKEN=${config.adminToken}` + NL +
+    // Needed to validate the `aud` and `iss` of Firebase ID tokens. Not a secret,
+    // but the gateway cannot verify a dashboard login without it.
+    `FIREBASE_PROJECT_ID=${config.project}` + NL,
     { encoding: 'utf8', mode: 0o600 }
   );
 

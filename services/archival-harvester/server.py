@@ -28,14 +28,11 @@ START_TIME = time.time()
 
 meili_client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY)
 
-def verify_admin_token(x_admin_token: Optional[str] = Header(None)):
-  """Validates the X-Admin-Token header for private admin API endpoints."""
-  if not x_admin_token or x_admin_token != ADMIN_SECRET_TOKEN:
-    raise HTTPException(
-      status_code=status.HTTP_401_UNAUTHORIZED,
-      detail="Invalid or missing X-Admin-Token header for Private API access."
-    )
-  return x_admin_token
+# Admin auth lives in auth.py. It accepts either a Firebase ID token with an
+# `admin` claim (used by the web dashboard, no secret in the browser) or the
+# X-Admin-Token shared secret (used by curl). The old comparison here was a plain
+# `!=`, which is not constant-time.
+from auth import require_admin
 
 @app.get("/health")
 def health_check():
@@ -93,7 +90,7 @@ def get_record(archive_code: str, identifier: str):
   except Exception as e:
     raise HTTPException(status_code=404, detail=f"Record not found: {str(e)}")
 
-@app.get("/api/v1/admin/status", dependencies=[Depends(verify_admin_token)])
+@app.get("/api/v1/admin/status", dependencies=[Depends(require_admin)])
 def get_admin_status():
   """
   Private Admin API endpoint providing detailed system metrics and archival engine status.
