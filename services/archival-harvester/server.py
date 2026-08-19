@@ -4,6 +4,7 @@ import psutil
 import meilisearch
 from fastapi import FastAPI, Query, HTTPException, Header, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from typing import Optional, List, Dict, Any
 
 app = FastAPI(

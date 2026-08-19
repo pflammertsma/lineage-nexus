@@ -47,14 +47,26 @@ correctness and observability now outrank new features. Grouped by that.
 Move the research orchestrator off Cloud Run and onto the OCI-hosted archival
 gateway at `api.lineage.nexus`, so there is one API instead of two.
 
-- [ ] **Test SSE through the Cloudflare Tunnel first — this can invalidate the
-  plan.** `api.lineage.nexus` is served through `cloudflared`, and Cloudflare
-  drops a connection that goes silent for ~100s. A research turn can legitimately
-  go quiet for longer: `QUOTA_MAX_WAIT_SECONDS = 120` means a single quota pause
-  exceeds it. Add a throwaway endpoint that streams, then goes silent for 110s,
-  and see whether the connection survives.
-  - If it dies: emit a keepalive frame every ~15s during quota waits and paced
-    searches. The SSE writer already pads frames, so this is a small change.
+- [x] **SSE through the Cloudflare Tunnel: tested, and it works with keepalives.**
+  Measured against the live tunnel with a deliberately silent stream:
+
+  | silence | result |
+  |---|---|
+  | 20 / 30 / 45 / 90 / 110s | survived |
+  | 130s | dropped, ~126s in |
+
+  So the tolerance is about **120 seconds**, and `QUOTA_MAX_WAIT_SECONDS = 120`
+  sat exactly on that boundary — a single quota pause was a coin flip.
+- [x] **Keepalive added** (`main.py`, `KEEPALIVE_SECONDS = 15`). The stream now
+  emits an SSE comment frame during any silence. Wrapping the iterator covers
+  every silent period rather than each place that happens to wait, and clients
+  skip lines that are not `data: `, so the UI never sees them.
+  - Implementation note worth keeping: the pull is held in a Task across
+    timeouts. `asyncio.wait_for` cancels the coroutine it is waiting on, which
+    tears down the async generator — a unit test caught research turns ending
+    silently after the first keepalive.
+  - *Verified: all frames delivered across two silent gaps, keepalives invisible
+    to the client parser.*
 - [ ] Port `apps/cloud-backend` onto the OCI service. Carry over, because these
   are easy to lose in a port: the per-key rate limiter, the request/history caps,
   `LOG_RESEARCH_CONTENT=false` (the privacy policy promises research is not

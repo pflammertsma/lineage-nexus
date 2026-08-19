@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import json
 import os
@@ -20,6 +21,10 @@ MAX_MESSAGE_CHARS = 8_000
 MAX_HISTORY_MESSAGES = 60
 MAX_HISTORY_CHARS = 400_000
 MAX_BODY_BYTES = 1_000_000
+
+# Well inside the ~120s of silence the production proxy tolerates.
+KEEPALIVE_SECONDS = 15
+NEWLINE = chr(10)
 
 # Per-key sliding window. Keyed by a hash of the API key, so a shared IP (a
 # household, a university) is not collectively limited, and the key itself is
@@ -196,11 +201,40 @@ async def chat(
             from orchestrator import ResearchOrchestrator
             orchestrator = ResearchOrchestrator(client=client, fallback_client=fallback_client, model_name=request.model)
             
-            async for update in orchestrator.chat(message=request.message, history=trimmed_history):
-                # Padding must go before \n\n to stay within the same 'data' chunk.
-                # Clients trim the frame before parsing, so the filler is discarded.
+            # A research turn can legitimately go silent for a long time — a quota
+            # pause alone is up to QUOTA_MAX_WAIT_SECONDS (120s), and paced archive
+            # searches add more. Measured against the production tunnel, the proxy
+            # drops a connection after roughly 120s of silence, so one quota wait
+            # sits exactly on the boundary.
+            #
+            # An SSE comment frame keeps it warm without reaching the application:
+            # clients skip any line that is not `data: `, so the UI never sees it.
+            # Wrapping the iterator covers every silent period rather than each
+            # place that happens to wait.
+            stream = orchestrator.chat(message=request.message, history=trimmed_history)
+            pending = None
+            while True:
+                # The pull is a Task held across timeouts, deliberately. Using
+                # asyncio.wait_for here cancels the awaited coroutine when it
+                # times out, which tears down the generator mid-turn: research
+                # then ends silently after the first keepalive.
+                if pending is None:
+                    pending = asyncio.ensure_future(stream.__anext__())
+                done, _ = await asyncio.wait({pending}, timeout=KEEPALIVE_SECONDS)
+                if not done:
+                    yield ': keepalive' + NEWLINE + NEWLINE
+                    continue
+
+                task, pending = pending, None
+                try:
+                    update = task.result()
+                except StopAsyncIteration:
+                    break
+
+                # Padding goes before the blank line to stay within the same 'data'
+                # chunk. Clients trim the frame before parsing, so it is discarded.
                 payload = json.dumps(update)
-                chunk = f"data: {payload}{' ' * max(0, 4096 - len(payload))}\n\n"
+                chunk = 'data: ' + payload + ' ' * max(0, 4096 - len(payload)) + NEWLINE + NEWLINE
                 yield chunk
                 
         except Exception as e:
