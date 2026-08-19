@@ -36,11 +36,6 @@ correctness and observability now outrank new features. Grouped by that.
   deploy, an SSE failure, or a Firestore rejection. Sentry (or equivalent) on
   both the frontend and the Cloud Run service. Must be configured to scrub
   research content, to keep the "we do not log your research" claim true.
-- [ ] **Billing budget** *(console — yours)*. On the Define step, turn the
-  **spend cap off**; a cap is limited to one project *and* one service, which is
-  what produced "Please select a service". A plain alert budget accepts
-  "All services".
-- [ ] **Branding appeal** — submitted, in review. No action.
 
 ### A2. Migrate to the self-hosted API (deprecate Cloud Run)
 
