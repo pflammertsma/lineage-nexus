@@ -23,7 +23,51 @@ correctness and observability now outrank new features. Grouped by that.
   "All services".
 - [ ] **Branding appeal** — submitted, in review. No action.
 
+### A2. Migrate to the self-hosted API (deprecate Cloud Run)
+
+Move the research orchestrator off Cloud Run and onto the OCI-hosted archival
+gateway at `api.lineage.nexus`, so there is one API instead of two.
+
+- [ ] **Test SSE through the Cloudflare Tunnel first — this can invalidate the
+  plan.** `api.lineage.nexus` is served through `cloudflared`, and Cloudflare
+  drops a connection that goes silent for ~100s. A research turn can legitimately
+  go quiet for longer: `QUOTA_MAX_WAIT_SECONDS = 120` means a single quota pause
+  exceeds it. Add a throwaway endpoint that streams, then goes silent for 110s,
+  and see whether the connection survives.
+  - If it dies: emit a keepalive frame every ~15s during quota waits and paced
+    searches. The SSE writer already pads frames, so this is a small change.
+- [ ] Port `apps/cloud-backend` onto the OCI service. Carry over, because these
+  are easy to lose in a port: the per-key rate limiter, the request/history caps,
+  `LOG_RESEARCH_CONTENT=false` (the privacy policy promises research is not
+  logged, and the VM logs to disk by default), and the AI-generation marker.
+- [ ] Run both APIs in parallel and complete a full research turn against OCI
+  before switching anything.
+- [ ] Flip `VITE_API_BASE_URL`; `VITE_ADMIN_API_BASE_URL` then collapses into it.
+- [ ] Decommission the Cloud Run service.
+- [ ] Accept what Cloud Run was providing: managed TLS, instant revision
+  rollback, and no OS to patch. On the VM those become ours.
+
+**Note:** the migration does *not* fix the Open Archieven rate limit. It changes
+which single IP the requests come from. The limit only stops mattering when
+searches are served from our own index.
+
+- [ ] **Fall back to Open Archieven on an index miss.** The archival API is
+  authoritative only for what has been harvested; anything it does not know must
+  still be answerable. The research tools should query our index first and fall
+  back to Open Archieven when it returns nothing, so coverage grows with the
+  index instead of gating on it.
+- [ ] Harvest the corpus into Meilisearch. This is the change that actually
+  removes the rate-limit constraint, and it is a project rather than a task —
+  check Open Archieven's terms on bulk retrieval before starting.
+
 ### B. Post-launch cleanups
+- [ ] **Rotate the archival secrets.** `MEILI_MASTER_KEY` and
+  `ADMIN_SECRET_TOKEN` were pasted into a chat transcript and were briefly staged
+  for commit to a public repository. They are gitignored now, but the values are
+  burned. Generate new ones, update `.deploy.env`, redeploy the gateway.
+- [ ] **`services/archival-harvester/server.py:33` compares the admin token with
+  `!=`**, which is not constant-time and leaks length/prefix information through
+  timing. Use `secrets.compare_digest`.
 - [x] **Simplify API key management** *(implemented, not yet deployed)*. One
   prominent "Gemini API key" field; the second key is now behind an understated
   "Add a backup key" link, expanded automatically if one is already set. The
