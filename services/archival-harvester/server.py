@@ -250,12 +250,20 @@ def admin_query(
       "event_type": hit.get("event_type", ""),
       "event_date": hit.get("event_date", ""),
       "event_place": hit.get("event_place", ""),
-      # Provenance: which export this document came from.
+      # Provenance.
+      #
+      # `retrieved_from` is the path this result came back on, not who owns the
+      # record: every record here originates with Open Archieven, and citations
+      # must always point there. What differs is whether we answered from our own
+      # snapshot or asked them live — which matters for both latency and
+      # freshness, since a snapshot can lag their corrections.
+      "retrieved_from": "index",
       "source": {
         "archive": hit.get("archive", ""),
         "kind": hit.get("kind", ""),
         "institution": hit.get("institution", ""),
         "index": INDEX_NAME,
+        "last_changed": hit.get("last_changed", ""),
       },
       "url": hit.get("url", ""),
     })
@@ -266,5 +274,12 @@ def admin_query(
     "took_ms": round((time.time() - started) * 1000, 1),
     "estimated_total": results.get("estimatedTotalHits", len(hits)),
     "returned": len(hits),
+    # Counts per retrieval path, so a caller can tell at a glance whether an
+    # answer came from our coverage or from Open Archieven. Both keys are always
+    # present, so a consumer never has to distinguish absent from zero.
+    "sources": {
+      "index": len(hits),
+      "openarchieven": 0,
+    },
     "hits": hits,
   }

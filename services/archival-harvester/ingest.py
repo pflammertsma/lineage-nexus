@@ -169,6 +169,10 @@ def transform(row: Dict[str, str], archive: str, kind: str,
         "names": " ".join(names),
         "persons": persons,
         "institution": _clean(row.get("SOURCEREFERENCE_INSTITUTIONNAME")),
+        # When Open Archieven last changed this record. Our index is a snapshot of
+        # an export, so this is what tells you whether a local hit might be stale
+        # relative to their live data.
+        "last_changed": _clean(row.get("SOURCE_LASTCHANGEDATE")),
         # Enough to reconstruct the permalink and fetch full detail on demand.
         "guid": guid,
         "url": f"https://www.openarchieven.nl/{archive}:{guid}",

@@ -25,6 +25,25 @@ const KIND_LABELS = {
 const kindLabel = (kind) => KIND_LABELS[kind] || `Record type: ${kind}`;
 
 /**
+ * How a hit was retrieved — not who owns it. Every record originates with Open
+ * Archieven; the distinction is whether we answered from our own harvested
+ * snapshot or asked them live. It matters for latency, and for freshness: a
+ * snapshot can lag corrections made upstream.
+ */
+const RETRIEVAL = {
+  index: {
+    label: 'local',
+    title: 'Answered from our harvested index — fast, but a snapshot of an export, so it can lag corrections made at Open Archieven.',
+    className: 'bg-green-600/15 text-green-600 border-green-600/30',
+  },
+  openarchieven: {
+    label: 'live',
+    title: 'Fetched from the Open Archieven API because our index had no match — current, but rate limited.',
+    className: 'bg-accent-soft text-accent border-accent/30',
+  },
+};
+
+/**
  * Raw index search, for checking what is actually in there.
  *
  * No agent, no orchestration, no interpretation — the point is to see the index
@@ -112,6 +131,18 @@ const ArchiveQuery = ({ getIdToken }) => {
             {result.estimated_total.toLocaleString()} match
             {result.estimated_total === 1 ? '' : 'es'} · showing {result.returned} ·{' '}
             <span className="font-mono">{result.took_ms}ms</span>
+            {result.sources && (
+              <>
+                {' · '}
+                <span title={RETRIEVAL.index.title} className="cursor-help">
+                  {result.sources.index} local
+                </span>
+                {', '}
+                <span title={RETRIEVAL.openarchieven.title} className="cursor-help">
+                  {result.sources.openarchieven} live
+                </span>
+              </>
+            )}
           </p>
 
           {result.hits.length === 0 ? (
@@ -142,8 +173,19 @@ const ArchiveQuery = ({ getIdToken }) => {
                     {[hit.event_type, hit.event_date, hit.event_place].filter(Boolean).join(' · ')}
                   </p>
 
-                  {/* Provenance: which export this row came from. */}
+                  {/* Provenance: how it was retrieved, then which export it came from. */}
                   <div className="flex flex-wrap items-center gap-1.5 mb-2">
+                    {(() => {
+                      const r = RETRIEVAL[hit.retrieved_from] || RETRIEVAL.index;
+                      return (
+                        <span
+                          title={r.title}
+                          className={`px-1.5 py-0.5 rounded border font-mono text-[10px] cursor-help ${r.className}`}
+                        >
+                          {r.label}
+                        </span>
+                      );
+                    })()}
                     <span
                       title={hit.source.institution
                         ? `${hit.source.archive} — ${hit.source.institution}`
@@ -159,6 +201,14 @@ const ArchiveQuery = ({ getIdToken }) => {
                       {hit.source.kind}
                     </span>
                     <span className="text-secondary/70 text-[10px]">{hit.source.institution}</span>
+                    {hit.source.last_changed && (
+                      <span
+                        title={`Open Archieven last changed this record on ${hit.source.last_changed}. Our copy reflects the export taken after that date.`}
+                        className="text-secondary/50 text-[10px] font-mono cursor-help"
+                      >
+                        upd {hit.source.last_changed}
+                      </span>
+                    )}
                   </div>
 
                   {hit.persons?.length > 0 && (
