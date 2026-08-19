@@ -87,7 +87,12 @@ function App() {
     syncState,
     storageError,
     syncWarning,
-  } = useSyncedSessions({ uid: auth.uid, syncEnabled: syncConsent === true });
+  } = useSyncedSessions({
+    uid: auth.uid,
+    syncEnabled: syncConsent === true,
+    // Messages are fetched per open session, so the hook needs to know which one.
+    activeSessionId,
+  });
 
   const needsSyncDecision = auth.canSync && auth.isSignedIn && auth.uid && syncConsent === null;
 

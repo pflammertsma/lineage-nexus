@@ -6,13 +6,31 @@
 correctness and observability now outrank new features. Grouped by that.
 
 ### A. Live-site risks (do first)
-- [ ] **Firestore 1 MiB document ceiling** — `messages` is unbounded and each
-  session is one document. A long research session with several biographies will
-  cross the limit, the write will fail, and `useSyncedSessions` swallows it into
-  `syncState: 'error'` — so the user sees a vague indicator while new messages
-  silently stop syncing. Needs a size check before writing, plus either chunking
-  across documents or an explicit, honest message. *Highest risk item: it loses
-  user data quietly.*
+- [x] **Firestore restructured: one document per message.** The session document
+  now holds metadata only (`title`, `updatedAt`, `messageCount`); messages live in
+  a `messages` subcollection. This removed three problems at once, not just the
+  size ceiling:
+  - **No session ceiling.** Only a single message would have to exceed 1 MiB,
+    which a biography never does. The size guard moved to per-message.
+  - **No write amplification.** Appending a message was rewriting the entire
+    history — hundreds of kilobytes per turn on a long session. Now one small
+    document.
+  - **No read amplification, and no last-writer-wins.** Snapshots carry only the
+    documents that changed rather than the whole transcript, and two devices
+    writing different messages no longer clobber each other. This also closes the
+    "multi-device conflict handling" item under Unverified.
+
+  Messages are fetched per open session rather than all at once, so a sidebar of
+  fifty conversations does not open fifty listeners. Legacy sessions migrate
+  lazily on first load, and `deleteField()` removes the old inline array —
+  without which a merge write would leave it in place for ever and the new rules
+  would reject the document.
+
+  Deletion now removes the subcollection first; Firestore does not cascade, and a
+  session document deleted before its messages leaves orphans nothing can reach.
+
+  *Verified: 25 unit tests on the pure helpers; rules deployed before the client
+  so no write hit an outdated ruleset.*
 - [x] **Error monitoring built** (`monitoring.js`), scrubbed of research content and
   inert until `VITE_SENTRY_DSN` is set — supply a DSN to switch it on. Original note: We are live and blind — nothing reports a broken
   deploy, an SSE failure, or a Firestore rejection. Sentry (or equivalent) on
@@ -486,7 +504,9 @@ These paths have never executed — see "Unverified" below.
 
 ## ⚠️ Unverified
 - **The Firebase path has never executed.** Google sign-in, the Firestore mirror, `onSnapshot` merges and cloud deletion are all written but untested — there is no project to run them against. What *is* verified: the merge rules (10 unit tests), and that the app runs correctly local-only with Firebase unconfigured. Exercise sign-in, a two-device sync, and delete-all against a real project before trusting it.
-- **Multi-device conflict handling is last-writer-wins per session.** Two devices editing the same conversation simultaneously will keep whichever pushed later; there is no message-level merge.
+- ~~**Multi-device conflict handling is last-writer-wins per session.**~~ Fixed by
+  the per-message schema: concurrent edits write different documents, so they
+  merge instead of overwriting. Still worth exercising on two real devices.
 
 ## 🐞 Known Issues / Tech Debt
 - [ ] **Resume across a dropped turn**: quota pauses are now absorbed in-process, but if the wait budget is exhausted the turn still unwinds and `current_history` is lost, so Retry re-runs the research from scratch. Needs a resume token: stash `current_history` + `turn_count` + `seen_queries` server-side (or return them to the client), and accept it back on the next request. Requires an API contract change.

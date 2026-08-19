@@ -1,10 +1,30 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { loadFirestore } from './firebase';
 import { SESSIONS_STORAGE, SYNC_CONSENT_STORAGE } from './config';
-import { mergeSessions, sessionFingerprint } from './lib/mergeSessions';
+import { sessionFingerprint } from './lib/mergeSessions';
 import { estimateSessionSize, formatBytes, isSessionTooLarge } from './lib/sessionSize';
+import {
+  isLegacySession,
+  mergeSessionMeta,
+  messagesFromDocs,
+  pendingMessageDocs,
+  sessionMetaDoc,
+} from './lib/sessionSync';
 
 const PUSH_DEBOUNCE_MS = 800;
+
+/** Removes every message document under a session. Firestore has no cascade. */
+async function deleteMessagesOf(fs, uid, sessionId) {
+  const messages = await fs.getDocs(
+    fs.collection(fs.db, 'users', uid, 'sessions', sessionId, 'messages')
+  );
+  const docs = messages.docs;
+  for (let i = 0; i < docs.length; i += 450) {
+    const batch = fs.writeBatch(fs.db);
+    docs.slice(i, i + 450).forEach(d => batch.delete(d.ref));
+    await batch.commit();
+  }
+}
 
 function loadLocal() {
   try {
@@ -37,7 +57,7 @@ function saveLocal(sessions) {
  * changes are debounced upward and a snapshot listener brings other devices' edits
  * down through mergeSessions.
  */
-export default function useSyncedSessions({ uid, syncEnabled }) {
+export default function useSyncedSessions({ uid, syncEnabled, activeSessionId }) {
   const [sessions, setSessions] = useState(loadLocal);
   const [storageError, setStorageError] = useState(null);
   const [syncState, setSyncState] = useState('idle'); // idle | syncing | synced | error
@@ -47,9 +67,9 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
   const pushedAtRef = useRef({});
   const fingerprintsRef = useRef({});
   const pushTimerRef = useRef(null);
-  // Sessions already reported as too large, so the warning is raised once per
-  // session rather than on every debounced push.
-  const oversizeNotifiedRef = useRef({});
+  // How many messages of each session have been written. Messages are only
+  // appended, so this is enough to know what is still pending.
+  const pushedCountRef = useRef({});
   const [syncWarning, setSyncWarning] = useState(null);
 
   const active = Boolean(uid && syncEnabled);
@@ -78,7 +98,28 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
         fs.collection(fs.db, 'users', uid, 'sessions'),
         (snapshot) => {
           const remote = snapshot.docs.map(d => d.data());
-          setSessions(local => mergeSessions(local, remote, pushedAtRef.current));
+
+          // Sessions written by the old schema still carry an inline array.
+          // Adopt those messages so nothing is lost, and let the next push
+          // rewrite them into the subcollection.
+          const legacy = remote.filter(isLegacySession);
+          setSessions(local => {
+            let next = mergeSessionMeta(local, remote, pushedAtRef.current);
+            if (legacy.length) {
+              const byId = new Map(next.map(x => [x.id, x]));
+              for (const doc of legacy) {
+                const mine = byId.get(doc.id);
+                if (mine && !mine.messages?.length) {
+                  byId.set(doc.id, { ...mine, messages: doc.messages });
+                  // Not yet in the subcollection, so the push must write them.
+                  pushedCountRef.current[doc.id] = 0;
+                  fingerprintsRef.current[doc.id] = null;
+                }
+              }
+              next = [...byId.values()];
+            }
+            return next;
+          });
           setSyncState('synced');
         },
         () => setSyncState('error')
@@ -89,6 +130,43 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
       if (unsubscribe) unsubscribe();
     };
   }, [active, uid]);
+
+  // Pull: messages for the session actually being read.
+  //
+  // Subscribed per session rather than all at once: a sidebar of fifty
+  // conversations would otherwise open fifty listeners and download every
+  // message to show one. Snapshots here carry only the documents that changed.
+  useEffect(() => {
+    if (!active || !activeSessionId) return;
+    let unsubscribe = null;
+    let cancelled = false;
+    (async () => {
+      const fs = await loadFirestore();
+      if (!fs || cancelled) return;
+      unsubscribe = fs.onSnapshot(
+        fs.query(
+          fs.collection(fs.db, 'users', uid, 'sessions', activeSessionId, 'messages'),
+          fs.orderBy('seq'),
+        ),
+        (snapshot) => {
+          const remote = messagesFromDocs(snapshot.docs.map(d => d.data()));
+          setSessions(local => local.map(session => {
+            if (session.id !== activeSessionId) return session;
+            // Never shrink from a snapshot: local may hold a message that has not
+            // been written yet, and adopting the shorter remote list would erase
+            // what the user just typed.
+            if (remote.length <= (session.messages || []).length) return session;
+            return { ...session, messages: remote };
+          }));
+        },
+        () => setSyncState('error')
+      );
+    })();
+    return () => {
+      cancelled = true;
+      if (unsubscribe) unsubscribe();
+    };
+  }, [active, uid, activeSessionId]);
 
   // Push: mirror locally-changed sessions upward, debounced.
   useEffect(() => {
@@ -106,33 +184,63 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
       try {
         await Promise.all(changed.map(async (session) => {
           const updatedAt = Date.now();
-          const payload = {
-            id: session.id,
-            title: session.title || 'Untitled research',
-            messages: session.messages || [],
-            updatedAt,
-          };
+          const pushedCount = pushedCountRef.current[session.id] ?? 0;
+          const pending = pendingMessageDocs(session, pushedCount);
 
-          // Checked before writing: Firestore rejects an oversized document, and
-          // that rejection is indistinguishable from a network failure once it
-          // reaches the catch below. The local copy is always complete, so the
-          // honest thing is to keep it and say plainly what is not syncing.
-          if (isSessionTooLarge(payload)) {
-            if (!oversizeNotifiedRef.current[session.id]) {
-              oversizeNotifiedRef.current[session.id] = true;
-              setSyncWarning(
-                `"${payload.title}" is ${formatBytes(estimateSessionSize(payload))} and too large to sync ` +
-                `(the limit is 1 MB per conversation). It is still saved on this device. ` +
-                `Start a new research session to keep syncing.`
-              );
-            }
-            // Deliberately leaves the fingerprint untouched, so trimming the
-            // session later lets it sync again on the next change.
+          // One batch per session: the metadata document and its new messages
+          // commit together, so `messageCount` can never advertise messages that
+          // are not there.
+          const batch = fs.writeBatch(fs.db);
+          const sessionRef = fs.doc(fs.db, 'users', uid, 'sessions', session.id);
+
+          // deleteField() is required, not cosmetic: a merge write leaves the old
+          // inline `messages` array in place, and the security rules reject a
+          // session document that still carries it.
+          batch.set(
+            sessionRef,
+            { ...sessionMetaDoc(session, updatedAt), messages: fs.deleteField() },
+            { merge: true }
+          );
+
+          // The per-session ceiling is gone, but one document still cannot exceed
+          // 1 MiB, so a single enormous message would fail — and Firestore's
+          // rejection is indistinguishable from a network error by the time it
+          // reaches the catch. Checked here so it can be reported honestly.
+          const oversized = pending.find(({ data }) => isSessionTooLarge(data));
+          if (oversized) {
+            setSyncWarning(
+              `One message in "${session.title || 'this research'}" is ` +
+              `${formatBytes(estimateSessionSize(oversized.data))} and too large to sync ` +
+              `(the limit is 1 MB per message). It is still saved on this device.`
+            );
             return;
           }
 
-          await fs.setDoc(fs.doc(fs.db, 'users', uid, 'sessions', session.id), payload, { merge: true });
+          for (const { id, data } of pending) {
+            batch.set(fs.doc(sessionRef, 'messages', id), data);
+          }
+
+          // A batch caps at 500 writes. Splitting keeps a very long first sync
+          // (or a legacy migration) from failing wholesale.
+          if (pending.length > 400) {
+            await fs.setDoc(
+              sessionRef,
+              { ...sessionMetaDoc(session, updatedAt), messages: fs.deleteField() },
+              { merge: true }
+            );
+            for (let i = 0; i < pending.length; i += 400) {
+              const chunk = fs.writeBatch(fs.db);
+              for (const { id, data } of pending.slice(i, i + 400)) {
+                chunk.set(fs.doc(sessionRef, 'messages', id), data);
+              }
+              await chunk.commit();
+            }
+          } else {
+            await batch.commit();
+          }
+
           pushedAtRef.current[session.id] = updatedAt;
+          pushedCountRef.current[session.id] = (session.messages || []).length;
           fingerprintsRef.current[session.id] = sessionFingerprint(session);
         }));
         setSyncState('synced');
@@ -148,10 +256,14 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
     setSessions(prev => prev.filter(s => s.id !== id));
     delete pushedAtRef.current[id];
     delete fingerprintsRef.current[id];
+    delete pushedCountRef.current[id];
     if (!active) return;
     const fs = await loadFirestore();
     if (!fs) return;
     try {
+      // Firestore does not cascade. Deleting only the parent would leave every
+      // message behind — invisible, still stored, and still counted.
+      await deleteMessagesOf(fs, uid, id);
       await fs.deleteDoc(fs.doc(fs.db, 'users', uid, 'sessions', id));
     } catch {
       setSyncState('error');
@@ -168,6 +280,11 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
       if (fs) {
         try {
           const snapshot = await fs.getDocs(fs.collection(fs.db, 'users', uid, 'sessions'));
+          // Messages first: a session document removed before its subcollection
+          // leaves orphans that nothing can reach to delete afterwards.
+          for (const d of snapshot.docs) {
+            await deleteMessagesOf(fs, uid, d.id);
+          }
           // Batches cap at 500 operations.
           const docs = snapshot.docs;
           for (let i = 0; i < docs.length; i += 450) {
@@ -184,6 +301,7 @@ export default function useSyncedSessions({ uid, syncEnabled }) {
     }
     pushedAtRef.current = {};
     fingerprintsRef.current = {};
+    pushedCountRef.current = {};
     if (scope === 'all') setSessions([]);
   }, [uid]);
 
