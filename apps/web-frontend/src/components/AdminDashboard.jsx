@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import {
-  ArrowLeft, Activity, Cpu, HardDrive, MemoryStick,
-  Database, RefreshCw, AlertTriangle, CheckCircle2,
+  Activity, Cpu, HardDrive, MemoryStick,
+  Database, AlertTriangle, CheckCircle2,
   Layers, Search, PieChart,
 } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
@@ -42,7 +42,6 @@ const Meter = ({ icon: Icon, label, percent, detail }) => (
     <p className={`font-serif text-3xl leading-none mb-2 ${levelFor(percent)}`}>
       {Number.isFinite(percent) ? `${percent.toFixed(1)}%` : '—'}
     </p>
-    {/* aria-hidden: the number above already conveys this to a screen reader. */}
     <div aria-hidden="true" className="h-1.5 rounded-full bg-muted overflow-hidden mb-2">
       <div
         className={`h-full rounded-full transition-all duration-500 ${
@@ -57,10 +56,7 @@ const Meter = ({ icon: Icon, label, percent, detail }) => (
 
 /**
  * Operational view of the archival API.
- *
- * Authenticates with the signed-in user's Firebase ID token, never a shared
- * secret: anything this page holds is readable by anyone who opens it, so a
- * long-lived token here would be a hazard.
+ * Header navigation, titles, and actions are rendered inside Header.jsx.
  */
 const AdminDashboard = ({ getIdToken }) => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -74,22 +70,15 @@ const AdminDashboard = ({ getIdToken }) => {
   const [history, setHistory] = useState([]);
   const [coverage, setCoverage] = useState(null);
   const [indexing, setIndexing] = useState(null);
-  // Minutes of history to chart. The server retains 24h, so this only decides
-  // how much of it to ask for.
   const [rangeMinutes, setRangeMinutes] = useState(360);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);
 
-  // Redeploying the gateway takes it down for a few seconds. Reporting that as
-  // an error on the first missed poll makes an ordinary deploy look like an
-  // outage, so a single failure is shown as "reconnecting" and the last good
-  // reading stays on screen. Two in a row (30s) is a real problem.
   const [reconnecting, setReconnecting] = useState(false);
   const failures = useRef(0);
   const TRANSIENT_TOLERANCE = 2;
 
-  /** Network-level failure: quiet the first time, an error once it persists. */
   const noteFailure = useCallback((message) => {
     failures.current += 1;
     if (failures.current >= TRANSIENT_TOLERANCE) {
@@ -120,8 +109,7 @@ const AdminDashboard = ({ getIdToken }) => {
         failures.current = 0;
         setReconnecting(false);
         setError(
-          'The archival API rejected this account. It must verify the Firebase ID token ' +
-          'and require an `admin` custom claim.'
+          'The archival API rejected this account. It must verify the Firebase ID token and require an `admin` custom claim.'
         );
         return;
       }
@@ -136,8 +124,6 @@ const AdminDashboard = ({ getIdToken }) => {
       setError(null);
       setFetchedAt(new Date());
 
-      // Separate call: history is a ring buffer on the server, so it survives a
-      // page reload where client-side accumulation would not.
       try {
         const histRes = await fetch(
           `${ADMIN_API_BASE_URL}/api/v1/admin/history?minutes=${rangeMinutes}`,
@@ -148,11 +134,9 @@ const AdminDashboard = ({ getIdToken }) => {
           if (body.status === 'success') setHistory(body.points || []);
         }
       } catch {
-        // Failing to update history should not break the rest of the status view.
+        // Non-critical
       }
 
-      // Coverage and indexing: fetched separately so slow Meilisearch facets do
-      // not block the quick metrics update.
       try {
         const covRes = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/coverage`, {
           headers: { Authorization: `Bearer ${token}` },
@@ -162,7 +146,7 @@ const AdminDashboard = ({ getIdToken }) => {
           if (body.status === 'success') setCoverage(body);
         }
       } catch {
-        // Non-critical; coverage panel shows its own empty state.
+        // Non-critical
       }
 
       try {
@@ -174,7 +158,7 @@ const AdminDashboard = ({ getIdToken }) => {
           if (body.status === 'success') setIndexing(body);
         }
       } catch {
-        // Non-critical; indexing panel handles missing state.
+        // Non-critical
       }
     } catch {
       noteFailure('Could not reach the archival API.');
@@ -189,6 +173,13 @@ const AdminDashboard = ({ getIdToken }) => {
     return () => clearInterval(interval);
   }, [load]);
 
+  // Listen for Header refresh button clicks
+  useEffect(() => {
+    const handleHeaderRefresh = () => load();
+    window.addEventListener('admin-refresh', handleHeaderRefresh);
+    return () => window.removeEventListener('admin-refresh', handleHeaderRefresh);
+  }, [load]);
+
   const online = status?.status === 'online';
   const mem = status?.system?.memory;
   const disk = status?.system?.disk;
@@ -197,40 +188,8 @@ const AdminDashboard = ({ getIdToken }) => {
   return (
     <main className="admin-page-container">
       <div className="admin-content-wrap">
-        <Link
-          to="/"
-          className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-secondary hover:text-accent transition-colors mb-8"
-        >
-          <ArrowLeft size={12} />
-          Back to research
-        </Link>
-
-        <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
-          <div>
-            <h1 className="font-serif text-[32px] sm:text-[40px] font-semibold tracking-tight leading-tight mb-2">
-              Archival Control Panel
-            </h1>
-            <p className="text-sm text-secondary">
-              {reconnecting
-                ? 'Reconnecting…'
-                : fetchedAt
-                ? `Updated ${fetchedAt.toLocaleTimeString()} · refreshes every ${REFRESH_MS / 1000}s`
-                : 'Contacting the service…'}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={load}
-            disabled={loading}
-            className="admin-btn-secondary"
-          >
-            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
-            Refresh
-          </button>
-        </div>
-
-        {/* Top Navigation Tabs */}
-        <div className="admin-tabs-nav">
+        {/* Mobile Navigation Tabs (visible only on narrow screens) */}
+        <div className="md:hidden admin-tabs-nav mb-6">
           <button
             type="button"
             onClick={() => setTab('overview')}
@@ -239,9 +198,8 @@ const AdminDashboard = ({ getIdToken }) => {
             }`}
           >
             <Activity size={14} />
-            System Overview
+            System
           </button>
-
           <button
             type="button"
             onClick={() => setTab('harvesting')}
@@ -250,12 +208,8 @@ const AdminDashboard = ({ getIdToken }) => {
             }`}
           >
             <Layers size={14} />
-            Ingest & Queue
-            {indexing?.is_indexing && (
-              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-            )}
+            Ingestion
           </button>
-
           <button
             type="button"
             onClick={() => setTab('coverage')}
@@ -264,14 +218,8 @@ const AdminDashboard = ({ getIdToken }) => {
             }`}
           >
             <PieChart size={14} />
-            Corpus Coverage
-            {coverage?.total_records && (
-              <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-muted text-secondary font-mono">
-                {coverage.total_records.toLocaleString()}
-              </span>
-            )}
+            Corpus
           </button>
-
           <button
             type="button"
             onClick={() => setTab('query')}
@@ -280,12 +228,12 @@ const AdminDashboard = ({ getIdToken }) => {
             }`}
           >
             <Search size={14} />
-            Index Explorer
+            Index
           </button>
         </div>
 
         {error && (
-          <div className="flex items-start gap-3 bg-card border border-amber-500/40 rounded-lg p-4 mb-8">
+          <div className="flex items-start gap-3 bg-card border border-amber-500/40 rounded-lg p-4 mb-6">
             <AlertTriangle size={16} className="text-amber-500 shrink-0 mt-0.5" />
             <p className="text-sm text-secondary">{error}</p>
           </div>
@@ -293,21 +241,32 @@ const AdminDashboard = ({ getIdToken }) => {
 
         {status && (
           <>
+            {/* Status & Last Updated Bar */}
+            <div className="flex items-center justify-between gap-4 mb-6 text-xs text-secondary flex-wrap">
+              <div className="flex items-center gap-2">
+                {online ? (
+                  <CheckCircle2 size={15} className="text-green-600 shrink-0" />
+                ) : (
+                  <AlertTriangle size={15} className="text-red-500 shrink-0" />
+                )}
+                <span className="font-semibold text-primary">
+                  {online ? 'Online' : String(status.status || 'Unknown')}
+                </span>
+                <span>· up {formatUptime(status.uptime_seconds)}</span>
+              </div>
+
+              <div>
+                {reconnecting
+                  ? 'Reconnecting…'
+                  : fetchedAt
+                  ? `Updated ${fetchedAt.toLocaleTimeString()} · refreshes every ${REFRESH_MS / 1000}s`
+                  : 'Contacting service…'}
+              </div>
+            </div>
+
             {/* Tab 1: System Overview */}
             {activeTab === 'overview' && (
               <div className="space-y-8">
-                <div className="flex items-center gap-2 mb-6">
-                  {online
-                    ? <CheckCircle2 size={16} className="text-green-600" />
-                    : <AlertTriangle size={16} className="text-red-500" />}
-                  <span className="text-sm font-semibold text-primary">
-                    {online ? 'Online' : String(status.status || 'Unknown')}
-                  </span>
-                  <span className="text-sm text-secondary">
-                    · up {formatUptime(status.uptime_seconds)}
-                  </span>
-                </div>
-
                 <div className="grid gap-4 sm:grid-cols-3">
                   <Meter
                     icon={Cpu}
@@ -339,9 +298,7 @@ const AdminDashboard = ({ getIdToken }) => {
                   <div className="admin-card">
                     <div className="admin-card-header">
                       <Database size={14} className="text-secondary shrink-0" />
-                      <span className="admin-card-title">
-                        Archival engine
-                      </span>
+                      <span className="admin-card-title">Archival engine</span>
                     </div>
                     <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 text-sm">
                       <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
@@ -367,12 +324,6 @@ const AdminDashboard = ({ getIdToken }) => {
                         </dd>
                       </div>
                     </dl>
-
-                    {engine.stats?.numberOfDocuments === 1 && (
-                      <p className="mt-4 text-xs text-amber-500">
-                        The index holds a single document — it looks seeded rather than populated.
-                      </p>
-                    )}
                   </div>
                 )}
               </div>
@@ -403,7 +354,7 @@ const AdminDashboard = ({ getIdToken }) => {
         )}
 
         {!status && !error && (
-          <div className="flex items-center gap-3 text-sm text-secondary">
+          <div className="flex items-center gap-3 text-sm text-secondary py-8">
             <Activity size={16} className="animate-pulse" />
             Loading service status…
           </div>

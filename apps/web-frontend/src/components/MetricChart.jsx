@@ -158,22 +158,6 @@ const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }
             ))}
           </div>
         </div>
-        {/* Legend only. The values moved into the card at the crosshair, so the
-            number you are reading sits next to the point it describes rather
-            than in a corner you have to look away to. */}
-        <div className="flex items-center gap-4 flex-wrap">
-          {series.map((s) => (
-            <span key={s.field} className="flex items-center gap-1.5 text-[11px]">
-              <span className="w-2.5 h-0.5 rounded-full" style={{ background: s.colour }} />
-              <span className="text-secondary">{s.label}</span>
-              {!hovered && (
-                <span className="tabular-nums" style={{ color: s.colour }}>
-                  {s.last?.toFixed(1)}%
-                </span>
-              )}
-            </span>
-          ))}
-        </div>
       </div>
 
       <div className="relative">

@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { Sun, Moon, Monitor, Settings, LogOut, Menu, ShieldCheck, AlertTriangle, Gauge } from 'lucide-react';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
+import {
+  Sun, Moon, Monitor, Settings, LogOut, Menu, ShieldCheck, AlertTriangle, Gauge,
+  Activity, Layers, PieChart, Search, RefreshCw,
+} from 'lucide-react';
 import logo from '../assets/logo.svg';
 
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
@@ -33,11 +36,12 @@ const Header = ({
   const ThemeIcon = THEME_ICON[themePreference] || Monitor;
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef(null);
-  // "Platform" is a jump link to a section of the landing page, so it only means
-  // anything there. On any other route it resolved against the current path
-  // (/privacy#features) and went nowhere; off the landing page the useful
-  // destination is the landing page itself.
-  const onLandingPage = useLocation().pathname === '/';
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const onLandingPage = location.pathname === '/';
+  const isAdminPage = location.pathname === '/admin';
+  const activeTab = searchParams.get('tab') || 'overview';
 
   const initials = initialsFor(displayName, email);
 
@@ -53,12 +57,10 @@ const Header = ({
 
   return (
     <header className="h-[var(--h-header)] bg-surface border-b border-border sticky top-0 z-[1000]">
-      {/* On /chat the bar runs full-bleed so the wordmark aligns with the sidebar
-          instead of a centred container, leaving the transcript as the only
-          centred element. The landing page keeps the marketing container. */}
-      <div className={isLoggedIn ? 'app-bar' : 'container h-full flex items-center justify-between'}>
+      <div className={isLoggedIn || isAdminPage ? 'app-bar' : 'container h-full flex items-center justify-between'}>
+        {/* Left Section: Logo / Title */}
         <div className="flex items-center gap-1 sm:gap-3 select-none min-w-0">
-          {isLoggedIn && (
+          {isLoggedIn && !isAdminPage && (
             <button
               type="button"
               onClick={onToggleSidebar}
@@ -68,31 +70,92 @@ const Header = ({
               <Menu size={20} />
             </button>
           )}
+
           <Link to="/" className="flex items-center gap-3 min-w-0" aria-label="Lineage Nexus home">
             <img src={logo} alt="" className="w-7 h-7 shrink-0 pointer-events-none" />
-            <span className="text-lg font-extrabold tracking-tight text-accent truncate">Lineage Nexus</span>
+            <span className="text-lg font-extrabold tracking-tight text-accent truncate">
+              {isAdminPage ? 'Archival Control Panel' : 'Lineage Nexus'}
+            </span>
           </Link>
         </div>
 
-        {/* Marketing links on landing page */}
-        {!isLoggedIn && (
-          <nav className="hidden md:flex gap-8 items-center opacity-60">
-            {onLandingPage ? (
-              <a href="#features" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Platform</a>
-            ) : (
-              <Link to="/" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Home</Link>
-            )}
-            <Link to="/sources" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Sources</Link>
-            <Link to="/ai-transparency" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">AI</Link>
-            <Link to="/privacy" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Privacy</Link>
-            <Link to="/terms" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Terms</Link>
+        {/* Middle Section: Marketing links or Admin Navigation Tabs */}
+        {isAdminPage ? (
+          <nav className="hidden md:flex items-stretch gap-1 h-full">
+            <button
+              type="button"
+              onClick={() => setSearchParams({ tab: 'overview' }, { replace: true })}
+              className={`admin-tab-btn ${
+                activeTab === 'overview' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
+              }`}
+            >
+              <Activity size={16} />
+              System
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSearchParams({ tab: 'harvesting' }, { replace: true })}
+              className={`admin-tab-btn ${
+                activeTab === 'harvesting' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
+              }`}
+            >
+              <Layers size={16} />
+              Ingestion
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSearchParams({ tab: 'coverage' }, { replace: true })}
+              className={`admin-tab-btn ${
+                activeTab === 'coverage' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
+              }`}
+            >
+              <PieChart size={16} />
+              Corpus
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setSearchParams({ tab: 'query' }, { replace: true })}
+              className={`admin-tab-btn ${
+                activeTab === 'query' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
+              }`}
+            >
+              <Search size={16} />
+              Index
+            </button>
           </nav>
+        ) : (
+          !isLoggedIn && (
+            <nav className="hidden md:flex gap-8 items-center opacity-60">
+              {onLandingPage ? (
+                <a href="#features" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Platform</a>
+              ) : (
+                <Link to="/" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Home</Link>
+              )}
+              <Link to="/sources" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Sources</Link>
+              <Link to="/ai-transparency" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">AI</Link>
+              <Link to="/privacy" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Privacy</Link>
+              <Link to="/terms" className="text-[10px] font-bold uppercase tracking-widest hover:text-accent transition-colors">Terms</Link>
+            </nav>
+          )
         )}
 
+        {/* Right Section: Admin Refresh, Theme, Account Dropdown */}
         <div className="flex items-center gap-3">
-          {/* Firebase is unconfigured, so "sign in" set a localStorage flag rather
-              than authenticating anyone. Saying so out loud is the point: an
-              indistinguishable fake login is how you ship one to production. */}
+          {isAdminPage && (
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event('admin-refresh'))}
+              title="Refresh status"
+              className="admin-btn-secondary py-1.5 px-3 text-xs"
+            >
+              <RefreshCw size={13} />
+              <span className="hidden sm:inline">Refresh</span>
+            </button>
+          )}
+
           {isSimulated && (
             <span
               title="No Firebase project is configured, so sign-in is simulated and sync is unavailable. Set VITE_FIREBASE_* in .env to enable real Google sign-in."
@@ -163,7 +226,7 @@ const Header = ({
                       <span>Settings & API Keys</span>
                     </button>
 
-                    {isAdmin && (
+                    {isAdmin && !isAdminPage && (
                       <Link
                         to="/admin"
                         onClick={() => setDropdownOpen(false)}
