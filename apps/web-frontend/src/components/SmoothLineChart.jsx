@@ -364,7 +364,7 @@ const SmoothLineChart = ({
 
         {hovered && (
           <div
-            className="absolute top-0 pointer-events-none z-10"
+            className="absolute top-0 pointer-events-none z-[100]"
             style={{
               left: `${(x(hovered.t) / W) * 100}%`,
               transform:
@@ -373,11 +373,19 @@ const SmoothLineChart = ({
                   : 'translateX(10px)',
             }}
           >
-            <div className="bg-card border border-border-strong rounded-lg px-3 py-2 shadow-lg min-w-[10.5rem] max-h-48 overflow-y-auto">
-              <p className="text-[10px] tabular-nums text-secondary mb-1.5 whitespace-nowrap">
+            <div className="bg-card/95 border border-border-strong rounded-xl px-3.5 py-2.5 shadow-2xl backdrop-blur-md">
+              <p className="text-[10px] tabular-nums text-secondary font-mono mb-2 whitespace-nowrap">
                 {stamp(hovered.t)}
               </p>
-              <ul className="space-y-1">
+              <ul
+                className={
+                  processedSeries.length > 30
+                    ? 'grid grid-cols-3 gap-x-4 gap-y-1 text-[11px] min-w-[34rem]'
+                    : processedSeries.length > 10
+                    ? 'grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] min-w-[22rem]'
+                    : 'space-y-1 text-[11px] min-w-[11rem]'
+                }
+              >
                 {processedSeries.map((s) => {
                   const val = hovered[s.field];
                   const formatted = s.formatter
@@ -386,15 +394,15 @@ const SmoothLineChart = ({
                     ? `${val.toFixed(1)}%`
                     : '—';
                   return (
-                    <li key={s.field} className="flex items-center justify-between gap-3 text-[11px]">
-                      <span className="flex items-center gap-1.5 truncate max-w-[8.5rem]">
+                    <li key={s.field} className="flex items-center justify-between gap-3">
+                      <span className="flex items-center gap-1.5 truncate max-w-[10rem]">
                         <span
-                          className="w-2.5 h-2.5 rounded-sm shrink-0"
+                          className="w-2.5 h-2.5 rounded-xs shrink-0 shadow-xs"
                           style={{ background: s.colour }}
                         />
                         <span className="text-secondary truncate">{s.label}</span>
                       </span>
-                      <span className="tabular-nums font-mono shrink-0" style={{ color: s.colour }}>
+                      <span className="tabular-nums font-mono shrink-0 font-medium" style={{ color: s.colour }}>
                         {formatted}
                       </span>
                     </li>
