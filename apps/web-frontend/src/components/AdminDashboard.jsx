@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft, Activity, Cpu, HardDrive, MemoryStick,
   Database, RefreshCw, AlertTriangle, CheckCircle2,
+  Layers, Search, PieChart,
 } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
 import MetricChart from './MetricChart';
@@ -33,10 +34,10 @@ function levelFor(percent) {
 }
 
 const Meter = ({ icon: Icon, label, percent, detail }) => (
-  <div className="bg-card border border-border rounded-lg p-4">
-    <div className="flex items-center gap-2 mb-3">
+  <div className="admin-meter-card">
+    <div className="admin-card-header">
       <Icon size={14} className="text-secondary shrink-0" />
-      <span className="text-[10px] font-bold uppercase tracking-widest text-secondary">{label}</span>
+      <span className="admin-card-title">{label}</span>
     </div>
     <p className={`font-serif text-3xl leading-none mb-2 ${levelFor(percent)}`}>
       {Number.isFinite(percent) ? `${percent.toFixed(1)}%` : '—'}
@@ -59,11 +60,16 @@ const Meter = ({ icon: Icon, label, percent, detail }) => (
  *
  * Authenticates with the signed-in user's Firebase ID token, never a shared
  * secret: anything this page holds is readable by anyone who opens it, so a
- * static admin token here would be public. The API is expected to verify the
- * token and its `admin` claim independently — the route guard in App.jsx only
- * controls what is *shown*.
+ * long-lived token here would be a hazard.
  */
 const AdminDashboard = ({ getIdToken }) => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'overview';
+
+  const setTab = (tab) => {
+    setSearchParams({ tab }, { replace: true });
+  };
+
   const [status, setStatus] = useState(null);
   const [history, setHistory] = useState([]);
   const [coverage, setCoverage] = useState(null);
@@ -120,42 +126,58 @@ const AdminDashboard = ({ getIdToken }) => {
         return;
       }
       if (!res.ok) {
-        failures.current = 0;
-        setReconnecting(false);
-        setError(`The archival API returned ${res.status}.`);
+        noteFailure(`The archival API returned ${res.status}.`);
         return;
       }
-      setStatus(await res.json());
+      const nextStatus = await res.json();
       failures.current = 0;
       setReconnecting(false);
+      setStatus(nextStatus);
       setError(null);
       setFetchedAt(new Date());
 
       // Separate call: history is a ring buffer on the server, so it survives a
       // page reload where client-side accumulation would not.
       try {
-        const h = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/history?minutes=${rangeMinutes}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (h.ok) setHistory((await h.json()).points || []);
-
-        const c = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/coverage`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (c.ok) setCoverage(await c.json());
-
-        const i = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/indexing`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (i.ok) setIndexing(await i.json());
+        const histRes = await fetch(
+          `${ADMIN_API_BASE_URL}/api/v1/admin/history?minutes=${rangeMinutes}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (histRes.ok) {
+          const body = await histRes.json();
+          if (body.status === 'success') setHistory(body.points || []);
+        }
       } catch {
-        // A missing chart, coverage or indexing panel is not worth failing the
-        // dashboard for.
+        // Failing to update history should not break the rest of the status view.
+      }
+
+      // Coverage and indexing: fetched separately so slow Meilisearch facets do
+      // not block the quick metrics update.
+      try {
+        const covRes = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/coverage`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (covRes.ok) {
+          const body = await covRes.json();
+          if (body.status === 'success') setCoverage(body);
+        }
+      } catch {
+        // Non-critical; coverage panel shows its own empty state.
+      }
+
+      try {
+        const idxRes = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/indexing`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (idxRes.ok) {
+          const body = await idxRes.json();
+          if (body.status === 'success') setIndexing(body);
+        }
+      } catch {
+        // Non-critical; indexing panel handles missing state.
       }
     } catch {
-      // A CORS rejection and a dead host are indistinguishable from here, and a
-      // redeploy looks exactly like both for a few seconds.
-      noteFailure('Could not reach the archival API. It may be offline, or not permit this origin.');
+      noteFailure('Could not reach the archival API.');
     } finally {
       setLoading(false);
     }
@@ -163,30 +185,30 @@ const AdminDashboard = ({ getIdToken }) => {
 
   useEffect(() => {
     load();
-    const id = setInterval(load, REFRESH_MS);
-    return () => clearInterval(id);
+    const interval = setInterval(load, REFRESH_MS);
+    return () => clearInterval(interval);
   }, [load]);
 
+  const online = status?.status === 'online';
   const mem = status?.system?.memory;
   const disk = status?.system?.disk;
   const engine = status?.archival_engine;
-  const online = status?.status === 'online';
 
   return (
-    <main className="overflow-y-auto">
-      <div className="reading-column py-12 sm:py-16" style={{ maxWidth: '980px' }}>
+    <main className="admin-page-container">
+      <div className="admin-content-wrap">
         <Link
-          to="/chat"
+          to="/"
           className="inline-flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-secondary hover:text-accent transition-colors mb-8"
         >
           <ArrowLeft size={12} />
           Back to research
         </Link>
 
-        <div className="flex items-start justify-between gap-4 flex-wrap mb-8">
+        <div className="flex items-start justify-between gap-4 flex-wrap mb-6">
           <div>
             <h1 className="font-serif text-[32px] sm:text-[40px] font-semibold tracking-tight leading-tight mb-2">
-              Archival API
+              Archival Control Panel
             </h1>
             <p className="text-sm text-secondary">
               {reconnecting
@@ -200,10 +222,65 @@ const AdminDashboard = ({ getIdToken }) => {
             type="button"
             onClick={load}
             disabled={loading}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-strong text-xs font-semibold text-secondary hover:text-primary hover:border-accent transition-colors cursor-pointer disabled:opacity-50"
+            className="admin-btn-secondary"
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
             Refresh
+          </button>
+        </div>
+
+        {/* Top Navigation Tabs */}
+        <div className="admin-tabs-nav">
+          <button
+            type="button"
+            onClick={() => setTab('overview')}
+            className={`admin-tab-btn ${
+              activeTab === 'overview' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
+            }`}
+          >
+            <Activity size={14} />
+            System Overview
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTab('harvesting')}
+            className={`admin-tab-btn ${
+              activeTab === 'harvesting' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
+            }`}
+          >
+            <Layers size={14} />
+            Ingest & Queue
+            {indexing?.is_indexing && (
+              <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTab('coverage')}
+            className={`admin-tab-btn ${
+              activeTab === 'coverage' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
+            }`}
+          >
+            <PieChart size={14} />
+            Corpus Coverage
+            {coverage?.total_records && (
+              <span className="px-1.5 py-0.2 text-[10px] rounded-full bg-muted text-secondary font-mono">
+                {coverage.total_records.toLocaleString()}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setTab('query')}
+            className={`admin-tab-btn ${
+              activeTab === 'query' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
+            }`}
+          >
+            <Search size={14} />
+            Index Explorer
           </button>
         </div>
 
@@ -216,103 +293,110 @@ const AdminDashboard = ({ getIdToken }) => {
 
         {status && (
           <>
-            <div className="flex items-center gap-2 mb-6">
-              {online
-                ? <CheckCircle2 size={16} className="text-green-600" />
-                : <AlertTriangle size={16} className="text-red-500" />}
-              <span className="text-sm font-semibold text-primary">
-                {online ? 'Online' : String(status.status || 'Unknown')}
-              </span>
-              <span className="text-sm text-secondary">
-                · up {formatUptime(status.uptime_seconds)}
-              </span>
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-3 mb-8">
-              <Meter
-                icon={Cpu}
-                label="CPU"
-                percent={status.system?.cpu_percent}
-                detail="Processor load"
-              />
-              <Meter
-                icon={MemoryStick}
-                label="Memory"
-                percent={mem?.percent}
-                detail={mem ? `${Math.round(mem.used_mb)} of ${Math.round(mem.total_mb)} MB` : '—'}
-              />
-              <Meter
-                icon={HardDrive}
-                label="Disk"
-                percent={disk?.percent}
-                detail={disk ? `${disk.used_gb?.toFixed(1)} of ${disk.total_gb?.toFixed(1)} GB` : '—'}
-              />
-            </div>
-
-            <div className="mb-8">
-              <MetricChart
-                points={history}
-                rangeMinutes={rangeMinutes}
-                onRangeChange={setRangeMinutes}
-              />
-            </div>
-
-            {/* Before coverage: this is what says whether the coverage figure
-                below is final or still climbing. */}
-            <div className="mb-8">
-              <IndexingProgress indexing={indexing} />
-            </div>
-
-            <div className="mb-8">
-              <HarvestCatalog getIdToken={getIdToken} onHarvestQueued={load} />
-            </div>
-
-            <div className="mb-8">
-              <ArchiveCoverage coverage={coverage} />
-            </div>
-
-            <div className="mb-8">
-              <ArchiveQuery getIdToken={getIdToken} />
-            </div>
-
-            {engine && (
-              <div className="bg-card border border-border rounded-lg p-5">
-                <div className="flex items-center gap-2 mb-4">
-                  <Database size={14} className="text-secondary" />
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-secondary">
-                    Archival engine
+            {/* Tab 1: System Overview */}
+            {activeTab === 'overview' && (
+              <div className="space-y-8">
+                <div className="flex items-center gap-2 mb-6">
+                  {online
+                    ? <CheckCircle2 size={16} className="text-green-600" />
+                    : <AlertTriangle size={16} className="text-red-500" />}
+                  <span className="text-sm font-semibold text-primary">
+                    {online ? 'Online' : String(status.status || 'Unknown')}
+                  </span>
+                  <span className="text-sm text-secondary">
+                    · up {formatUptime(status.uptime_seconds)}
                   </span>
                 </div>
-                <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 text-sm">
-                  <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
-                    <dt className="text-secondary">Index</dt>
-                    <dd className="text-xs text-primary">{engine.index_name || '—'}</dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
-                    <dt className="text-secondary">Documents</dt>
-                    <dd className="tabular-nums text-xs text-primary">
-                      {engine.stats?.numberOfDocuments?.toLocaleString() ?? '—'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
-                    <dt className="text-secondary">Indexing</dt>
-                    <dd className="tabular-nums text-xs text-primary">
-                      {engine.stats?.isIndexing ? 'in progress' : 'idle'}
-                    </dd>
-                  </div>
-                  <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
-                    <dt className="text-secondary">Engine</dt>
-                    <dd className="text-xs text-primary truncate" title={engine.meilisearch_url}>
-                      {engine.meilisearch_url || '—'}
-                    </dd>
-                  </div>
-                </dl>
 
-                {engine.stats?.numberOfDocuments === 1 && (
-                  <p className="mt-4 text-xs text-amber-500">
-                    The index holds a single document — it looks seeded rather than populated.
-                  </p>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <Meter
+                    icon={Cpu}
+                    label="CPU"
+                    percent={status.system?.cpu_percent}
+                    detail="Processor load"
+                  />
+                  <Meter
+                    icon={MemoryStick}
+                    label="Memory"
+                    percent={mem?.percent}
+                    detail={mem ? `${Math.round(mem.used_mb)} of ${Math.round(mem.total_mb)} MB` : '—'}
+                  />
+                  <Meter
+                    icon={HardDrive}
+                    label="Disk"
+                    percent={disk?.percent}
+                    detail={disk ? `${disk.used_gb?.toFixed(1)} of ${disk.total_gb?.toFixed(1)} GB` : '—'}
+                  />
+                </div>
+
+                <MetricChart
+                  points={history}
+                  rangeMinutes={rangeMinutes}
+                  onRangeChange={setRangeMinutes}
+                />
+
+                {engine && (
+                  <div className="admin-card">
+                    <div className="admin-card-header">
+                      <Database size={14} className="text-secondary shrink-0" />
+                      <span className="admin-card-title">
+                        Archival engine
+                      </span>
+                    </div>
+                    <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 text-sm">
+                      <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
+                        <dt className="text-secondary">Index</dt>
+                        <dd className="text-xs text-primary">{engine.index_name || '—'}</dd>
+                      </div>
+                      <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
+                        <dt className="text-secondary">Documents</dt>
+                        <dd className="tabular-nums text-xs text-primary">
+                          {engine.stats?.numberOfDocuments?.toLocaleString() ?? '—'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
+                        <dt className="text-secondary">Indexing</dt>
+                        <dd className="tabular-nums text-xs text-primary">
+                          {engine.stats?.isIndexing ? 'in progress' : 'idle'}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
+                        <dt className="text-secondary">Engine</dt>
+                        <dd className="text-xs text-primary truncate" title={engine.meilisearch_url}>
+                          {engine.meilisearch_url || '—'}
+                        </dd>
+                      </div>
+                    </dl>
+
+                    {engine.stats?.numberOfDocuments === 1 && (
+                      <p className="mt-4 text-xs text-amber-500">
+                        The index holds a single document — it looks seeded rather than populated.
+                      </p>
+                    )}
+                  </div>
                 )}
+              </div>
+            )}
+
+            {/* Tab 2: Ingest & Harvester Queue */}
+            {activeTab === 'harvesting' && (
+              <div className="space-y-8">
+                <IndexingProgress indexing={indexing} />
+                <HarvestCatalog getIdToken={getIdToken} onHarvestQueued={load} />
+              </div>
+            )}
+
+            {/* Tab 3: Corpus Coverage */}
+            {activeTab === 'coverage' && (
+              <div className="space-y-8">
+                <ArchiveCoverage coverage={coverage} />
+              </div>
+            )}
+
+            {/* Tab 4: Index Explorer */}
+            {activeTab === 'query' && (
+              <div className="space-y-8">
+                <ArchiveQuery getIdToken={getIdToken} />
               </div>
             )}
           </>

@@ -116,18 +116,20 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg p-5">
+    <div className="admin-card">
       {/* Header */}
       <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
-        <div className="flex items-center gap-2">
-          <Layers size={16} className="text-accent" />
-          <h2 className="text-sm font-semibold text-primary">Dutch Archival Catalog & Harvester Queue</h2>
+        <div className="admin-card-header mb-0">
+          <Layers size={14} className="text-secondary shrink-0" />
+          <span className="admin-card-title">
+            Dutch Archival Catalog & Harvester Queue
+          </span>
         </div>
         <button
           type="button"
           onClick={fetchCatalog}
           disabled={loading}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-semibold border border-border text-secondary hover:text-primary transition-colors cursor-pointer disabled:opacity-50"
+          className="admin-btn-secondary py-1.5 px-3"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           Reload Catalog
@@ -141,22 +143,22 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
       {/* Summary Cards */}
       {catalog?.summary && (
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-          <div className="bg-muted/40 border border-border/60 rounded-md p-3">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-secondary mb-1">Total Archives</div>
-            <div className="font-serif text-xl font-semibold text-primary">{catalog.summary.total_archives} archives</div>
-            <div className="text-[11px] text-secondary mt-0.5">{catalog.summary.total_export_files} export files</div>
+          <div className="admin-summary-box">
+            <div className="admin-summary-label">Total Archives</div>
+            <div className="admin-summary-value text-primary">{catalog.summary.total_archives} archives</div>
+            <div className="admin-summary-subtext">{catalog.summary.total_export_files} export files</div>
           </div>
-          <div className="bg-muted/40 border border-border/60 rounded-md p-3">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-secondary mb-1">Indexed In Engine</div>
-            <div className="font-serif text-xl font-semibold text-green-600">{catalog.summary.indexed_archives} archives</div>
-            <div className="text-[11px] text-secondary mt-0.5">Sub-10ms searchable</div>
+          <div className="admin-summary-box">
+            <div className="admin-summary-label">Indexed In Engine</div>
+            <div className="admin-summary-value text-green-600">{catalog.summary.indexed_archives} archives</div>
+            <div className="admin-summary-subtext">Sub-10ms searchable</div>
           </div>
-          <div className="bg-muted/40 border border-border/60 rounded-md p-3">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-secondary mb-1">Awaiting Ingest</div>
-            <div className="font-serif text-xl font-semibold text-amber-500">
+          <div className="admin-summary-box">
+            <div className="admin-summary-label">Awaiting Ingest</div>
+            <div className="admin-summary-value text-amber-500">
               {catalog.summary.total_archives - catalog.summary.indexed_archives} archives
             </div>
-            <div className="text-[11px] text-secondary mt-0.5">Ready to queue</div>
+            <div className="admin-summary-subtext">Ready to queue</div>
           </div>
         </div>
       )}
@@ -200,7 +202,7 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
               key={st}
               type="button"
               onClick={() => setStatusFilter(st)}
-              className={`px-2.5 py-1 rounded text-[11px] font-medium capitalize transition-colors cursor-pointer ${
+              className={`admin-pill-filter ${
                 statusFilter === st
                   ? 'bg-card text-primary shadow-xs'
                   : 'text-secondary hover:text-primary'
@@ -255,10 +257,8 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
               <div
                 key={archive.code}
                 onClick={() => toggleSelect(archive.code)}
-                className={`flex items-start justify-between gap-3 p-3 rounded-md border transition-all cursor-pointer ${
-                  isSelected
-                    ? 'bg-accent/5 border-accent/40 shadow-xs'
-                    : 'bg-muted/20 border-border/60 hover:bg-muted/40'
+                className={`admin-list-item ${
+                  isSelected ? 'admin-list-item-selected' : 'admin-list-item-default'
                 }`}
               >
                 <div className="flex items-start gap-3 min-w-0">
@@ -283,17 +283,17 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
 
                       {/* Status Badges */}
                       {archive.indexed_records > 0 ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-green-500/10 text-green-700 dark:text-green-400 border border-green-500/20">
+                        <span className="admin-badge-success">
                           <CheckCircle size={10} />
                           Indexed ({archive.indexed_records.toLocaleString()} recs)
                         </span>
                       ) : archive.status === 'queued' ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                        <span className="admin-badge-warning">
                           <Clock size={10} />
                           Queued in plan
                         </span>
                       ) : (
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-secondary/10 text-secondary">
+                        <span className="admin-badge-neutral">
                           Available for Harvest
                         </span>
                       )}
@@ -335,7 +335,7 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
             type="button"
             onClick={handleQueueHarvest}
             disabled={submitting}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-accent text-accent-foreground font-semibold text-xs hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+            className="admin-btn-action"
           >
             {submitting ? (
               <RefreshCw size={13} className="animate-spin" />
