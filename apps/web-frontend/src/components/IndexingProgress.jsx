@@ -2,11 +2,17 @@ import React from 'react';
 import { Layers, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 /**
- * A batch whose document count has not moved for this long is worth a look.
+ * How long everything must be frozen before it is worth mentioning.
  *
- * Not an error: a large merge reports no change until it commits, so silence is
- * normal for a while. The threshold is set above the duration of a healthy batch
- * so that a warning means "longer than the ones before it", not "still working".
+ * "Frozen" means all three signals at once: no documents indexed, no tasks
+ * completed, *and* no movement in the engine's own batch progress. Watching
+ * documents alone cried stall over healthy work — a re-ingest updates records in
+ * place, so the count legitimately sits still for hours while a batch grinds
+ * through its steps at 98 MB/s.
+ *
+ * Still not proof of a fault: a large merge is quiet under all three. The
+ * threshold sits above a healthy batch so a warning means "longer than the ones
+ * before it", not "still working".
  */
 const STALL_WARN_SECONDS = 300;
 const STALL_ALERT_SECONDS = 900;
@@ -78,6 +84,7 @@ const IndexingProgress = ({ indexing }) => {
       : null;
 
   const pct = Number.isFinite(batch?.percentage) ? batch.percentage : null;
+  const job = indexing.current_ingest;
 
   return (
     <div className="bg-card border border-border rounded-lg p-5">
@@ -196,11 +203,39 @@ const IndexingProgress = ({ indexing }) => {
               ))}
             </ul>
           )}
-          <p className="text-[10px] text-secondary/60 mt-2">
-            Steps are nested — the deepest is the work happening now. All{' '}
-            {batch.tasks?.toLocaleString()} tasks commit together, so the
-            searchable count does not move until the whole batch lands.
-          </p>
+          {/* What is actually being harvested. Meilisearch only ever sees
+              documents, never which export they came from, so this comes from
+              the harvester's own log. */}
+          {job && (
+            <div className="mt-3 pt-3 border-t border-border/60">
+              <div className="flex items-baseline justify-between gap-3 flex-wrap">
+                <span className="text-[11px] text-secondary">
+                  Harvesting{' '}
+                  <span className="font-mono text-primary">
+                    {job.archive}.{job.kind}
+                  </span>
+                  {job.files_completed > 0 && (
+                    <span className="text-secondary/60">
+                      {' '}· {job.files_completed} file
+                      {job.files_completed === 1 ? '' : 's'} done
+                    </span>
+                  )}
+                </span>
+                <span className="text-[11px] font-mono text-secondary">
+                  {Number.isFinite(job.submitted) &&
+                    `${job.submitted.toLocaleString()} rows`}
+                  {Number.isFinite(job.rows_per_second) &&
+                    ` · ${Math.round(job.rows_per_second).toLocaleString()}/s`}
+                </span>
+              </div>
+              {job.waiting_for_queue && (
+                <p className="text-[10px] text-secondary/60 mt-1">
+                  Throttled by backpressure — the harvester is waiting for the
+                  queue to drain, which keeps batches inside available memory.
+                </p>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -214,11 +249,12 @@ const IndexingProgress = ({ indexing }) => {
         >
           <AlertTriangle size={14} className="shrink-0 mt-0.5" />
           <p className="text-xs">
-            The document count has not moved in {formatDuration(stalled)}.
+            Nothing has moved in {formatDuration(stalled)} — no documents
+            indexed, no tasks completed, and no batch progress.
             {' '}
             <span className="text-secondary">
-              A large merge reports nothing until it commits, so this is only a
-              problem if it runs well past how long the batches below took.
+              A large merge is quiet under all three, so this is only a problem
+              if it runs well past how long the batches below took.
             </span>
           </p>
         </div>

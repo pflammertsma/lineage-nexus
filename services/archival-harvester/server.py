@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 import psutil
 from collections import deque
@@ -268,6 +269,28 @@ async def _sample_metrics() -> None:
         # Not available on every platform; absent is better than wrong.
         iowait = None
 
+      # Completed tasks, not just documents. A re-ingest updates existing
+      # records in place, so the document count is flat for hours while real
+      # work happens — judging progress on documents alone reports that as a
+      # stall. Task completions move either way.
+      done = None
+      try:
+        done = _count_tasks("succeeded")
+      except Exception:
+        pass
+
+      # Progress of the batch in flight. Within one long batch no task completes
+      # and no document lands, yet the engine reports itself advancing through
+      # named steps. Without this a healthy 20-minute merge is indistinguishable
+      # from a wedged one, and the panel cries stall over honest work.
+      pct = None
+      try:
+        batches = _meili_get("/batches?limit=1").get("results") or []
+        if batches and batches[0].get("finishedAt") is None:
+          pct = ((batches[0].get("progress") or {}).get("percentage"))
+      except Exception:
+        pass
+
       _metrics.append({
         "t": int(time.time()),
         # interval=None so the first call does not block for a second.
@@ -276,6 +299,8 @@ async def _sample_metrics() -> None:
         "mem": round(mem.percent, 1),
         "disk": round(disk.percent, 1),
         "docs": docs,
+        "done": done,
+        "pct": pct,
         "indexing": indexing,
       })
       _persist_metric(_metrics[-1])
@@ -346,14 +371,11 @@ def admin_query(
       "event_type": hit.get("event_type", ""),
       "event_date": hit.get("event_date", ""),
       "event_place": hit.get("event_place", ""),
-      # Provenance.
-      #
-      # `retrieved_from` is the path this result came back on, not who owns the
-      # record: every record here originates with Open Archieven, and citations
-      # must always point there. What differs is whether we answered from our own
-      # snapshot or asked them live — which matters for both latency and
-      # freshness, since a snapshot can lag their corrections.
-      "retrieved_from": "index",
+      # The whole stored document, for inspecting a record without leaving the
+      # dashboard. This endpoint exists to answer "did that export ingest
+      # correctly", and the transformed fields above are exactly what a bad
+      # transform would hide.
+      "raw": hit,
       "source": {
         "archive": hit.get("archive", ""),
         "kind": hit.get("kind", ""),
@@ -370,13 +392,9 @@ def admin_query(
     "took_ms": round((time.time() - started) * 1000, 1),
     "estimated_total": results.get("estimatedTotalHits", len(hits)),
     "returned": len(hits),
-    # Counts per retrieval path, so a caller can tell at a glance whether an
-    # answer came from our coverage or from Open Archieven. Both keys are always
-    # present, so a consumer never has to distinguish absent from zero.
-    "sources": {
-      "index": len(hits),
-      "openarchieven": 0,
-    },
+    # No retrieval-path breakdown: every hit here comes from our own index. When
+    # the Open Archieven fallback lands, that distinction becomes real and worth
+    # reporting again — until then it only implies a choice that is not happening.
     "hits": hits,
   }
 
@@ -516,23 +534,118 @@ def _document_rate(window_seconds: int = 600) -> Optional[float]:
   return max(0.0, (samples[-1]["docs"] - samples[0]["docs"]) / span)
 
 
-def _seconds_since_documents_changed() -> Optional[int]:
+def _seconds_since_progress() -> Optional[int]:
   """
-  How long the document count has been unchanged.
+  How long nothing has moved, across every signal we have.
 
-  This is the stall signal. A batch that is merging shows no change either, so a
-  value here is not proof of a problem — but a count frozen for longer than the
-  batches around it took to finish is the symptom worth looking at.
+  Three are needed, because each is blind on its own:
+
+    documents  a re-ingest updates records in place, so the count sits still
+               for hours while the engine works perfectly normally
+    tasks      no task completes until its whole batch commits
+    batch %    the engine's own progress through the batch in flight
+
+  Only when all three are frozen is there something worth reporting. A value
+  here is still not proof of a fault — but a figure well past how long the
+  surrounding batches took is the symptom worth looking at.
   """
-  samples = [p for p in _metrics if p.get("docs") is not None]
+  def signal(sample: Dict[str, Any]):
+    return (sample.get("docs"), sample.get("done"), sample.get("pct"))
+
+  samples = [p for p in _metrics if any(v is not None for v in signal(p))]
   if len(samples) < 2:
     return None
-  latest = samples[-1]["docs"]
+  latest = signal(samples[-1])
   for sample in reversed(samples):
-    if sample["docs"] != latest:
+    if signal(sample) != latest:
       return int(time.time() - sample["t"])
   # Unchanged across the whole buffer: report its span rather than claim zero.
   return int(time.time() - samples[0]["t"])
+
+
+# Where the harvester writes its log. Mounted read-only into this container, so
+# the dashboard can say *what* is being ingested — something Meilisearch cannot
+# know. It only ever sees documents, not which export they came from.
+INGEST_LOG_DIR = os.environ.get("INGEST_LOG_DIR", "/ingest-logs")
+
+_INGEST_STREAMING = re.compile(r"streaming ([a-z0-9_]+)\.([a-z0-9_]+)")
+_INGEST_SUBMITTED = re.compile(
+  r"([a-z0-9_]+)\.([a-z0-9_]+): ([\d,]+) submitted \(([\d.]+) rec/s\)"
+)
+_INGEST_FINISHED = re.compile(
+  r"([a-z0-9_]+)\.([a-z0-9_]+): ([\d,]+) records from ([\d,]+) rows"
+)
+
+
+def _current_ingest() -> Optional[Dict[str, Any]]:
+  """
+  What the harvester is working on, read from the tail of its log.
+
+  Parsing a log is not elegant, but the alternative — having the ingest publish
+  status through the API — would mean a run already in flight could not be seen
+  at all. This works for jobs started before the feature existed, which is
+  exactly when someone wants to know what is happening.
+
+  Returns None when no log exists or nothing has been written recently enough to
+  trust; a stale line is worse than no line.
+  """
+  try:
+    logs = [
+      os.path.join(INGEST_LOG_DIR, name)
+      for name in os.listdir(INGEST_LOG_DIR)
+      if name.endswith(".log")
+    ]
+    if not logs:
+      return None
+    newest = max(logs, key=os.path.getmtime)
+    age = time.time() - os.path.getmtime(newest)
+    # Nothing written for five minutes means the run is over or wedged. Either
+    # way, reporting its last line as "current" would be a lie.
+    if age > 300:
+      return None
+
+    with open(newest, "rb") as handle:
+      handle.seek(0, os.SEEK_END)
+      window = min(handle.tell(), 16384)
+      handle.seek(-window, os.SEEK_END)
+      tail = handle.read().decode("utf-8", errors="replace").splitlines()
+  except OSError:
+    return None
+
+  archive = kind = None
+  submitted = None
+  rate = None
+  waiting = False
+  completed = 0
+
+  for line in tail:
+    match = _INGEST_STREAMING.search(line)
+    if match:
+      archive, kind = match.group(1), match.group(2)
+      submitted, rate = None, None
+    match = _INGEST_SUBMITTED.search(line)
+    if match:
+      archive, kind = match.group(1), match.group(2)
+      submitted = int(match.group(3).replace(",", ""))
+      rate = float(match.group(4))
+    if _INGEST_FINISHED.search(line):
+      completed += 1
+    waiting = "waiting for queue" in line
+
+  if not archive:
+    return None
+
+  return {
+    "archive": archive,
+    "kind": kind,
+    "submitted": submitted,
+    "rows_per_second": rate,
+    # True when the harvester is throttling itself because the queue is full —
+    # the normal state under backpressure, and not a problem.
+    "waiting_for_queue": waiting,
+    "files_completed": completed,
+    "log_age_seconds": int(age),
+  }
 
 
 @app.get("/api/v1/admin/indexing", dependencies=[Depends(require_admin)])
@@ -578,11 +691,20 @@ def admin_indexing():
       elif finished is not None and len(recent) < 5:
         # Durations of completed batches are the only honest yardstick for
         # whether the one in flight is taking abnormally long.
+        details = batch.get("details") or {}
         recent.append({
           "uid": batch.get("uid"),
           "tasks": batch_stats.get("totalNbTasks"),
           "duration": batch.get("duration"),
+          "started_at": batch.get("startedAt"),
           "finished_at": finished,
+          # The real document count, so throughput is measured rather than
+          # inferred. Deriving it as tasks x batch size silently hardcodes our
+          # ingest's INGEST_BATCH_SIZE, and would misreport every batch the
+          # moment that changed or another writer submitted differently sized
+          # payloads. `indexedDocuments` is what actually landed; fall back to
+          # what was received when the engine does not report it.
+          "documents": details.get("indexedDocuments") or details.get("receivedDocuments"),
         })
   except Exception:
     # The batches endpoint is informational; losing it should not take the
@@ -610,9 +732,10 @@ def admin_indexing():
       "total_pending": enqueued + processing,
     },
     "current_batch": current,
+    "current_ingest": _current_ingest(),
     "recent_batches": recent,
     "documents_per_second": round(rate, 1) if rate is not None else None,
-    "stalled_seconds": _seconds_since_documents_changed(),
+    "stalled_seconds": _seconds_since_progress(),
     "pending_documents": pending_documents,
     "eta_seconds": eta_seconds,
   }

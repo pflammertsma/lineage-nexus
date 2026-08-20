@@ -218,10 +218,61 @@ searches are served from our own index.
         *Verified against the live export: 40,000 rows collapse to exactly 17,930
         records with unique ids, retaining 39,912 people where the old code kept
         17,930.* Longest legitimate run is 127 people on one deed.
-  - [ ] **Re-ingest `frl` and `gra` to recover the lost people.** The index is
-        complete-looking but wrong: ~1.88M records are missing everyone except
-        one person. Needs the RAM decision first — a repeat at 9h per batch is
-        not worth doing twice.
+  - [ ] **Re-ingest running: `frl` + `ade`.** Started 2026-08-20 18:16 UTC in an
+        isolated `ingest` container, logging to `/opt/ingest-logs/reingest.log`.
+        `gra` is skipped — its submitted and indexed counts matched exactly, so
+        it has no multi-row records. `ade` does: `ade.bev` has 4,959 repeated
+        GUIDs per 30,000 rows.
+
+        Chosen as a controlled comparison against the 9-hour baseline: same
+        data, now with the merge fix, backpressure, and 12 GB instead of 6 GB.
+        Early results, all verified live:
+
+        | | before | now |
+        |---|---|---|
+        | batch size | 1,121 tasks / 11.1M docs | 24 tasks / 240k docs |
+        | queue depth | 1,289, climbing | pinned at 25 |
+        | submit rate | "24,000/s" into a queue | 2,178/s, engine-paced |
+
+        Merge confirmed in the live index: a `frl.bev` household now holds three
+        residents where it previously kept only the last.
+
+        The record count stays at 11,782,742 throughout — these are updates to
+        existing ids, not additions. Progress shows in the ingest log and the
+        queue, not the document count.
+  - [x] **Stall detection no longer trips on a re-ingest.** It compared document
+        counts, but an update-in-place run leaves that flat for hours while the
+        engine works normally — the panel would have reported a multi-hour stall
+        during a perfectly healthy run. It now treats a completed task as
+        progress too. *Verified live at `stalled_seconds: 70` mid-re-ingest;
+        unit tests cover flat-docs-rising-tasks, both-frozen, and rising-docs.*
+  - [x] **Dashboard corrections from watching a real run.**
+        - Dropped the `local` / `live` chips and the retrieval-path counts from
+          the query panel. Every hit is served from our own index, so the
+          distinction implied a choice that is not being made. It comes back
+          with the Open Archieven fallback, when it becomes true.
+        - Query rows expand inline to the full stored document. This panel
+          exists to answer "did that export ingest correctly", and the
+          transformed fields are exactly what a bad transform would hide.
+        - **The stall warning was firing over healthy work.** It watched the
+          document count, which a re-ingest leaves flat for hours, and it fired
+          while the batch was visibly advancing at 47% and the box was at 48%
+          I/O wait. The signal is now documents *or* completed tasks *or* the
+          engine's own batch percentage, and the wording no longer claims it is
+          only about documents. *Verified live at `stalled_seconds: 23` during
+          the run that previously showed 7m 10s.*
+        - Replaced the "steps are nested" explainer with what is actually being
+          harvested — archive, record type, rows submitted, rows/s, files done,
+          and whether backpressure is currently throttling. Meilisearch cannot
+          know this (it only sees documents), so the gateway reads the
+          harvester's log through a read-only mount. Parsed from the log rather
+          than published by the ingest so a run already in flight is visible —
+          which is precisely when someone wants to know. Ignores a log untouched
+          for 5 minutes, because a stale line is worse than no line.
+  - [ ] **Harvest the remaining 80 archives** once the re-ingest lands and its
+        throughput is known. 375 files across 83 archives; 22 done. At the
+        measured ~1.5 KB/record the full ~51.6M corpus is ~77 GB, well inside
+        the 200 GB volume — RAM, not disk, sets the pace.
   - [ ] Confirm the final document count against the 13,658,813 submitted.
     Per-task stats report ~9% fewer `indexedDocuments` than received. Sampling
     30,000 rows of `frl.dtb_d` found no repeated `SOURCE_RECORD_GUID`, so it is

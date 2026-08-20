@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, ExternalLink, Loader2 } from 'lucide-react';
+import { Search, ExternalLink, Loader2, ChevronRight } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
 
 /**
@@ -25,25 +25,6 @@ const KIND_LABELS = {
 const kindLabel = (kind) => KIND_LABELS[kind] || `Record type: ${kind}`;
 
 /**
- * How a hit was retrieved — not who owns it. Every record originates with Open
- * Archieven; the distinction is whether we answered from our own harvested
- * snapshot or asked them live. It matters for latency, and for freshness: a
- * snapshot can lag corrections made upstream.
- */
-const RETRIEVAL = {
-  index: {
-    label: 'local',
-    title: 'Answered from our harvested index — fast, but a snapshot of an export, so it can lag corrections made at Open Archieven.',
-    className: 'bg-green-600/15 text-green-600 border-green-600/30',
-  },
-  openarchieven: {
-    label: 'live',
-    title: 'Fetched from the Open Archieven API because our index had no match — current, but rate limited.',
-    className: 'bg-accent-soft text-accent border-accent/30',
-  },
-};
-
-/**
  * Raw index search, for checking what is actually in there.
  *
  * No agent, no orchestration, no interpretation — the point is to see the index
@@ -56,6 +37,16 @@ const ArchiveQuery = ({ getIdToken }) => {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  // Which rows are showing their stored document. Ids rather than indices, so an
+  // expanded row does not follow the position when a new search reorders results.
+  const [expanded, setExpanded] = useState(() => new Set());
+
+  const toggle = (id) =>
+    setExpanded((open) => {
+      const next = new Set(open);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
 
   const run = async (e) => {
     e.preventDefault();
@@ -84,6 +75,7 @@ const ArchiveQuery = ({ getIdToken }) => {
         return;
       }
       setResult(data);
+      setExpanded(new Set());
     } catch {
       setError('Could not reach the archival API.');
     } finally {
@@ -131,18 +123,6 @@ const ArchiveQuery = ({ getIdToken }) => {
             {result.estimated_total.toLocaleString()} match
             {result.estimated_total === 1 ? '' : 'es'} · showing {result.returned} ·{' '}
             <span className="font-mono">{result.took_ms}ms</span>
-            {result.sources && (
-              <>
-                {' · '}
-                <span title={RETRIEVAL.index.title} className="cursor-help">
-                  {result.sources.index} local
-                </span>
-                {', '}
-                <span title={RETRIEVAL.openarchieven.title} className="cursor-help">
-                  {result.sources.openarchieven} live
-                </span>
-              </>
-            )}
           </p>
 
           {result.hits.length === 0 ? (
@@ -155,7 +135,20 @@ const ArchiveQuery = ({ getIdToken }) => {
               {result.hits.map((hit) => (
                 <li key={hit.id} className="border border-border/60 rounded-lg p-3 text-xs">
                   <div className="flex items-start justify-between gap-3 mb-1.5">
-                    <span className="text-primary font-semibold break-words">{hit.names}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggle(hit.id)}
+                      aria-expanded={expanded.has(hit.id)}
+                      className="flex items-start gap-1.5 text-left text-primary font-semibold break-words hover:text-accent transition-colors cursor-pointer"
+                    >
+                      <ChevronRight
+                        size={13}
+                        className={`mt-0.5 shrink-0 transition-transform ${
+                          expanded.has(hit.id) ? 'rotate-90' : ''
+                        }`}
+                      />
+                      {hit.names}
+                    </button>
                     {hit.url && (
                       <a
                         href={hit.url}
@@ -173,19 +166,9 @@ const ArchiveQuery = ({ getIdToken }) => {
                     {[hit.event_type, hit.event_date, hit.event_place].filter(Boolean).join(' · ')}
                   </p>
 
-                  {/* Provenance: how it was retrieved, then which export it came from. */}
+                  {/* Which export this came from. Every hit is served from our
+                      own index, so there is no retrieval path worth showing. */}
                   <div className="flex flex-wrap items-center gap-1.5 mb-2">
-                    {(() => {
-                      const r = RETRIEVAL[hit.retrieved_from] || RETRIEVAL.index;
-                      return (
-                        <span
-                          title={r.title}
-                          className={`px-1.5 py-0.5 rounded border font-mono text-[10px] cursor-help ${r.className}`}
-                        >
-                          {r.label}
-                        </span>
-                      );
-                    })()}
                     <span
                       title={hit.source.institution
                         ? `${hit.source.archive} — ${hit.source.institution}`
@@ -210,6 +193,12 @@ const ArchiveQuery = ({ getIdToken }) => {
                       </span>
                     )}
                   </div>
+
+                  {expanded.has(hit.id) && (
+                    <pre className="mb-2 p-2.5 rounded bg-muted/60 border border-border/60 text-[10px] leading-relaxed font-mono text-secondary overflow-x-auto max-h-72 overflow-y-auto">
+{JSON.stringify(hit.raw ?? hit, null, 2)}
+                    </pre>
+                  )}
 
                   {hit.persons?.length > 0 && (
                     <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-secondary">

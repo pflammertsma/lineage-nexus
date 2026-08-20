@@ -266,7 +266,10 @@ function deployArchival(config) {
       // Metrics history lives on the host, not in the container, so redeploying
       // does not blank the dashboard's 24-hour chart.
       'sudo mkdir -p /opt/archival-state',
-      'sudo docker run -d --name gateway --env-file /opt/archival-harvester/.env --restart always --net=host -v /opt/archival-state:/state archival-gateway',
+      'sudo mkdir -p /opt/ingest-logs',
+      // Harvester log, read-only: lets the dashboard report which export is
+      // being ingested. Meilisearch only ever sees documents, never their origin.
+      'sudo docker run -d --name gateway --env-file /opt/archival-harvester/.env --restart always --net=host -v /opt/archival-state:/state -v /opt/ingest-logs:/ingest-logs:ro archival-gateway',
       // The container has the values now; leave nothing readable at rest.
       'shred -u /opt/archival-harvester/.env 2>/dev/null || rm -f /opt/archival-harvester/.env',
     ].join(' && ');
