@@ -56,28 +56,6 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
 
   if (!isOpen) return null;
 
-  const handleDownloadCsv = async () => {
-    try {
-      const token = await getIdToken();
-      if (!token) return;
-      const url = `${ADMIN_API_BASE_URL}/api/v1/admin/batch-telemetry?format=csv${
-        selectedBatchUid !== 'all' ? `&batch_uid=${selectedBatchUid}` : ''
-      }`;
-      const res = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const blob = await res.blob();
-      const a = document.createElement('a');
-      a.href = window.URL.createObjectURL(blob);
-      a.download = `batch_telemetry_${selectedBatchUid}.csv`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch {
-      // Fallback
-    }
-  };
-
   const handleDownloadJson = () => {
     const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(filteredSamples, null, 2));
     const a = document.createElement('a');
@@ -197,17 +175,8 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
 
             <button
               type="button"
-              onClick={handleDownloadCsv}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-on-accent text-xs font-bold shadow-xs hover:bg-accent/90 transition-colors cursor-pointer"
-            >
-              <Download size={13} />
-              <span>Export CSV</span>
-            </button>
-
-            <button
-              type="button"
               onClick={handleDownloadJson}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-card border border-border text-primary text-xs font-medium hover:border-accent transition-colors cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-on-accent text-xs font-bold shadow-xs hover:bg-accent/90 transition-colors cursor-pointer"
             >
               <Download size={13} />
               <span>Export JSON</span>
@@ -230,7 +199,7 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
               {/* Chart 1: Progress Curves */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-primary">Progress Curve (Phase-Weighted)</span>
+                  <span className="font-semibold text-primary">Progress Curve</span>
                   <div className="flex items-center gap-3 text-[10px]">
                     <span className="flex items-center gap-1 text-amber-500 font-medium">
                       <span className="w-2 h-0.5 bg-amber-500 rounded-full" /> Raw Engine %
@@ -264,7 +233,7 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
               {/* Chart 2: ETA Stability */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-primary">ETA Stability (Smoothed vs Naive)</span>
+                  <span className="font-semibold text-primary">ETA Stability</span>
                   <div className="flex items-center gap-3 text-[10px]">
                     <span className="flex items-center gap-1 text-red-400 font-medium">
                       <span className="w-2 h-0.5 bg-red-400 rounded-full" /> Naive Linear ETA
