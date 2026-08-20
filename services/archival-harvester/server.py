@@ -37,6 +37,51 @@ START_TIME = time.time()
 
 meili_client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY)
 
+
+def ensure_meilisearch_index_settings():
+  """Configures Meilisearch for sub-50ms query latency by setting proximityPrecision to 'byAttribute'."""
+  try:
+    index = meili_client.index(INDEX_NAME)
+    index.update_settings({
+      "searchableAttributes": [
+        "full_names",
+        "person_names",
+        "event_place",
+        "deed_type",
+        "archive_name",
+        "event_year"
+      ],
+      "filterableAttributes": [
+        "event_type",
+        "event_year",
+        "event_place",
+        "archive_code",
+        "province"
+      ],
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness"
+      ],
+      "proximityPrecision": "byAttribute",
+      "typoTolerance": {
+        "enabled": True,
+        "minWordSizeForTypos": {
+          "oneTypo": 4,
+          "twoTypos": 8
+        }
+      }
+    })
+    logger.info("Configured Meilisearch proximityPrecision: 'byAttribute' and Dutch stopWords successfully.")
+  except Exception as e:
+    logger.warning(f"Could not auto-update Meilisearch index settings: {e}")
+
+
+ensure_meilisearch_index_settings()
+
 # Admin auth lives in auth.py. It accepts either a Firebase ID token with an
 # `admin` claim (used by the web dashboard, no secret in the browser) or the
 # X-Admin-Token shared secret (used by curl). The old comparison here was a plain

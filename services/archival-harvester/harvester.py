@@ -47,6 +47,7 @@ def configure_meilisearch_index():
       "sort",
       "exactness"
     ],
+    "proximityPrecision": "byAttribute",
     "typoTolerance": {
       "enabled": True,
       "minWordSizeForTypos": {
