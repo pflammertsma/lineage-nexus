@@ -234,6 +234,13 @@ function deployArchival(config) {
     );
   }
 
+  step('Pre-flight: Validating local Python syntax');
+  try {
+    run('python', ['-m', 'py_compile', 'services/archival-harvester/server.py']);
+  } catch (err) {
+    fail('Local Python syntax validation failed! Aborting deployment to protect production.', String(err));
+  }
+
   step('Deploying self-hosted archival gateway');
   const target = `${config.ociUser}@${config.ociHost}`;
 
@@ -260,9 +267,13 @@ function deployArchival(config) {
     run('scp', ['-i', config.ociKey, localEnv, `${target}:/opt/archival-harvester/.env`]);
     const remote = [
       'cd /opt/archival-harvester',
+      'echo "▸ Building Docker image..."',
+      'sudo docker build -t archival-gateway .',
+      'echo "▸ Validating container imports before swap..."',
+      'sudo docker run --rm archival-gateway python -m py_compile server.py',
+      'echo "▸ Swapping container..."',
       'sudo docker stop gateway || true',
       'sudo docker rm gateway || true',
-      'sudo docker build -t archival-gateway .',
       // Metrics history lives on the host, not in the container, so redeploying
       // does not blank the dashboard's 24-hour chart.
       'sudo mkdir -p /opt/archival-state',
@@ -272,6 +283,11 @@ function deployArchival(config) {
       'sudo docker run -d --name gateway --env-file /opt/archival-harvester/.env --restart always --net=host -v /opt/archival-state:/state -v /opt/ingest-logs:/ingest-logs:ro archival-gateway',
       // The container has the values now; leave nothing readable at rest.
       'shred -u /opt/archival-harvester/.env 2>/dev/null || rm -f /opt/archival-harvester/.env',
+      'echo "▸ Verifying production health check..."',
+      'for i in $(seq 1 10); do if curl -sf http://localhost:8090/health >/dev/null; then echo "✓ Health check passed!"; exit 0; fi; sleep 1; done',
+      'echo "✗ Health check failed! Dumping container logs:"',
+      'sudo docker logs gateway --tail 40',
+      'exit 1',
     ].join(' && ');
     run('ssh', ['-i', config.ociKey, target, `"${remote}"`]);
   } finally {
