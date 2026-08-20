@@ -175,10 +175,23 @@ async def _sample_metrics() -> None:
         # Meilisearch being unreachable should not stop CPU/memory history.
         pass
 
+      # I/O wait, tracked separately because `cpu_percent` does not include it.
+      # A box pinned at 98 MB/s of page-fault reads reported 4.9% CPU and 20%
+      # memory here — idle-looking on every metric we had, while vmstat showed
+      # 0% idle and 94% iowait. Without this the dashboard cannot distinguish a
+      # machine doing nothing from one saturated on disk, which is exactly the
+      # state a stalled harvest puts it in.
+      try:
+        iowait = round(psutil.cpu_times_percent(interval=None).iowait, 1)
+      except (AttributeError, ValueError):
+        # Not available on every platform; absent is better than wrong.
+        iowait = None
+
       _metrics.append({
         "t": int(time.time()),
         # interval=None so the first call does not block for a second.
         "cpu": psutil.cpu_percent(interval=None),
+        "iowait": iowait,
         "mem": round(mem.percent, 1),
         "disk": round(disk.percent, 1),
         "docs": docs,

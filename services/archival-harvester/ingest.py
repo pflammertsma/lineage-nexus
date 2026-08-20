@@ -27,6 +27,7 @@ import argparse
 import csv
 import gzip
 import io
+import json
 import logging
 import os
 import re
@@ -51,6 +52,26 @@ MEILI_MASTER_KEY = os.environ.get("MEILI_MASTER_KEY", "")
 INDEX_NAME = os.environ.get("MEILI_INDEX", "records")
 
 BATCH_SIZE = int(os.environ.get("INGEST_BATCH_SIZE", "10000"))
+
+# Backpressure. Submitting is ~10,000 records/second; indexing is far slower, so
+# an unthrottled run does not "finish" — it just moves the whole corpus into
+# Meilisearch's queue and leaves. That is what happened on the first frl+gra run:
+# 1,289 tasks and 5.4 GB of pending payloads piled up, Meilisearch auto-grouped
+# 266 of them into one 2.66M-document batch, and that batch then read 178 GB off
+# the disk over 45 minutes without indexing a single document. Its working set no
+# longer fit in RAM, so it thrashed the page cache instead of making progress.
+#
+# Waiting for the queue to drain bounds how much work the engine can group into a
+# single batch, which is the thing that actually has to fit in memory. It costs
+# nothing in total throughput: the engine was always the bottleneck, and a shallow
+# queue just stops us from pretending otherwise.
+MAX_PENDING_TASKS = int(os.environ.get("INGEST_MAX_PENDING_TASKS", "8"))
+QUEUE_POLL_SECONDS = 5
+
+# A queue that has not moved for this long is stuck rather than busy. Not fatal on
+# its own — a big merge is legitimately silent for minutes — but it is the point
+# at which the run should say so rather than block for ever.
+QUEUE_STALL_SECONDS = int(os.environ.get("INGEST_STALL_SECONDS", "900"))
 
 # Role prefixes are derived from each file's own header rather than hardcoded.
 #
@@ -208,6 +229,65 @@ def list_exports() -> List[str]:
     return sorted(set(found))
 
 
+def pending_tasks() -> Optional[int]:
+    """
+    How many tasks Meilisearch still has to work through.
+
+    urllib rather than the client so this does not depend on which task helpers a
+    given client release exposes. `limit=0` asks for the count without making the
+    engine serialise a page of results.
+    """
+    url = f"{MEILI_HOST}/tasks?statuses=enqueued,processing&limit=0"
+    request = urllib.request.Request(
+        url, headers={"Authorization": f"Bearer {MEILI_MASTER_KEY}"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return json.loads(response.read().decode("utf-8")).get("total")
+    except Exception:
+        # Never let a failed status check stop an ingest that is otherwise fine.
+        return None
+
+
+def await_queue(threshold: int = MAX_PENDING_TASKS) -> None:
+    """
+    Blocks until the queue is shallow enough to accept more work.
+
+    Returns immediately if the count cannot be read — a broken status endpoint
+    should slow the ingest down, not halt it.
+    """
+    waited = 0.0
+    last_count = None
+    unchanged_for = 0.0
+
+    while True:
+        count = pending_tasks()
+        if count is None or count <= threshold:
+            if waited:
+                logger.info("    queue drained to %s after %.0fs", count, waited)
+            return
+
+        if count == last_count:
+            unchanged_for += QUEUE_POLL_SECONDS
+            if unchanged_for >= QUEUE_STALL_SECONDS:
+                logger.warning(
+                    "    queue stuck at %d tasks for %.0fs — the engine is not "
+                    "draining. Check the indexing panel on the admin dashboard; "
+                    "continuing anyway.",
+                    count, unchanged_for,
+                )
+                return
+        else:
+            unchanged_for = 0.0
+            last_count = count
+
+        if waited and waited % 60 < QUEUE_POLL_SECONDS:
+            logger.info("    waiting for queue: %d tasks pending", count)
+
+        time.sleep(QUEUE_POLL_SECONDS)
+        waited += QUEUE_POLL_SECONDS
+
+
 def configure_index(client) -> Any:
     index = client.index(INDEX_NAME)
     index.update_settings({
@@ -250,15 +330,19 @@ def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None) -> 
         if len(batch) >= BATCH_SIZE:
             index.add_documents(batch)
             batch = []
-            logger.info("  %s.%s: %d indexed (%.0f rec/s)",
+            logger.info("  %s.%s: %d submitted (%.0f rec/s)",
                         archive, kind, count, count / max(1e-6, time.time() - started))
+            # Backpressure: keep the queue shallow so the engine never groups
+            # more into one batch than it can hold in memory.
+            await_queue()
         if limit and count >= limit:
             break
 
     if batch:
         index.add_documents(batch)
+        await_queue()
 
-    logger.info("  %s.%s: %d indexed, %d skipped (no name or guid), %.1fs",
+    logger.info("  %s.%s: %d submitted, %d skipped (no name or guid), %.1fs",
                 archive, kind, count, skipped, time.time() - started)
     return count
 

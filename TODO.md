@@ -102,20 +102,46 @@ searches are served from our own index.
     and how long the document count has been unchanged. Completed batch durations
     sit underneath as the yardstick — a batch that has run 20x longer than the
     ones before it is the signal worth acting on.
-  - [ ] **Blocked: Meilisearch cannot digest the queue on a 6 GB box.** (Although we are not certain about this.)
-    The ingest script submits far faster than the engine indexes, so 1,289 tasks
-    (5.4 GB of pending payloads) piled up. Meilisearch auto-batched 266 of them
-    into a single 2.66M-document batch, which has now run for over 35 minutes
-    against ~3 minutes for the 175-task batches that preceded it. It reads a
-    sustained ~92 MB/s while its progress counter does not advance — the merge
-    working set no longer fits in the 4.4 GB page cache. Fix is one of: throttle
-    submission so the queue stays shallow (wait for each batch before sending
-    the next), cap `--max-indexing-memory` so the engine plans smaller merges,
-    or give the VM more RAM. Throttling is the cheapest and should land in
-    `ingest.py` before any re-run.
-    Restarting Meilisearch with `MEILI_MAX_INDEXING_MEMORY` capped is the least
-    destructive way out: enqueued tasks are durable on disk, so a restart aborts
-    only the batch in flight and the queue is re-processed rather than lost.
+  - [x] **Diagnosed and cleared: the engine was thrashing, not working.** The
+    ingest submitted far faster than the engine indexes, so 1,289 tasks (5.4 GB
+    of pending payloads) piled up and Meilisearch auto-grouped 266 of them into
+    one 2.66M-document batch. That batch ran 45 minutes and indexed nothing.
+
+    Proving it was genuinely stuck, rather than slow, needed `/proc/<pid>/io` —
+    the engine's own counters could not distinguish the two:
+
+    | signal | reading |
+    |---|---|
+    | `read_bytes` | +7.5 GB in 81s (~92 MB/s), 178 GB cumulative |
+    | `write_bytes` | +20 KB in 81s |
+    | `rchar` | unchanged |
+
+    `rchar` flat while `read_bytes` climbs means memory-mapped page faults, not
+    `read()` calls — LMDB faulting pages back in. 178 GB of reads against a 5 GB
+    database is the same data ~35 times over, and near-zero writes means nothing
+    was being produced. Note the process to measure is the container's *child*:
+    `docker inspect -f '{{.State.Pid}}'` returns the tini shim, which is idle and
+    reads zero, and measuring it suggests a healthy engine doing nothing.
+
+    Fixed by recreating the container with `MEILI_MAX_INDEXING_MEMORY=2GiB` so the
+    indexer spills to disk instead of thrashing the page cache. Non-destructive:
+    enqueued tasks are durable and LMDB is crash-safe, so all 3,659,141 documents
+    and all 1,121 tasks survived — only the wasted in-flight batch was discarded.
+    The step counter, frozen at `payload 200/266` for 45 minutes, resumed
+    immediately and passed 800 within three minutes.
+  - [x] **Backpressure added to `ingest.py`.** After each submission it waits for
+    the queue to fall to `INGEST_MAX_PENDING_TASKS` (default 8) before sending
+    more, which bounds how much the engine can group into one batch — the thing
+    that actually has to fit in memory. It gives up after
+    `INGEST_STALL_SECONDS` (default 900) rather than blocking for ever, and skips
+    waiting entirely if the count cannot be read, so a broken status endpoint
+    slows the ingest rather than halting it. Costs nothing in throughput: the
+    engine was always the bottleneck. *Verified against stubs: drains, unreadable
+    count, frozen queue, and already-empty all behave.*
+    **Not yet deployed** — deploying restarts the gateway and wipes the metrics
+    history, which is worth avoiding while the current run is being watched.
+  - [ ] Consider more RAM before attempting the full corpus. 6 GB was enough to
+    thrash at 13M documents; the 2 GiB cap works but leaves little headroom.
 - [ ] **Metrics history does not survive a deploy.** The ring buffer is
   in-process, so redeploying the gateway empties the chart and resets the stall
   clock on the indexing panel — which is exactly when someone is most likely to

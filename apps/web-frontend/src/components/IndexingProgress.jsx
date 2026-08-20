@@ -166,19 +166,39 @@ const IndexingProgress = ({ indexing }) => {
           </p>
 
           {/* The engine's own step counters. When the percentage is not moving,
-              this is what shows which phase it is wedged in. */}
+              this is what shows which phase it is wedged in.
+
+              These are nested, not parallel: each step is a stage *within* the
+              one above it, so `processing tasks 0/2` and `payload 911/1121`
+              describe the same work at different depths. Rendered flat they read
+              as four contradictory progress bars, so the nesting is drawn. */}
           {batch.steps?.length > 0 && (
             <ul className="space-y-1">
               {batch.steps.map((s, i) => (
                 <li key={i} className="flex justify-between gap-3 text-[11px]">
-                  <span className="text-secondary">{s.step}</span>
-                  <span className="font-mono text-secondary/70 shrink-0">
+                  <span
+                    className={i === batch.steps.length - 1 ? 'text-primary' : 'text-secondary'}
+                    style={{ paddingLeft: `${i * 0.85}rem` }}
+                  >
+                    {i > 0 && <span className="text-secondary/40 mr-1.5">└</span>}
+                    {s.step}
+                  </span>
+                  <span
+                    className={`font-mono shrink-0 ${
+                      i === batch.steps.length - 1 ? 'text-primary' : 'text-secondary/70'
+                    }`}
+                  >
                     {s.finished}/{s.total}
                   </span>
                 </li>
               ))}
             </ul>
           )}
+          <p className="text-[10px] text-secondary/60 mt-2">
+            Steps are nested — the deepest is the work happening now. All{' '}
+            {batch.tasks?.toLocaleString()} tasks commit together, so the
+            searchable count does not move until the whole batch lands.
+          </p>
         </div>
       )}
 
