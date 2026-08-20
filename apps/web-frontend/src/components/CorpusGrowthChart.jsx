@@ -56,16 +56,18 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
   }, [transformedPoints]);
 
   const controls = (
-    <div className="flex items-center gap-1.5 bg-surface border border-border rounded-md px-2 py-1 text-xs">
+    <div className="flex items-center gap-1.5 bg-surface border border-border rounded-md px-2.5 py-1 text-xs">
       <Filter size={12} className="text-secondary shrink-0" />
       <select
         value={selectedArchive}
         onChange={(e) => setSelectedArchive(e.target.value)}
         className="bg-transparent text-xs text-primary font-medium focus:outline-none cursor-pointer"
       >
-        <option value="all">All Archives (Total)</option>
+        <option value="all" className="bg-card text-primary font-medium py-1">
+          All Archives (Total)
+        </option>
         {availableArchives.map((code) => (
-          <option key={code} value={code}>
+          <option key={code} value={code} className="bg-card text-primary font-medium py-1">
             {getArchiveName(code)} ({code.toUpperCase()})
           </option>
         ))}
