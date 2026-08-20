@@ -171,8 +171,8 @@ const IndexingProgress = ({ indexing }) => {
         </p>
       )}
 
-      {/* Stage 1: Active Harvester Dataset Banner */}
-      {job && (
+      {/* Stage 1: Active Harvester Streaming Banner */}
+      {job && job.is_active !== false && (
         <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -219,13 +219,34 @@ const IndexingProgress = ({ indexing }) => {
       {batch && (
         <div className="border border-border/60 rounded-lg p-4 mb-4">
           <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
-            <span className="text-xs text-primary font-semibold">
-              Batch {batch.uid}
+            <span className="text-xs text-primary font-semibold flex items-center gap-2 flex-wrap">
+              <span>Batch {batch.uid}</span>
+              {job?.archive && (
+                <span className="px-1.5 py-0.5 rounded bg-card border border-border text-[10px] font-mono font-medium text-primary">
+                  {getArchiveName(job.archive)} ({job.archive}.{job.kind})
+                </span>
+              )}
+              {busy && (
+                <span className="px-1.5 py-0.5 rounded bg-accent/10 border border-accent/30 text-[10px] font-medium text-accent">
+                  Indexing
+                </span>
+              )}
             </span>
             <span className="text-[11px] text-secondary tabular-nums">
               {batch.tasks?.toLocaleString()} tasks ·{' '}
               {batch.documents?.toLocaleString()} docs ·{' '}
               {formatDuration(batch.elapsed_seconds)}
+              {indexing.eta_seconds != null ? (
+                <span className="text-accent font-medium ml-1">
+                  · ETA ~{formatDuration(indexing.eta_seconds)}
+                </span>
+              ) : (
+                indexing.recent_batches?.length > 0 && (
+                  <span className="text-accent/80 font-medium ml-1" title="Estimated based on average duration of recent completed batches">
+                    · Est. ~{formatDuration(Math.max(0, (indexing.recent_batches.reduce((acc, b) => acc + (parseIsoDuration(b.duration) || 120), 0) / indexing.recent_batches.length) - (batch.elapsed_seconds || 0)))}
+                  </span>
+                )
+              )}
             </span>
           </div>
 
@@ -263,6 +284,15 @@ const IndexingProgress = ({ indexing }) => {
                 </li>
               ))}
             </ul>
+          )}
+
+          {busy && !job && (
+            <div className="mt-3 pt-3 border-t border-border/60 flex items-center gap-2 text-xs text-secondary">
+              <Loader2 size={13} className="animate-spin text-accent shrink-0" />
+              <span>
+                Engine is actively crunching word proximity matrices in memory.
+              </span>
+            </div>
           )}
         </div>
       )}

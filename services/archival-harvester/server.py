@@ -626,6 +626,7 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
   rate = None
   waiting = False
   completed = 0
+  is_active = False
 
   for line in lines:
     if _INGEST_FINISHED.search(line):
@@ -636,12 +637,24 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
     if match:
       archive, kind = match.group(1), match.group(2)
       submitted, rate = None, None
+      is_active = True
     match = _INGEST_SUBMITTED.search(line)
     if match:
       archive, kind = match.group(1), match.group(2)
       submitted = int(match.group(3).replace(",", ""))
       rate = float(match.group(4))
-    waiting = "waiting for queue" in line
+      is_active = True
+    if "waiting for queue" in line:
+      waiting = True
+      is_active = True
+
+  # Fallback to last mentioned archive in whole log if tail has no active stream line
+  if not archive:
+    for line in reversed(lines):
+      match = _INGEST_STREAMING.search(line) or _INGEST_SUBMITTED.search(line)
+      if match:
+        archive, kind = match.group(1), match.group(2)
+        break
 
   if not archive:
     return None
@@ -667,6 +680,7 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
     "waiting_for_queue": waiting,
     "files_completed": completed,
     "log_age_seconds": int(age),
+    "is_active": is_active,
   }
 
 
