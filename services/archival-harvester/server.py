@@ -880,8 +880,12 @@ def admin_indexing():
 
     telemetry_sample = {
       "timestamp": int(time.time()),
+      "iso_time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
       "batch_uid": b_uid,
       "step": current_step_name,
+      "steps": steps,
+      "documents": current.get("documents"),
+      "tasks": current.get("tasks"),
       "raw_progress_pct": raw_pct,
       "virtual_progress_pct": virtual_pct,
       "elapsed_seconds": elapsed,

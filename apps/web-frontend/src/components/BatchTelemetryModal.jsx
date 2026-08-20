@@ -121,7 +121,7 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
             </div>
             <div>
               <h3 className="text-base font-bold text-primary flex items-center gap-2">
-                <span>Batch Telemetry & ETA Debugger</span>
+                <span>Batch Telemetry</span>
                 {selectedBatchUid !== 'all' && (
                   <span className="px-2 py-0.5 rounded-full bg-card border border-border text-xs font-mono font-semibold text-accent">
                     Batch #{selectedBatchUid}

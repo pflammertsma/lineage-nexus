@@ -126,8 +126,8 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
           <p
             className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1 cursor-help"
             title={'Records searchable right now. Re-harvesting an archive rewrites existing ' +
-                   'records under the same ids, so this figure stays put even while the run ' +
-                   'is doing real work — it only climbs when genuinely new records arrive.'}
+              'records under the same ids, so this figure stays put even while the run ' +
+              'is doing real work — it only climbs when genuinely new records arrive.'}
           >
             Searchable
           </p>
@@ -139,9 +139,9 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
           <p
             className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1 cursor-help"
             title={'One task is one submission of up to 10,000 records. The engine groups ' +
-                   'whatever is queued into a batch when it goes idle, so batches have no ' +
-                   'fixed size or number. This figure is capped by backpressure — it is the ' +
-                   'work in flight, not the work remaining.'}
+              'whatever is queued into a batch when it goes idle, so batches have no ' +
+              'fixed size or number. This figure is capped by backpressure — it is the ' +
+              'work in flight, not the work remaining.'}
           >
             Queued tasks
           </p>
@@ -205,7 +205,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
                 type="button"
                 onClick={() => onOpenTelemetry?.(batch?.uid || 'all')}
                 className="font-medium text-accent hover:underline cursor-pointer transition-colors flex items-center gap-1"
-                title="Click to open batch telemetry & debug charts"
+                title="View batch telemetry charts"
               >
                 ETA: ~{formatDuration(indexing.eta_seconds)}
               </button>
@@ -246,7 +246,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
                   type="button"
                   onClick={() => onOpenTelemetry?.(batch.uid)}
                   className="text-accent font-medium hover:underline ml-1 cursor-pointer transition-colors inline-flex items-center gap-1"
-                  title="Click to view batch telemetry charts"
+                  title="View batch telemetry charts"
                 >
                   · ETA ~{formatDuration(indexing.eta_seconds)}
                 </button>
@@ -262,9 +262,8 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
 
           <div aria-hidden="true" className="h-1.5 rounded-full bg-muted overflow-hidden mb-1">
             <div
-              className={`h-full rounded-full transition-all duration-500 ${
-                stallLevel === 'alert' ? 'bg-red-500' : stallLevel === 'warn' ? 'bg-amber-500' : 'bg-accent'
-              }`}
+              className={`h-full rounded-full transition-all duration-500 ${stallLevel === 'alert' ? 'bg-red-500' : stallLevel === 'warn' ? 'bg-amber-500' : 'bg-accent'
+                }`}
               style={{ width: `${Math.min(100, Math.max(0, pct ?? 0))}%` }}
             />
           </div>
@@ -285,9 +284,8 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
                     {s.step}
                   </span>
                   <span
-                    className={`tabular-nums shrink-0 ${
-                      i === batch.steps.length - 1 ? 'text-primary font-medium' : 'text-secondary/70'
-                    }`}
+                    className={`tabular-nums shrink-0 ${i === batch.steps.length - 1 ? 'text-primary font-medium' : 'text-secondary/70'
+                      }`}
                   >
                     {s.finished}/{s.total}
                   </span>
@@ -309,11 +307,10 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
 
       {stallLevel && (
         <div
-          className={`flex items-start gap-2.5 rounded-lg p-3 mb-4 border ${
-            stallLevel === 'alert'
-              ? 'border-red-500/40 text-red-500'
-              : 'border-amber-500/40 text-amber-500'
-          }`}
+          className={`flex items-start gap-2.5 rounded-lg p-3 mb-4 border ${stallLevel === 'alert'
+            ? 'border-red-500/40 text-red-500'
+            : 'border-amber-500/40 text-amber-500'
+            }`}
         >
           <AlertTriangle size={14} className="shrink-0 mt-0.5" />
           <p className="text-xs">
