@@ -56,6 +56,32 @@ const Header = ({
 
   const initials = initialsFor(displayName, email);
 
+  const [isIngestActive, setIsIngestActive] = useState(false);
+  const [systemStress, setSystemStress] = useState('normal');
+
+  useEffect(() => {
+    const handleIndexingActive = (e) => {
+      if (e?.detail) setIsIngestActive(Boolean(e.detail.active));
+    };
+    const handleSystemStress = (e) => {
+      if (e?.detail) setSystemStress(e.detail.level || 'normal');
+    };
+
+    window.addEventListener('admin-indexing-active', handleIndexingActive);
+    window.addEventListener('admin-system-stress', handleSystemStress);
+    return () => {
+      window.removeEventListener('admin-indexing-active', handleIndexingActive);
+      window.removeEventListener('admin-system-stress', handleSystemStress);
+    };
+  }, []);
+
+  const stressDotBg =
+    systemStress === 'critical'
+      ? 'bg-red-500'
+      : systemStress === 'warning'
+      ? 'bg-amber-500'
+      : null;
+
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
@@ -102,14 +128,28 @@ const Header = ({
               >
                 <ActiveTabIcon size={16} className="text-accent shrink-0" />
                 <span>{activeTabObj.label}</span>
+                {activeTabId === 'overview' && stressDotBg && (
+                  <span className="relative flex h-2 w-2 ml-0.5" title={`System ${systemStress} load`}>
+                    <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${stressDotBg}`}></span>
+                    <span className={`relative inline-flex rounded-full h-2 w-2 ${stressDotBg}`}></span>
+                  </span>
+                )}
+                {activeTabId === 'harvesting' && isIngestActive && (
+                  <span className="relative flex h-2 w-2 ml-0.5" title="Ingestion in progress">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+                  </span>
+                )}
                 <ChevronDown size={14} className="text-secondary shrink-0 ml-0.5" />
               </button>
 
               {adminMobileMenuOpen && (
-                <div className="absolute left-0 mt-2 w-48 bg-card border border-border-strong rounded-xl shadow-2xl py-1.5 z-[1100]">
+                <div className="absolute left-0 mt-2 w-52 bg-card border border-border-strong rounded-xl shadow-2xl py-1.5 z-[1100]">
                   {ADMIN_TABS.map((tab) => {
                     const TabIcon = tab.icon;
                     const isActive = activeTabId === tab.id;
+                    const isHarvesting = tab.id === 'harvesting';
+                    const isOverview = tab.id === 'overview';
                     return (
                       <button
                         key={tab.id}
@@ -126,6 +166,26 @@ const Header = ({
                       >
                         <TabIcon size={16} className={isActive ? 'text-accent' : 'text-secondary'} />
                         <span>{tab.label}</span>
+
+                        {isOverview && stressDotBg && (
+                          <span className="ml-auto text-[10px] font-semibold flex items-center gap-1.5" style={{ color: systemStress === 'critical' ? '#EF4444' : '#F59E0B' }}>
+                            <span className="relative flex h-2 w-2">
+                              <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${stressDotBg}`}></span>
+                              <span className={`relative inline-flex rounded-full h-2 w-2 ${stressDotBg}`}></span>
+                            </span>
+                            <span>{systemStress === 'critical' ? 'Critical' : 'High Load'}</span>
+                          </span>
+                        )}
+
+                        {isHarvesting && isIngestActive && (
+                          <span className="ml-auto text-[10px] text-accent font-semibold flex items-center gap-1.5">
+                            <span className="relative flex h-2 w-2">
+                              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                              <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+                            </span>
+                            <span>Active</span>
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -141,6 +201,8 @@ const Header = ({
             {ADMIN_TABS.map((tab) => {
               const TabIcon = tab.icon;
               const isActive = activeTabId === tab.id;
+              const isHarvesting = tab.id === 'harvesting';
+              const isOverview = tab.id === 'overview';
               return (
                 <button
                   key={tab.id}
@@ -149,7 +211,19 @@ const Header = ({
                   className={`admin-tab-btn ${isActive ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'}`}
                 >
                   <TabIcon size={16} />
-                  {tab.label}
+                  <span>{tab.label}</span>
+                  {isOverview && stressDotBg && (
+                    <span className="relative flex h-2 w-2 ml-1" title={`System ${systemStress} load`}>
+                      <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${stressDotBg}`}></span>
+                      <span className={`relative inline-flex rounded-full h-2 w-2 ${stressDotBg}`}></span>
+                    </span>
+                  )}
+                  {isHarvesting && isIngestActive && (
+                    <span className="relative flex h-2 w-2 ml-1" title="Ingestion in progress">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+                    </span>
+                  )}
                 </button>
               );
             })}

@@ -141,6 +141,7 @@ const AdminDashboard = ({ getIdToken }) => {
       setError(null);
       setFetchedAt(new Date());
 
+      let points = [];
       try {
         const histRes = await fetch(
           `${ADMIN_API_BASE_URL}/api/v1/admin/history?minutes=${rangeMinutes}`,
@@ -148,11 +149,46 @@ const AdminDashboard = ({ getIdToken }) => {
         );
         if (histRes.ok) {
           const body = await histRes.json();
-          if (body.status === 'success') setHistory(body.points || []);
+          if (body.status === 'success') {
+            points = body.points || [];
+            setHistory(points);
+          }
         }
       } catch {
         // Non-critical
       }
+
+      // Compute 3-minute moving average over recent history samples (~12 x 15s points) to prevent spurious dots
+      const recentSamples = points.slice(-12);
+      let cpuAvg = nextStatus?.system?.cpu_percent ?? 0;
+      let memAvg = nextStatus?.system?.memory?.percent ?? 0;
+      let diskAvg = nextStatus?.system?.disk?.percent ?? 0;
+      let iowaitAvg = nextStatus?.system?.iowait_percent ?? 0;
+
+      if (recentSamples.length > 0) {
+        const cpuVals = recentSamples.map((p) => p.cpu).filter((v) => typeof v === 'number');
+        const memVals = recentSamples.map((p) => p.mem).filter((v) => typeof v === 'number');
+        const diskVals = recentSamples.map((p) => p.disk).filter((v) => typeof v === 'number');
+        const ioVals = recentSamples.map((p) => p.iowait).filter((v) => typeof v === 'number');
+
+        if (cpuVals.length) cpuAvg = cpuVals.reduce((a, b) => a + b, 0) / cpuVals.length;
+        if (memVals.length) memAvg = memVals.reduce((a, b) => a + b, 0) / memVals.length;
+        if (diskVals.length) diskAvg = diskVals.reduce((a, b) => a + b, 0) / diskVals.length;
+        if (ioVals.length) iowaitAvg = ioVals.reduce((a, b) => a + b, 0) / ioVals.length;
+      }
+
+      const isOnline = nextStatus?.status === 'online';
+
+      let stressLevel = 'normal';
+      if (!isOnline || cpuAvg >= 90 || memAvg >= 90 || diskAvg >= 80) {
+        stressLevel = 'critical';
+      } else if (cpuAvg >= 85 || memAvg >= 85 || diskAvg >= 60 || iowaitAvg >= 40) {
+        stressLevel = 'warning';
+      }
+
+      window.dispatchEvent(
+        new CustomEvent('admin-system-stress', { detail: { level: stressLevel } })
+      );
 
       try {
         const covRes = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/coverage`, {
@@ -175,6 +211,17 @@ const AdminDashboard = ({ getIdToken }) => {
           if (body.status === 'success') {
             setIndexing(body);
             if (body.archive_names) setArchiveNames(body.archive_names);
+
+            const isIndexingActive = Boolean(
+              body.is_indexing ||
+              body.current_batch ||
+              body.current_ingest?.is_active ||
+              (body.queue && body.queue.total_pending > 0)
+            );
+
+            window.dispatchEvent(
+              new CustomEvent('admin-indexing-active', { detail: { active: isIndexingActive } })
+            );
           }
         }
       } catch {
