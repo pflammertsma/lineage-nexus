@@ -85,6 +85,48 @@ searches are served from our own index.
 - [ ] Harvest the corpus into Meilisearch. This is the change that actually
   removes the rate-limit constraint, and it is a project rather than a task —
   check Open Archieven's terms on bulk retrieval before starting.
+  - [x] `ade` — 773,234 records, indexed.
+  - [x] Download and submit `frl` (10,205,019) and `gra` (2,680,560) via
+    `services/archival-harvester/ingest.py`. Streamed from the sanctioned bulk
+    CSV exports; no file ever staged to disk.
+  - [x] **Volume grown to 200 GB** (193 GB filesystem, 179 GB free). The Oracle
+    Cloud agent grew the partition live; no reboot, no manual `growpart`. Disk is
+    no longer a constraint on the full corpus — at the measured ~1.29 KB/record
+    the whole 51.6M-record set is ~66 GB. It does **not** address the stall
+    below, which is memory-bound.
+  - [x] **Indexing progress exposed on the dashboard**
+    (`/api/v1/admin/indexing` + `IndexingProgress.jsx`). Coverage reports what is
+    *searchable*; documents accepted but not yet merged are invisible there, so a
+    stalled harvest and a finished one looked identical. The panel shows queue
+    depth, the batch in flight with the engine's own step counters, throughput,
+    and how long the document count has been unchanged. Completed batch durations
+    sit underneath as the yardstick — a batch that has run 20x longer than the
+    ones before it is the signal worth acting on.
+  - [ ] **Blocked: Meilisearch cannot digest the queue on a 6 GB box.** (Although we are not certain about this.)
+    The ingest script submits far faster than the engine indexes, so 1,289 tasks
+    (5.4 GB of pending payloads) piled up. Meilisearch auto-batched 266 of them
+    into a single 2.66M-document batch, which has now run for over 35 minutes
+    against ~3 minutes for the 175-task batches that preceded it. It reads a
+    sustained ~92 MB/s while its progress counter does not advance — the merge
+    working set no longer fits in the 4.4 GB page cache. Fix is one of: throttle
+    submission so the queue stays shallow (wait for each batch before sending
+    the next), cap `--max-indexing-memory` so the engine plans smaller merges,
+    or give the VM more RAM. Throttling is the cheapest and should land in
+    `ingest.py` before any re-run.
+    Restarting Meilisearch with `MEILI_MAX_INDEXING_MEMORY` capped is the least
+    destructive way out: enqueued tasks are durable on disk, so a restart aborts
+    only the batch in flight and the queue is re-processed rather than lost.
+- [ ] **Metrics history does not survive a deploy.** The ring buffer is
+  in-process, so redeploying the gateway empties the chart and resets the stall
+  clock on the indexing panel — which is exactly when someone is most likely to
+  be watching. Persisting samples, or reading them back from Meilisearch's own
+  task history, would fix it.
+  - [ ] Confirm the final document count against the 13,658,813 submitted.
+    Per-task stats report ~9% fewer `indexedDocuments` than received. Sampling
+    30,000 rows of `frl.dtb_d` found no repeated `SOURCE_RECORD_GUID`, so it is
+    not intra-file duplication; if the final count really is ~9% short, the id
+    scheme (`{archive}_{guid}`, no `kind`) is collapsing records that appear in
+    two exports, and needs `kind` mixed in.
 
 ### B. Post-launch cleanups
 - [x] **Admin dashboard** at `/admin`, gated on a Firebase `admin` custom claim,
@@ -94,6 +136,12 @@ searches are served from our own index.
   `ADMIN_SECRET_TOKEN` were pasted into a chat transcript and were briefly staged
   for commit to a public repository. They are gitignored now, but the values are
   burned. Generate new ones, update `.deploy.env`, redeploy the gateway.
+- [ ] **Rotate `MEILI_MASTER_KEY` again.** The replacement value was printed into
+  a chat transcript a second time, by a `docker inspect ... .Config.Env` whose
+  filter matched `MEILI_MASTER_KEY` alongside the memory settings it was actually
+  looking for. Same remedy as above. Reading a container's environment is the
+  hazard here — filter for the specific variable wanted, never a prefix that a
+  secret also matches.
 - [x] **Admin token comparison is now constant-time** (`secrets.compare_digest`); it was
   a plain `!=`, which is not constant-time and leaks length/prefix information through
   timing. Use `secrets.compare_digest`.

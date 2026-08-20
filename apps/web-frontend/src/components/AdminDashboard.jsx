@@ -8,6 +8,7 @@ import { ADMIN_API_BASE_URL } from '../config';
 import MetricChart from './MetricChart';
 import ArchiveQuery from './ArchiveQuery';
 import ArchiveCoverage from './ArchiveCoverage';
+import IndexingProgress from './IndexingProgress';
 
 const REFRESH_MS = 15_000;
 
@@ -65,6 +66,10 @@ const AdminDashboard = ({ getIdToken }) => {
   const [status, setStatus] = useState(null);
   const [history, setHistory] = useState([]);
   const [coverage, setCoverage] = useState(null);
+  const [indexing, setIndexing] = useState(null);
+  // Minutes of history to chart. The server retains 24h, so this only decides
+  // how much of it to ask for.
+  const [rangeMinutes, setRangeMinutes] = useState(360);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);
@@ -103,7 +108,7 @@ const AdminDashboard = ({ getIdToken }) => {
       // Separate call: history is a ring buffer on the server, so it survives a
       // page reload where client-side accumulation would not.
       try {
-        const h = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/history?minutes=360`, {
+        const h = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/history?minutes=${rangeMinutes}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (h.ok) setHistory((await h.json()).points || []);
@@ -112,8 +117,14 @@ const AdminDashboard = ({ getIdToken }) => {
           headers: { Authorization: `Bearer ${token}` },
         });
         if (c.ok) setCoverage(await c.json());
+
+        const i = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/indexing`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (i.ok) setIndexing(await i.json());
       } catch {
-        // A missing chart or coverage panel is not worth failing the dashboard for.
+        // A missing chart, coverage or indexing panel is not worth failing the
+        // dashboard for.
       }
     } catch {
       // A CORS rejection and a dead host are indistinguishable from here.
@@ -121,7 +132,7 @@ const AdminDashboard = ({ getIdToken }) => {
     } finally {
       setLoading(false);
     }
-  }, [getIdToken]);
+  }, [getIdToken, rangeMinutes]);
 
   useEffect(() => {
     load();
@@ -210,7 +221,17 @@ const AdminDashboard = ({ getIdToken }) => {
             </div>
 
             <div className="mb-8">
-              <MetricChart points={history} />
+              <MetricChart
+                points={history}
+                rangeMinutes={rangeMinutes}
+                onRangeChange={setRangeMinutes}
+              />
+            </div>
+
+            {/* Before coverage: this is what says whether the coverage figure
+                below is final or still climbing. */}
+            <div className="mb-8">
+              <IndexingProgress indexing={indexing} />
             </div>
 
             <div className="mb-8">

@@ -149,11 +149,11 @@ if __name__ == "__main__":
 # buffer of samples gives the dashboard six hours of history without a
 # time-series database: 6h at 15s is 1440 points, a few hundred kB.
 #
-# In memory only, so it resets when the container restarts. That is a fair trade
-# for the complexity avoided; if history needs to survive deploys, this is the
-# point to swap in real storage.
+# 24h at 15s is 5,760 samples, a few hundred kB. In memory only, so it resets
+# when the container restarts — a fair trade for the complexity avoided; if
+# history needs to survive deploys, this is the point to swap in real storage.
 METRICS_INTERVAL_SECONDS = 15
-METRICS_WINDOW_SECONDS = 6 * 60 * 60
+METRICS_WINDOW_SECONDS = 24 * 60 * 60
 METRICS_CAPACITY = METRICS_WINDOW_SECONDS // METRICS_INTERVAL_SECONDS
 
 _metrics: Deque[Dict[str, Any]] = deque(maxlen=METRICS_CAPACITY)
@@ -196,7 +196,7 @@ async def _start_metrics() -> None:
 
 
 @app.get("/api/v1/admin/history", dependencies=[Depends(require_admin)])
-def admin_history(minutes: int = Query(360, ge=5, le=360)):
+def admin_history(minutes: int = Query(360, ge=5, le=1440)):
   """Samples from the last `minutes`, oldest first."""
   cutoff = time.time() - minutes * 60
   points = [p for p in _metrics if p["t"] >= cutoff]
@@ -319,4 +319,182 @@ def admin_coverage():
       ({"kind": k, "records": v} for k, v in by_kind.items()),
       key=lambda r: -r["records"],
     ),
+  }
+
+
+# --- Indexing progress ----------------------------------------------------
+# Meilisearch accepts documents far faster than it indexes them, so "submitted"
+# and "searchable" are different numbers and the gap can be hours wide. Nothing
+# in /status or /coverage shows that gap: both report the index as it is now, and
+# a harvest that has stalled looks identical to one that has finished.
+#
+# The engine does expose the detail, on /tasks and /batches. This surfaces it,
+# plus two things it cannot know on its own: how fast documents are actually
+# landing, and how long the count has been standing still.
+
+def _meili_get(path: str) -> Any:
+  """
+  Reads a Meilisearch endpoint the Python client does not wrap.
+
+  urllib rather than the client because /batches arrived in 1.12 and the client
+  version pinned here predates it — going direct avoids tying this to whichever
+  helpers a given client release happens to expose.
+  """
+  import json
+  import urllib.request
+
+  request = urllib.request.Request(
+    f"{MEILI_HOST}{path}",
+    headers={"Authorization": f"Bearer {MEILI_MASTER_KEY}"},
+  )
+  with urllib.request.urlopen(request, timeout=10) as response:
+    return json.loads(response.read().decode("utf-8"))
+
+
+def _elapsed_since(timestamp: Optional[str]) -> Optional[int]:
+  """
+  Seconds since an RFC 3339 timestamp, computed here rather than in the browser.
+
+  Meilisearch reports nanosecond precision, which `fromisoformat` rejects, so the
+  fraction is truncated to microseconds. Doing this server-side keeps a skewed
+  client clock from turning a two-minute batch into a two-hour one on screen.
+  """
+  if not timestamp:
+    return None
+  import re
+  from datetime import datetime, timezone
+
+  cleaned = re.sub(r"(\.\d{6})\d+", r"\1", timestamp.replace("Z", "+00:00"))
+  try:
+    started = datetime.fromisoformat(cleaned)
+  except ValueError:
+    return None
+  return max(0, int((datetime.now(timezone.utc) - started).total_seconds()))
+
+
+def _count_tasks(statuses: str) -> int:
+  """Total matching tasks. limit=0 so Meilisearch counts without serialising."""
+  try:
+    return _meili_get(f"/tasks?statuses={statuses}&limit=0").get("total", 0)
+  except Exception:
+    return 0
+
+
+def _document_rate(window_seconds: int = 600) -> Optional[float]:
+  """
+  Documents per second over the recent metrics samples.
+
+  Measured from the ring buffer rather than by polling twice: a rate needs two
+  readings separated in time, and asking the caller to wait for the second one
+  would make the dashboard hang.
+  """
+  cutoff = time.time() - window_seconds
+  samples = [p for p in _metrics if p["t"] >= cutoff and p.get("docs") is not None]
+  if len(samples) < 2:
+    return None
+  span = samples[-1]["t"] - samples[0]["t"]
+  if span <= 0:
+    return None
+  return max(0.0, (samples[-1]["docs"] - samples[0]["docs"]) / span)
+
+
+def _seconds_since_documents_changed() -> Optional[int]:
+  """
+  How long the document count has been unchanged.
+
+  This is the stall signal. A batch that is merging shows no change either, so a
+  value here is not proof of a problem — but a count frozen for longer than the
+  batches around it took to finish is the symptom worth looking at.
+  """
+  samples = [p for p in _metrics if p.get("docs") is not None]
+  if len(samples) < 2:
+    return None
+  latest = samples[-1]["docs"]
+  for sample in reversed(samples):
+    if sample["docs"] != latest:
+      return int(time.time() - sample["t"])
+  # Unchanged across the whole buffer: report its span rather than claim zero.
+  return int(time.time() - samples[0]["t"])
+
+
+@app.get("/api/v1/admin/indexing", dependencies=[Depends(require_admin)])
+def admin_indexing():
+  """Queue depth, the batch in flight, and whether it is actually moving."""
+  try:
+    stats = meili_client.index(INDEX_NAME).get_stats()
+    documents = stats.number_of_documents
+    is_indexing = stats.is_indexing
+  except Exception as exc:
+    return {"status": "error", "error_message": str(exc)}
+
+  enqueued = _count_tasks("enqueued")
+  processing = _count_tasks("processing")
+  failed = _count_tasks("failed")
+
+  current = None
+  recent: List[Dict[str, Any]] = []
+  try:
+    batches = _meili_get("/batches?limit=8").get("results", []) or []
+    for batch in batches:
+      batch_stats = batch.get("stats", {}) or {}
+      finished = batch.get("finishedAt")
+      if finished is None and current is None:
+        progress = batch.get("progress") or {}
+        started = batch.get("startedAt")
+        current = {
+          "uid": batch.get("uid"),
+          "tasks": batch_stats.get("totalNbTasks"),
+          "documents": (batch.get("details") or {}).get("receivedDocuments"),
+          "percentage": progress.get("percentage"),
+          "started_at": started,
+          "elapsed_seconds": _elapsed_since(started),
+          "steps": [
+            {
+              "step": s.get("currentStep"),
+              "finished": s.get("finished"),
+              "total": s.get("total"),
+            }
+            for s in (progress.get("steps") or [])
+          ],
+        }
+      elif finished is not None and len(recent) < 5:
+        # Durations of completed batches are the only honest yardstick for
+        # whether the one in flight is taking abnormally long.
+        recent.append({
+          "uid": batch.get("uid"),
+          "tasks": batch_stats.get("totalNbTasks"),
+          "duration": batch.get("duration"),
+          "finished_at": finished,
+        })
+  except Exception:
+    # The batches endpoint is informational; losing it should not take the
+    # queue counts down with it.
+    pass
+
+  rate = _document_rate()
+  pending_documents = None
+  eta_seconds = None
+  if current and current.get("documents"):
+    # Only the batch in flight declares a document count. Queued tasks do not,
+    # so this is a floor on what is left, not the total.
+    pending_documents = current["documents"]
+    if rate and rate > 0:
+      eta_seconds = int(pending_documents / rate)
+
+  return {
+    "status": "success",
+    "documents": documents,
+    "is_indexing": is_indexing,
+    "queue": {
+      "enqueued": enqueued,
+      "processing": processing,
+      "failed": failed,
+      "total_pending": enqueued + processing,
+    },
+    "current_batch": current,
+    "recent_batches": recent,
+    "documents_per_second": round(rate, 1) if rate is not None else None,
+    "stalled_seconds": _seconds_since_documents_changed(),
+    "pending_documents": pending_documents,
+    "eta_seconds": eta_seconds,
   }

@@ -58,7 +58,13 @@ function smoothPath(pts, top, bottom) {
  * question is how they move together — a CPU spike that also moves memory reads
  * very differently from one that does not.
  */
-const MetricChart = ({ points, height = 200 }) => {
+const RANGES = [
+  { minutes: 60, label: '1h' },
+  { minutes: 360, label: '6h' },
+  { minutes: 1440, label: '24h' },
+];
+
+const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }) => {
   const [hoverIndex, setHoverIndex] = useState(null);
 
   const W = 1000;
@@ -99,7 +105,7 @@ const MetricChart = ({ points, height = 200 }) => {
     return (
       <div className="bg-card border border-border rounded-lg p-5">
         <p className="text-[10px] font-bold uppercase tracking-widest text-secondary mb-3">
-          System · 6 hours
+          System
         </p>
         <div className="flex items-center justify-center text-xs text-secondary" style={{ height }}>
           Collecting samples…
@@ -118,9 +124,26 @@ const MetricChart = ({ points, height = 200 }) => {
   return (
     <div className="bg-card border border-border rounded-lg p-5">
       <div className="flex items-baseline justify-between gap-4 flex-wrap mb-4">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-secondary">
-          System · 6 hours
-        </p>
+        <div className="flex items-center gap-3">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-secondary">System</p>
+          <div className="flex rounded-md border border-border overflow-hidden">
+            {RANGES.map((r) => (
+              <button
+                key={r.minutes}
+                type="button"
+                onClick={() => onRangeChange?.(r.minutes)}
+                aria-pressed={rangeMinutes === r.minutes}
+                className={`px-2 py-0.5 text-[10px] font-mono transition-colors cursor-pointer ${
+                  rangeMinutes === r.minutes
+                    ? 'bg-accent text-on-accent'
+                    : 'text-secondary hover:text-primary'
+                }`}
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="flex items-center gap-4 flex-wrap">
           {series.map((s) => (
             <span key={s.field} className="flex items-center gap-1.5 text-[11px]">
