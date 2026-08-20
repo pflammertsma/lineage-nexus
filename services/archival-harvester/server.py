@@ -607,70 +607,13 @@ def _seconds_since_progress() -> Optional[int]:
 
 # --- Phase-Weighted ETA & Batch Telemetry Engine ----------------------------
 # Meilisearch batch execution consists of steps:
-# 1. document (5% weight) - JSON deserialization
-# 2. extracting word proximity (80% weight) - heavy tokenization & proximity matrix calculation
-# 3. indexing (12% weight) - flushing trees to LMDB disk
-# 4. processing tasks (3% weight) - committing transaction
-
-PHASE_WEIGHTS = {
-  "document": 0.05,
-  "extracting word proximity": 0.80,
-  "indexing": 0.12,
-  "processing tasks": 0.03,
-}
+from eta_engine import (
+  PHASE_WEIGHTS,
+  calculate_virtual_progress as _calculate_virtual_progress,
+  compute_phase_weighted_eta as _compute_phase_weighted_eta,
+)
 
 _batch_telemetry: Deque[Dict[str, Any]] = deque(maxlen=3000)
-_last_ewma_velocity: Dict[int, float] = {}
-
-
-def _calculate_virtual_progress(progress_data: Dict[str, Any]) -> float:
-  """Converts raw step progress into a phase-weighted virtual progress percentage (0.0 to 100.0)."""
-  if not progress_data:
-    return 0.0
-
-  steps = progress_data.get("steps") or []
-  if not steps:
-    pct = progress_data.get("percentage")
-    return float(pct) if pct is not None else 0.0
-
-  accumulated = 0.0
-  for step_info in steps:
-    step_name = step_info.get("currentStep", "")
-    finished = step_info.get("finished", 0)
-    total = step_info.get("total", 1) or 1
-    weight = PHASE_WEIGHTS.get(step_name, 0.25)
-
-    step_ratio = min(1.0, max(0.0, finished / total))
-    accumulated += step_ratio * weight * 100.0
-
-  return min(100.0, max(0.0, round(accumulated, 2)))
-
-
-def _compute_phase_weighted_eta(batch_uid: int, virtual_progress: float, elapsed_seconds: float) -> Tuple[Optional[int], Optional[int]]:
-  """
-  Calculates both phase-weighted EWMA smoothed ETA and naive linear ETA in seconds.
-  Returns (smoothed_eta_seconds, naive_eta_seconds).
-  """
-  if not elapsed_seconds or elapsed_seconds <= 0 or virtual_progress <= 0:
-    return None, None
-
-  remaining_pct = max(0.0, 100.0 - virtual_progress)
-  if remaining_pct <= 0:
-    return 0, 0
-
-  # Naive linear calculation based on raw virtual progress rate
-  instant_velocity = virtual_progress / elapsed_seconds
-  naive_eta = int(remaining_pct / instant_velocity) if instant_velocity > 0 else None
-
-  # EWMA velocity smoothing
-  alpha = 0.25
-  prev_velocity = _last_ewma_velocity.get(batch_uid, instant_velocity)
-  smoothed_velocity = alpha * instant_velocity + (1.0 - alpha) * prev_velocity
-  _last_ewma_velocity[batch_uid] = smoothed_velocity
-
-  smoothed_eta = int(remaining_pct / smoothed_velocity) if smoothed_velocity > 0 else naive_eta
-
-  return smoothed_eta, naive_eta
 
 
 # Where the harvester writes its log. Mounted read-only into this container, so
@@ -863,7 +806,7 @@ def admin_indexing():
     virtual_pct = _calculate_virtual_progress(current)
     elapsed = current.get("elapsed_seconds") or 0
 
-    smoothed_eta, naive_eta = _compute_phase_weighted_eta(b_uid, virtual_pct, elapsed)
+    smoothed_eta, naive_eta = _compute_phase_weighted_eta(b_uid, current, elapsed)
     current["virtual_percentage"] = virtual_pct
     current["naive_eta_seconds"] = naive_eta
     eta_seconds = smoothed_eta
