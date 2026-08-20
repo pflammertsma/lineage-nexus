@@ -15,6 +15,7 @@ from typing import Any, Dict, List, Optional, Tuple
 PHASE_WEIGHTS = {
   "document": 0.05,
   "extracting word proximity": 0.80,
+  "post-processing words": 0.80,
   "indexing": 0.12,
   "processing tasks": 0.03,
 }

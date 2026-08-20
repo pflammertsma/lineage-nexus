@@ -78,13 +78,22 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
   const H = 180;
   const P = 30;
 
+  const minElapsed = Math.min(...filteredSamples.map((s) => s.elapsed_seconds || 0));
   const maxElapsed = Math.max(1, ...filteredSamples.map((s) => s.elapsed_seconds || 0));
+  const spanElapsed = maxElapsed - minElapsed;
+
   const maxEta = Math.max(
     1,
     ...filteredSamples.map((s) => Math.max(s.eta_seconds || 0, s.naive_eta_seconds || 0))
   );
 
-  const getX = (elapsed) => P + ((elapsed || 0) / maxElapsed) * (W - 2 * P);
+  const getX = (elapsed) => {
+    if (spanElapsed <= 0) return P;
+    if (minElapsed > 30 && spanElapsed > 5) {
+      return P + (((elapsed || 0) - minElapsed) / spanElapsed) * (W - 2 * P);
+    }
+    return P + ((elapsed || 0) / maxElapsed) * (W - 2 * P);
+  };
   const getYPct = (pct) => H - P - ((pct || 0) / 100) * (H - 2 * P);
   const getYEta = (eta) => H - P - ((eta || 0) / maxEta) * (H - 2 * P);
 

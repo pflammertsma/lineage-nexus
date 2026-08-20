@@ -607,13 +607,32 @@ def _seconds_since_progress() -> Optional[int]:
 
 # --- Phase-Weighted ETA & Batch Telemetry Engine ----------------------------
 # Meilisearch batch execution consists of steps:
-from eta_engine import (
-  PHASE_WEIGHTS,
-  calculate_virtual_progress as _calculate_virtual_progress,
-  compute_phase_weighted_eta as _compute_phase_weighted_eta,
-)
+STATE_DIR = os.environ.get("STATE_DIR", "/state")
+TELEMETRY_FILE = os.path.join(STATE_DIR, "batch_telemetry.json")
 
-_batch_telemetry: Deque[Dict[str, Any]] = deque(maxlen=3000)
+
+def _load_batch_telemetry() -> Deque[Dict[str, Any]]:
+  if os.path.exists(TELEMETRY_FILE):
+    try:
+      with open(TELEMETRY_FILE, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        if isinstance(data, list):
+          return deque(data, maxlen=3000)
+    except Exception:
+      pass
+  return deque(maxlen=3000)
+
+
+def _save_batch_telemetry():
+  try:
+    os.makedirs(STATE_DIR, exist_ok=True)
+    with open(TELEMETRY_FILE, "w", encoding="utf-8") as f:
+      json.dump(list(_batch_telemetry), f)
+  except Exception:
+    pass
+
+
+_batch_telemetry: Deque[Dict[str, Any]] = _load_batch_telemetry()
 
 
 # Where the harvester writes its log. Mounted read-only into this container, so
@@ -840,6 +859,7 @@ def admin_indexing():
       "write_mbs": io_rates.get("write_mbs", 0.0),
     }
     _batch_telemetry.append(telemetry_sample)
+    _save_batch_telemetry()
 
   return {
     "status": "success",
