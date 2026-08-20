@@ -27,6 +27,16 @@ function formatDuration(seconds) {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
+/** When a batch ran, in the reader's own timezone. */
+function stamp(value) {
+  if (!value) return '';
+  const when = new Date(value);
+  if (Number.isNaN(when.getTime())) return '';
+  return when.toLocaleString([], {
+    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
+  });
+}
+
 /** Meilisearch reports batch durations as ISO 8601, e.g. `PT189.380307315S`. */
 function parseIsoDuration(value) {
   if (typeof value !== 'string') return null;
@@ -112,7 +122,12 @@ const IndexingProgress = ({ indexing }) => {
 
       <div className="grid gap-4 sm:grid-cols-3 mb-5">
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1">
+          <p
+            className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1 cursor-help"
+            title={'Records searchable right now. Re-harvesting an archive rewrites existing ' +
+                   'records under the same ids, so this figure stays put even while the run ' +
+                   'is doing real work — it only climbs when genuinely new records arrive.'}
+          >
             Searchable
           </p>
           <p className="font-serif text-2xl text-primary leading-none">
@@ -120,7 +135,13 @@ const IndexingProgress = ({ indexing }) => {
           </p>
         </div>
         <div>
-          <p className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1">
+          <p
+            className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1 cursor-help"
+            title={'One task is one submission of up to 10,000 records. The engine groups ' +
+                   'whatever is queued into a batch when it goes idle, so batches have no ' +
+                   'fixed size or number. This figure is capped by backpressure — it is the ' +
+                   'work in flight, not the work remaining.'}
+          >
             Queued tasks
           </p>
           <p className={`font-serif text-2xl leading-none ${pending ? 'text-amber-500' : 'text-primary'}`}>
@@ -155,7 +176,7 @@ const IndexingProgress = ({ indexing }) => {
             <span className="text-xs text-primary font-semibold">
               Batch {batch.uid}
             </span>
-            <span className="text-[11px] text-secondary font-mono">
+            <span className="text-[11px] text-secondary tabular-nums">
               {batch.tasks?.toLocaleString()} tasks ·{' '}
               {batch.documents?.toLocaleString()} docs ·{' '}
               {formatDuration(batch.elapsed_seconds)}
@@ -170,7 +191,7 @@ const IndexingProgress = ({ indexing }) => {
               style={{ width: `${Math.min(100, Math.max(0, pct ?? 0))}%` }}
             />
           </div>
-          <p className="text-[11px] text-secondary font-mono mb-3">
+          <p className="text-[11px] text-secondary tabular-nums mb-3">
             {pct === null ? 'progress unreported' : `${pct.toFixed(1)}%`}
           </p>
 
@@ -193,7 +214,7 @@ const IndexingProgress = ({ indexing }) => {
                     {s.step}
                   </span>
                   <span
-                    className={`font-mono shrink-0 ${
+                    className={`tabular-nums shrink-0 ${
                       i === batch.steps.length - 1 ? 'text-primary' : 'text-secondary/70'
                     }`}
                   >
@@ -211,17 +232,15 @@ const IndexingProgress = ({ indexing }) => {
               <div className="flex items-baseline justify-between gap-3 flex-wrap">
                 <span className="text-[11px] text-secondary">
                   Harvesting{' '}
-                  <span className="font-mono text-primary">
+                  <span className="tabular-nums text-primary">
                     {job.archive}.{job.kind}
                   </span>
-                  {job.files_completed > 0 && (
-                    <span className="text-secondary/60">
-                      {' '}· {job.files_completed} file
-                      {job.files_completed === 1 ? '' : 's'} done
-                    </span>
-                  )}
+                  <span className="text-secondary/60">
+                    {' '}· file {job.files_completed + 1}
+                    {job.files_total ? ` of ${job.files_total}` : ''}
+                  </span>
                 </span>
-                <span className="text-[11px] font-mono text-secondary">
+                <span className="text-[11px] tabular-nums text-secondary">
                   {Number.isFinite(job.submitted) &&
                     `${job.submitted.toLocaleString()} rows`}
                   {Number.isFinite(job.rows_per_second) &&
@@ -268,19 +287,20 @@ const IndexingProgress = ({ indexing }) => {
           <ul className="space-y-1">
             {indexing.recent_batches.map((b) => {
               const seconds = parseIsoDuration(b.duration);
+              // Measured from the documents the engine reports, not inferred
+              // from task count times our ingest's batch size.
               const perSecond =
-                seconds && b.tasks ? (b.tasks * 10000) / seconds : null;
+                seconds && seconds > 0 && b.documents ? b.documents / seconds : null;
               return (
                 <li key={b.uid} className="flex justify-between gap-3 text-[11px]">
                   <span className="text-secondary">
                     Batch {b.uid}
                     <span className="text-secondary/60"> · {b.tasks?.toLocaleString()} tasks</span>
                   </span>
-                  <span className="font-mono text-secondary/70 shrink-0">
-                    {seconds === null ? '—' : formatDuration(seconds)}
-                    {perSecond
-                      ? ` · ~${Math.round(perSecond).toLocaleString()}/s`
-                      : ''}
+                  <span className="text-secondary/70 shrink-0 tabular-nums">
+                    {stamp(b.started_at || b.finished_at)}
+                    {seconds === null ? '' : ` · ${formatDuration(seconds)}`}
+                    {perSecond ? ` · ${Math.round(perSecond).toLocaleString()}/s` : ''}
                   </span>
                 </li>
               );

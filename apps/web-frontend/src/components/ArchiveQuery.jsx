@@ -101,7 +101,7 @@ const ArchiveQuery = ({ getIdToken }) => {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Name or place, e.g. Langeraap"
-          className="input-field flex-1 font-mono text-[13px]"
+          className="input-field flex-1 text-[13px]"
           autoComplete="off"
           spellCheck={false}
         />
@@ -122,7 +122,7 @@ const ArchiveQuery = ({ getIdToken }) => {
           <p className="text-xs text-secondary mb-3">
             {result.estimated_total.toLocaleString()} match
             {result.estimated_total === 1 ? '' : 'es'} · showing {result.returned} ·{' '}
-            <span className="font-mono">{result.took_ms}ms</span>
+            <span className="tabular-nums">{result.took_ms}ms</span>
           </p>
 
           {result.hits.length === 0 ? (
@@ -173,13 +173,13 @@ const ArchiveQuery = ({ getIdToken }) => {
                       title={hit.source.institution
                         ? `${hit.source.archive} — ${hit.source.institution}`
                         : `Archive code: ${hit.source.archive}`}
-                      className="px-1.5 py-0.5 rounded bg-accent-soft text-accent font-mono text-[10px] cursor-help"
+                      className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[10px] cursor-help"
                     >
                       {hit.source.archive}
                     </span>
                     <span
                       title={kindLabel(hit.source.kind)}
-                      className="px-1.5 py-0.5 rounded bg-muted text-secondary font-mono text-[10px] cursor-help"
+                      className="px-1.5 py-0.5 rounded bg-muted text-secondary text-[10px] cursor-help"
                     >
                       {hit.source.kind}
                     </span>
@@ -187,7 +187,7 @@ const ArchiveQuery = ({ getIdToken }) => {
                     {hit.source.last_changed && (
                       <span
                         title={`Open Archieven last changed this record on ${hit.source.last_changed}. Our copy reflects the export taken after that date.`}
-                        className="text-secondary/50 text-[10px] font-mono cursor-help"
+                        className="text-secondary/50 text-[10px] tabular-nums cursor-help"
                       >
                         upd {hit.source.last_changed}
                       </span>

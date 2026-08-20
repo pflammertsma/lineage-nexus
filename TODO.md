@@ -269,6 +269,86 @@ searches are served from our own index.
           than published by the ingest so a run already in flight is visible —
           which is precisely when someone wants to know. Ignores a log untouched
           for 5 minutes, because a stale line is worse than no line.
+  - [x] **Fixed: completed-file count was reading a 16 kB window.** The panel
+        showed "3 files done" when 7 were finished — the earlier completion lines
+        had scrolled out of the tail the parser read. Completions are now counted
+        over the whole log (tens of kB, free); the tail still decides *current*
+        state, which is the only part that should be recent.
+  - [x] **Run progress is now "file 8 of 15".** The harvester writes a
+        `plan.json` listing every file it intends to process before it starts
+        work, so the panel can show position in the run rather than only naming
+        the file in flight. Batches cannot answer this: Meilisearch forms one
+        from whatever happens to be queued when it goes idle, so their number is
+        emergent, not planned. Tooltips on Searchable and Queued tasks now say
+        so — the first cannot move during a re-ingest, and the second is capped
+        by backpressure, so neither is a measure of work remaining.
+  - [x] **Fixed: backpressure was killing the download connection.** Two files
+        failed the re-ingest with `[Errno 32] Broken pipe` — `frl.not` after a
+        340s wait and `ade.bsg` after 270s, the two longest waits of the run.
+        `await_queue()` blocks *inside* the row loop, so with a full queue the
+        HTTPS connection to the export host sat idle for minutes and was closed
+        underneath us.
+
+        Exports are now staged to local disk and parsed from there, so a long
+        pause cannot break anything. The original no-staging rule was written
+        when the host had ~40 GB free for a ~40 GB corpus; the volume is now
+        200 GB and the largest export is under a gigabyte, so the constraint
+        that justified the risk is gone. Files are deleted as soon as they are
+        read. *Verified: download, round-trip and merge all tested against a
+        local HTTP server.*
+
+        A failed file is now retried once, reported as `FAILED` in the summary,
+        and makes the process exit non-zero. Previously the run exited 0 having
+        silently skipped both files, and nothing on the dashboard said otherwise
+        — which is why this took a day to notice.
+  - [ ] **Re-run `frl.not` and `ade.bsg`.** Both are partially merged: sampling
+        800 `frl.not` records shows 500 already multi-person (max 36), so the
+        run enriched a lot before dying, but neither file completed.
+  - [x] **Raised `INGEST_BATCH_SIZE` to 100,000, `INGEST_MAX_PENDING_TASKS` to 5.**
+        The batch history explains why this is the only lever that works.
+        Consecutive batches start **0.00–0.03s** apart: Meilisearch takes work
+        the instant it is idle, and one submission costs us ~0.3–0.5s round
+        trip. We can never get a second task in before the scheduler grabs the
+        first, so queuing *more* tasks cannot make batches bigger — only making
+        each task bigger can.
+
+        Measured within one file (`frl.not`), so difficulty is held constant:
+
+        | | docs | time | rate |
+        |---|---|---|---|
+        | 6-task batches | 354,272 | 1,585s | 224/s |
+        | 19-task batches | 950,000 | 1,680s | 566/s |
+
+        Solving the two gives **~232s fixed cost per batch** plus ~0.55 ms per
+        document. Half the wall-clock time went to batches carrying a quarter of
+        the documents. Projected: ~1.7x faster at 250k per batch, ~2.7x at 600k.
+
+        The alternating 6/19 pattern is the cap itself — while a batch of N runs,
+        the harvester fills the remaining slots and those become the next batch.
+        The oscillation is unavoidable; making each task large is what stops it
+        from mattering.
+        Showing per-batch timings on the dashboard immediately exposed this:
+
+        | batch | tasks | docs | duration | rate |
+        |---|---|---|---|---|
+        | 125 | 1 | 10,000 | 95.6s | 104/s |
+        | 124 | 24 | 240,000 | 203.2s | 1,181/s |
+        | 123 | 1 | 10,000 | 75.6s | 132/s |
+        | 122 | 24 | 240,000 | 182.1s | 1,317/s |
+        | 121 | 1 | 10,000 | 111.0s | 90/s |
+
+        There is a **fixed cost of roughly 90 seconds per batch** regardless of
+        size — a 24x larger batch takes about twice as long, not 24x. The runs
+        alternate because Meilisearch starts a batch the moment it is idle: when
+        a big batch finishes it grabs whichever single task is queued right then,
+        spends ~95s on 10,000 documents, and only while *that* runs does the
+        harvester refill the queue to 25. Roughly a third of wall-clock time is
+        going into batches carrying 4% of the documents.
+
+        Bigger submissions fix it without touching the memory ceiling that caused
+        the 9-hour batch: at 100,000 per task even a one-task batch amortises the
+        fixed cost 10x, and `INGEST_MAX_PENDING_TASKS` can drop to ~4 to keep the
+        same ~400k documents in flight.
   - [ ] **Harvest the remaining 80 archives** once the re-ingest lands and its
         throughput is known. 375 files across 83 archives; 22 done. At the
         measured ~1.5 KB/record the full ~51.6M corpus is ~77 GB, well inside

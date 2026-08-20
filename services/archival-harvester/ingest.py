@@ -14,9 +14,13 @@ for this purpose.
 
 Two constraints shape the design:
 
-  1. The whole corpus is ~8.3 GB compressed and ~40 GB uncompressed, on a host
-     with ~40 GB free. So nothing is ever written to disk: each file is streamed,
-     decompressed in flight, transformed, batched to Meilisearch, and discarded.
+  1. Each export is staged to local disk, then parsed from there. Streaming
+     straight off the socket was the original design — the host had ~40 GB free
+     for a ~40 GB corpus — but backpressure blocks inside the row loop, and an
+     HTTPS connection held idle for minutes gets closed underneath us. The
+     volume is now 200 GB and the largest export is under a gigabyte, so the
+     constraint that justified the risk is gone. Staged files are deleted as
+     soon as they are read.
 
   2. The source has 180 columns per record. Storing all of them would multiply
      the index for fields nobody searches. We keep what identifies and locates a
@@ -51,7 +55,24 @@ MEILI_HOST = os.environ.get("MEILI_HOST", "http://127.0.0.1:7700")
 MEILI_MASTER_KEY = os.environ.get("MEILI_MASTER_KEY", "")
 INDEX_NAME = os.environ.get("MEILI_INDEX", "records")
 
-BATCH_SIZE = int(os.environ.get("INGEST_BATCH_SIZE", "10000"))
+# Documents per submission.
+#
+# Raised from 10,000 after measuring what small batches cost. Meilisearch starts
+# a batch the instant it is idle — measured gaps between consecutive batches are
+# 0.00-0.03s — while one submission takes us ~0.3-0.5s round trip. We therefore
+# *cannot* get a second task in before the scheduler grabs the first, so batch
+# size is not something we can influence by queuing more tasks. The only lever
+# is how much each task carries.
+#
+# The cost model, measured within a single file so difficulty is held constant
+# (frl.not, alternating 6- and 19-task batches):
+#
+#     fixed     ~232 seconds per batch, whatever its size
+#     marginal  ~0.55 ms per document
+#
+# At 10,000 per task a one-task batch spent ~232s of overhead on ~5s of work.
+# Half the wall-clock time went to batches carrying a quarter of the documents.
+BATCH_SIZE = int(os.environ.get("INGEST_BATCH_SIZE", "100000"))
 
 # Backpressure. Submitting is ~10,000 records/second; indexing is far slower, so
 # an unthrottled run does not "finish" — it just moves the whole corpus into
@@ -65,7 +86,15 @@ BATCH_SIZE = int(os.environ.get("INGEST_BATCH_SIZE", "10000"))
 # single batch, which is the thing that actually has to fit in memory. It costs
 # nothing in total throughput: the engine was always the bottleneck, and a shallow
 # queue just stops us from pretending otherwise.
-MAX_PENDING_TASKS = int(os.environ.get("INGEST_MAX_PENDING_TASKS", "8"))
+# Cap on tasks in flight, which bounds how much the engine can group into one
+# batch — the thing that has to fit in memory. Five 100,000-document tasks is at
+# most ~500k documents per batch, against the 11.1M batch that thrashed a 6 GB
+# box for nine hours, on a host that now has twice the RAM.
+#
+# Note this cap is also what creates the alternating batch sizes: while a batch
+# of N processes, the harvester fills the remaining slots, and those become the
+# next batch. Making each task larger is what stops that from mattering.
+MAX_PENDING_TASKS = int(os.environ.get("INGEST_MAX_PENDING_TASKS", "5"))
 QUEUE_POLL_SECONDS = 5
 
 # A queue that has not moved for this long is stuck rather than busy. Not fatal on
@@ -200,6 +229,50 @@ def transform(row: Dict[str, str], archive: str, kind: str,
     }
 
 
+def download_export(url: str, destination: str) -> int:
+    """
+    Fetches one export to local disk, returning its size in bytes.
+
+    Downloading first, rather than parsing straight off the socket, exists
+    because of a failure this cost us: backpressure blocks inside the row loop,
+    and with the queue full that block lasts minutes. Holding an idle HTTPS
+    connection to the export host that long gets it closed underneath us, and
+    the next read dies with `[Errno 32] Broken pipe`. It killed `frl.not` after
+    a 340s wait and `ade.bsg` after 270s — the two longest waits of the run.
+
+    The original design streamed to avoid ever staging a file, because the host
+    had ~40 GB free for a ~40 GB corpus. That volume is now 200 GB with 171 GB
+    free and the largest single export is under a gigabyte, so the constraint
+    that justified the risk is gone. The file is removed as soon as it is read.
+    """
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    written = 0
+    with urllib.request.urlopen(request, timeout=120) as response:
+        with open(destination, "wb") as handle:
+            while True:
+                chunk = response.read(1 << 20)
+                if not chunk:
+                    break
+                handle.write(chunk)
+                written += len(chunk)
+    return written
+
+
+def rows_from_file(path: str) -> Iterator[Any]:
+    """
+    Yields the header, then each row, from a local gzipped pipe-delimited export.
+
+    Same contract as stream_rows, but reading a local file — so a long pause for
+    backpressure cannot break anything.
+    """
+    with gzip.open(path, "rb") as gz:
+        text = io.TextIOWrapper(gz, encoding="utf-8", errors="replace", newline="")
+        reader = csv.DictReader(text, delimiter="|", quoting=csv.QUOTE_NONE)
+        yield reader.fieldnames or []
+        for row in reader:
+            yield row
+
+
 def stream_rows(url: str) -> Iterator[Dict[str, str]]:
     """
     Yields rows from a remote gzipped, pipe-delimited CSV without staging it.
@@ -289,6 +362,21 @@ def await_queue(threshold: int = MAX_PENDING_TASKS) -> None:
 
 
 def configure_index(client) -> Any:
+    """
+    Applies index settings. Cheap while they are unchanged — expensive the day
+    they are not.
+
+    Meilisearch reindexes every document when `searchableAttributes`,
+    `filterableAttributes` or `typoTolerance` actually change, because those
+    decide what the inverted index contains. Calling this on every run is free
+    today: all five settings tasks so far finished in between 5ms and 0.5s,
+    because the values are identical and the engine no-ops.
+
+    Change any of them, though, and this one line rebuilds the index over every
+    record. At 11.8M documents and the ~1,200 docs/s this host sustains, that is
+    hours of work triggered by an edit that looks like a config tweak. Make such
+    a change deliberately, and expect the rebuild.
+    """
     index = client.index(INDEX_NAME)
     index.update_settings({
         "searchableAttributes": ["names", "event_place", "event_type", "institution"],
@@ -378,10 +466,30 @@ def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None) -> 
     logger.info("streaming %s.%s", archive, kind)
 
     batch: List[Dict[str, Any]] = []
-    count = 0
     started = time.time()
 
-    rows = stream_rows(url)
+    staged = os.path.join(
+        os.environ.get("INGEST_TMP_DIR", "/tmp"), f"{archive}.{kind}.csv.gz"
+    )
+    size = download_export(url, staged)
+    logger.info("  %s.%s: fetched %.0f MB in %.0fs",
+                archive, kind, size / (1 << 20), time.time() - started)
+
+    try:
+        return _ingest_staged(index, staged, archive, kind, limit, started, batch)
+    finally:
+        # The staged copy exists only for the duration of one file.
+        try:
+            os.unlink(staged)
+        except OSError:
+            pass
+
+
+def _ingest_staged(index, staged: str, archive: str, kind: str,
+                   limit: Optional[int], started: float,
+                   batch: List[Dict[str, Any]]) -> int:
+    count = 0
+    rows = rows_from_file(staged)
     prefixes = role_prefixes(next(rows))
     logger.info("  %s.%s: %d person roles in this schema", archive, kind, len(prefixes))
 
@@ -447,7 +555,27 @@ def main() -> int:
     index = configure_index(client)
 
     wanted = set(args.kinds.split(",")) if args.kinds else None
+
+    # Publish the plan before doing any work, so the dashboard can say "file 8
+    # of 15" rather than only naming the file in progress. Written where the log
+    # goes, which the gateway already mounts.
+    plan = [
+        f"{archive}.{kind}"
+        for archive in args.archives
+        for kind in sorted(n.split(".", 1)[1] for n in available if n.startswith(f"{archive}."))
+        if not wanted or kind in wanted
+    ]
+    try:
+        plan_dir = os.environ.get("INGEST_LOG_DIR", "/logs")
+        os.makedirs(plan_dir, exist_ok=True)
+        with open(os.path.join(plan_dir, "plan.json"), "w", encoding="utf-8") as handle:
+            json.dump({"started": time.time(), "files": plan}, handle)
+        logger.info("plan: %d files — %s", len(plan), ", ".join(plan))
+    except OSError as exc:
+        logger.warning("could not write run plan: %s", exc)
+
     total = 0
+    failures: List[str] = []
     for archive in args.archives:
         kinds = [n.split(".", 1)[1] for n in available if n.startswith(f"{archive}.")]
         if not kinds:
@@ -456,15 +584,29 @@ def main() -> int:
         for kind in sorted(kinds):
             if wanted and kind not in wanted:
                 continue
-            try:
-                total += ingest_file(index, archive, kind, args.limit)
-            except Exception as exc:
-                # One bad file should not abandon the rest of the run.
-                logger.error("  %s.%s failed: %s", archive, kind, exc)
+            for attempt in (1, 2):
+                try:
+                    total += ingest_file(index, archive, kind, args.limit)
+                    break
+                except Exception as exc:
+                    # One bad file should not abandon the rest of the run, but it
+                    # must not vanish either: the first run exited 0 having
+                    # silently skipped frl.not and ade.bsg, and the dashboard had
+                    # no way to know.
+                    if attempt == 1:
+                        logger.warning("  %s.%s failed (%s) — retrying once",
+                                       archive, kind, exc)
+                        time.sleep(10)
+                        continue
+                    logger.error("  %s.%s FAILED after retry: %s", archive, kind, exc)
+                    failures.append(f"{archive}.{kind}")
 
+    if failures:
+        logger.error("done with FAILURES: %d file(s) did not complete: %s",
+                     len(failures), ", ".join(failures))
     logger.info("done: %d documents submitted", total)
     logger.info("Meilisearch indexes asynchronously; check the admin dashboard for progress.")
-    return 0
+    return 1 if failures else 0
 
 
 if __name__ == "__main__":

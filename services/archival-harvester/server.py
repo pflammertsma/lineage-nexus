@@ -604,11 +604,15 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
     if age > 300:
       return None
 
-    with open(newest, "rb") as handle:
-      handle.seek(0, os.SEEK_END)
-      window = min(handle.tell(), 16384)
-      handle.seek(-window, os.SEEK_END)
-      tail = handle.read().decode("utf-8", errors="replace").splitlines()
+    # Completed files are counted over the whole log, not the tail. Counting
+    # them in a 16 kB window undercounted badly — 7 finished files read as 3,
+    # because the earlier completion lines had scrolled out of it. The log is
+    # tens of kilobytes, so reading all of it costs nothing.
+    with open(newest, "r", encoding="utf-8", errors="replace") as handle:
+      lines = handle.read().splitlines()
+    # The tail is still what decides *current* state: the last file mentioned,
+    # not every file the run has ever touched.
+    tail = lines[-200:]
   except OSError:
     return None
 
@@ -617,6 +621,10 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
   rate = None
   waiting = False
   completed = 0
+
+  for line in lines:
+    if _INGEST_FINISHED.search(line):
+      completed += 1
 
   for line in tail:
     match = _INGEST_STREAMING.search(line)
@@ -628,16 +636,25 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
       archive, kind = match.group(1), match.group(2)
       submitted = int(match.group(3).replace(",", ""))
       rate = float(match.group(4))
-    if _INGEST_FINISHED.search(line):
-      completed += 1
     waiting = "waiting for queue" in line
 
   if not archive:
     return None
 
+  # Total file count comes from a plan the harvester writes when it starts.
+  # Without it the panel can say which file is in progress but not how much of
+  # the run is left, which is the question people actually have.
+  planned = None
+  try:
+    with open(os.path.join(INGEST_LOG_DIR, "plan.json"), "r", encoding="utf-8") as handle:
+      planned = (json.load(handle) or {}).get("files")
+  except (OSError, ValueError):
+    planned = None
+
   return {
     "archive": archive,
     "kind": kind,
+    "files_total": len(planned) if isinstance(planned, list) else None,
     "submitted": submitted,
     "rows_per_second": rate,
     # True when the harvester is throttling itself because the queue is full —

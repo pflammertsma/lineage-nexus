@@ -281,23 +281,23 @@ const AdminDashboard = ({ getIdToken }) => {
                 <dl className="grid gap-x-8 gap-y-3 sm:grid-cols-2 text-sm">
                   <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
                     <dt className="text-secondary">Index</dt>
-                    <dd className="font-mono text-xs text-primary">{engine.index_name || '—'}</dd>
+                    <dd className="text-xs text-primary">{engine.index_name || '—'}</dd>
                   </div>
                   <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
                     <dt className="text-secondary">Documents</dt>
-                    <dd className="font-mono text-xs text-primary">
+                    <dd className="tabular-nums text-xs text-primary">
                       {engine.stats?.numberOfDocuments?.toLocaleString() ?? '—'}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
                     <dt className="text-secondary">Indexing</dt>
-                    <dd className="font-mono text-xs text-primary">
+                    <dd className="tabular-nums text-xs text-primary">
                       {engine.stats?.isIndexing ? 'in progress' : 'idle'}
                     </dd>
                   </div>
                   <div className="flex justify-between gap-4 border-b border-border/50 pb-2">
                     <dt className="text-secondary">Engine</dt>
-                    <dd className="font-mono text-xs text-primary truncate" title={engine.meilisearch_url}>
+                    <dd className="text-xs text-primary truncate" title={engine.meilisearch_url}>
                       {engine.meilisearch_url || '—'}
                     </dd>
                   </div>

@@ -147,7 +147,7 @@ const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }
                 type="button"
                 onClick={() => onRangeChange?.(r.minutes)}
                 aria-pressed={rangeMinutes === r.minutes}
-                className={`px-2 py-0.5 text-[10px] font-mono transition-colors cursor-pointer ${
+                className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${
                   rangeMinutes === r.minutes
                     ? 'bg-accent text-on-accent'
                     : 'text-secondary hover:text-primary'
@@ -167,7 +167,7 @@ const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }
               <span className="w-2.5 h-0.5 rounded-full" style={{ background: s.colour }} />
               <span className="text-secondary">{s.label}</span>
               {!hovered && (
-                <span className="font-mono" style={{ color: s.colour }}>
+                <span className="tabular-nums" style={{ color: s.colour }}>
                   {s.last?.toFixed(1)}%
                 </span>
               )}
@@ -236,7 +236,7 @@ const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }
           }}
         >
           <div className="bg-card border border-border-strong rounded-lg px-3 py-2 shadow-lg min-w-[9.5rem]">
-            <p className="text-[10px] font-mono text-secondary mb-1.5 whitespace-nowrap">
+            <p className="text-[10px] tabular-nums text-secondary mb-1.5 whitespace-nowrap">
               {stamp(hovered.t)}
             </p>
             <ul className="space-y-1">
@@ -246,7 +246,7 @@ const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }
                     <span className="w-2.5 h-0.5 rounded-full shrink-0" style={{ background: s.colour }} />
                     <span className="text-secondary whitespace-nowrap">{s.label}</span>
                   </span>
-                  <span className="font-mono shrink-0" style={{ color: s.colour }}>
+                  <span className="tabular-nums shrink-0" style={{ color: s.colour }}>
                     {Number.isFinite(hovered[s.field]) ? `${hovered[s.field].toFixed(1)}%` : '—'}
                   </span>
                 </li>
@@ -257,7 +257,7 @@ const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }
       )}
       </div>
 
-      <div className="flex justify-between items-center mt-2 text-[10px] font-mono text-secondary">
+      <div className="flex justify-between items-center mt-2 text-[10px] tabular-nums text-secondary">
         <span>{stamp(usable[0].t)}</span>
         <span>{stamp(usable[usable.length - 1].t)}</span>
       </div>

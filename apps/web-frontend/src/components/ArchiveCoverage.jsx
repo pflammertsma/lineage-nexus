@@ -59,7 +59,7 @@ const Glossary = ({ archives, onClose }) => (
       )}
       {archives.map((row) => (
         <li key={row.archive} className="flex gap-2 text-xs">
-          <span className="font-mono text-primary shrink-0 w-12">{row.archive}</span>
+          <span className="text-primary shrink-0 w-12">{row.archive}</span>
           <span className="text-secondary">{row.institution || 'Name not recorded'}</span>
         </li>
       ))}
@@ -71,7 +71,7 @@ const Glossary = ({ archives, onClose }) => (
     <ul className="space-y-1">
       {Object.entries(KIND_LABELS).map(([kind, label]) => (
         <li key={kind} className="flex gap-2 text-xs">
-          <span className="font-mono text-primary shrink-0 w-12">{kind}</span>
+          <span className="text-primary shrink-0 w-12">{kind}</span>
           <span className="text-secondary">{label}</span>
         </li>
       ))}
@@ -130,22 +130,12 @@ const ArchiveCoverage = ({ coverage }) => {
             <HelpCircle size={13} />
           </button>
         </div>
-        <div className="flex items-baseline gap-2">
-          <span className="font-serif text-3xl text-primary leading-none">
-            {total.toLocaleString()}
-          </span>
-          {coverage.is_indexing && (
-            <span className="text-[10px] text-amber-500 uppercase tracking-widest">
-              indexing…
-            </span>
-          )}
-        </div>
+        {/* No "indexing" badge here: the Indexing panel above this one owns
+            that state, and in more detail than a single word could carry. */}
+        <span className="font-serif text-3xl text-primary leading-none">
+          {total.toLocaleString()}
+        </span>
       </div>
-
-      <p className="text-xs text-secondary mb-5">
-        Across {coverage.archive_count} archive{coverage.archive_count === 1 ? '' : 's'}.
-        Anything not held here is answered live from Open Archieven instead.
-      </p>
 
       {showGlossary && (
         <Glossary archives={archives} onClose={() => setShowGlossary(false)} />
@@ -161,14 +151,14 @@ const ArchiveCoverage = ({ coverage }) => {
               <li key={row.archive} className="text-xs">
                 <div className="flex justify-between gap-2 mb-0.5">
                   <span
-                    className="font-mono text-primary cursor-help"
+                    className="text-primary cursor-help"
                     title={row.institution
                       ? `${row.archive} — ${row.institution}`
                       : `Archive code: ${row.archive}`}
                   >
                     {row.archive}
                   </span>
-                  <span className="text-secondary font-mono">{row.records.toLocaleString()}</span>
+                  <span className="text-secondary tabular-nums">{row.records.toLocaleString()}</span>
                 </div>
                 <div aria-hidden="true" className="h-1 rounded-full bg-muted overflow-hidden">
                   <div className="h-full rounded-full bg-accent/60"
@@ -187,10 +177,10 @@ const ArchiveCoverage = ({ coverage }) => {
             {(coverage.by_kind || []).map((row) => (
               <li key={row.kind} className="flex justify-between gap-2 text-xs" title={KIND_LABELS[row.kind] || row.kind}>
                 <span className="text-secondary cursor-help">
-                  <span className="font-mono text-primary/80">{row.kind}</span>
+                  <span className="text-primary/80">{row.kind}</span>
                   {KIND_SHORT[row.kind] && <span className="ml-2">{KIND_SHORT[row.kind]}</span>}
                 </span>
-                <span className="text-secondary font-mono shrink-0">{row.records.toLocaleString()}</span>
+                <span className="text-secondary tabular-nums shrink-0">{row.records.toLocaleString()}</span>
               </li>
             ))}
           </ul>
