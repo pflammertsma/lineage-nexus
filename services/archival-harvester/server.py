@@ -10,7 +10,7 @@ import meilisearch
 from fastapi import FastAPI, Query, HTTPException, Header, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from typing import Any, Deque, Dict, List, Optional
+from typing import Any, Deque, Dict, List, Optional, Tuple
 
 app = FastAPI(
   title="Lineage Nexus Archival Gateway Engine",
@@ -605,6 +605,74 @@ def _seconds_since_progress() -> Optional[int]:
   return int(time.time() - samples[0]["t"])
 
 
+# --- Phase-Weighted ETA & Batch Telemetry Engine ----------------------------
+# Meilisearch batch execution consists of steps:
+# 1. document (5% weight) - JSON deserialization
+# 2. extracting word proximity (80% weight) - heavy tokenization & proximity matrix calculation
+# 3. indexing (12% weight) - flushing trees to LMDB disk
+# 4. processing tasks (3% weight) - committing transaction
+
+PHASE_WEIGHTS = {
+  "document": 0.05,
+  "extracting word proximity": 0.80,
+  "indexing": 0.12,
+  "processing tasks": 0.03,
+}
+
+_batch_telemetry: Deque[Dict[str, Any]] = deque(maxlen=3000)
+_last_ewma_velocity: Dict[int, float] = {}
+
+
+def _calculate_virtual_progress(progress_data: Dict[str, Any]) -> float:
+  """Converts raw step progress into a phase-weighted virtual progress percentage (0.0 to 100.0)."""
+  if not progress_data:
+    return 0.0
+
+  steps = progress_data.get("steps") or []
+  if not steps:
+    pct = progress_data.get("percentage")
+    return float(pct) if pct is not None else 0.0
+
+  accumulated = 0.0
+  for step_info in steps:
+    step_name = step_info.get("currentStep", "")
+    finished = step_info.get("finished", 0)
+    total = step_info.get("total", 1) or 1
+    weight = PHASE_WEIGHTS.get(step_name, 0.25)
+
+    step_ratio = min(1.0, max(0.0, finished / total))
+    accumulated += step_ratio * weight * 100.0
+
+  return min(100.0, max(0.0, round(accumulated, 2)))
+
+
+def _compute_phase_weighted_eta(batch_uid: int, virtual_progress: float, elapsed_seconds: float) -> Tuple[Optional[int], Optional[int]]:
+  """
+  Calculates both phase-weighted EWMA smoothed ETA and naive linear ETA in seconds.
+  Returns (smoothed_eta_seconds, naive_eta_seconds).
+  """
+  if not elapsed_seconds or elapsed_seconds <= 0 or virtual_progress <= 0:
+    return None, None
+
+  remaining_pct = max(0.0, 100.0 - virtual_progress)
+  if remaining_pct <= 0:
+    return 0, 0
+
+  # Naive linear calculation based on raw virtual progress rate
+  instant_velocity = virtual_progress / elapsed_seconds
+  naive_eta = int(remaining_pct / instant_velocity) if instant_velocity > 0 else None
+
+  # EWMA velocity smoothing
+  alpha = 0.25
+  prev_velocity = _last_ewma_velocity.get(batch_uid, instant_velocity)
+  smoothed_velocity = alpha * instant_velocity + (1.0 - alpha) * prev_velocity
+  _last_ewma_velocity[batch_uid] = smoothed_velocity
+
+  smoothed_eta = int(remaining_pct / smoothed_velocity) if smoothed_velocity > 0 else naive_eta
+
+  return smoothed_eta, naive_eta
+
+
 # Where the harvester writes its log. Mounted read-only into this container, so
 # the dashboard can say *what* is being ingested — something Meilisearch cannot
 # know. It only ever sees documents, not which export they came from.
@@ -787,12 +855,44 @@ def admin_indexing():
   rate = _document_rate()
   pending_documents = None
   eta_seconds = None
-  if current and current.get("documents"):
-    # Only the batch in flight declares a document count. Queued tasks do not,
-    # so this is a floor on what is left, not the total.
-    pending_documents = current["documents"]
-    if rate and rate > 0:
-      eta_seconds = int(pending_documents / rate)
+  naive_eta_seconds = None
+
+  if current:
+    b_uid = current.get("uid") or 0
+    raw_pct = current.get("percentage") or 0.0
+    virtual_pct = _calculate_virtual_progress(current)
+    elapsed = current.get("elapsed_seconds") or 0
+
+    smoothed_eta, naive_eta = _compute_phase_weighted_eta(b_uid, virtual_pct, elapsed)
+    current["virtual_percentage"] = virtual_pct
+    current["naive_eta_seconds"] = naive_eta
+    eta_seconds = smoothed_eta
+    naive_eta_seconds = naive_eta
+
+    if current.get("documents"):
+      pending_documents = current["documents"]
+
+    # Record telemetry sample
+    steps = current.get("steps") or []
+    current_step_name = steps[-1]["step"] if steps else "indexing"
+    io_rates = _get_disk_io_rates()
+    iowait_pct = round(psutil.cpu_times_percent(interval=None).iowait, 1) if hasattr(psutil, "cpu_times_percent") else 0.0
+
+    telemetry_sample = {
+      "timestamp": int(time.time()),
+      "batch_uid": b_uid,
+      "step": current_step_name,
+      "raw_progress_pct": raw_pct,
+      "virtual_progress_pct": virtual_pct,
+      "elapsed_seconds": elapsed,
+      "eta_seconds": smoothed_eta,
+      "naive_eta_seconds": naive_eta,
+      "cpu_percent": psutil.cpu_percent(interval=None),
+      "iowait_percent": iowait_pct,
+      "read_mbs": io_rates.get("read_mbs", 0.0),
+      "write_mbs": io_rates.get("write_mbs", 0.0),
+    }
+    _batch_telemetry.append(telemetry_sample)
 
   return {
     "status": "success",
@@ -812,6 +912,52 @@ def admin_indexing():
     "stalled_seconds": _seconds_since_progress(),
     "pending_documents": pending_documents,
     "eta_seconds": eta_seconds,
+    "naive_eta_seconds": naive_eta_seconds,
+  }
+
+
+@app.get("/api/v1/admin/batch-telemetry", dependencies=[Depends(require_admin)])
+def admin_batch_telemetry(
+  batch_uid: Optional[int] = Query(None, description="Filter by batch UID"),
+  format: str = Query("json", description="Output format: 'json' or 'csv'")
+):
+  """
+  Provides time-series telemetry samples of engine batch execution.
+  Can be exported as CSV for machine-readable extrapolation and trial analysis.
+  """
+  samples = list(_batch_telemetry)
+  if batch_uid is not None:
+    samples = [s for s in samples if s.get("batch_uid") == batch_uid]
+
+  if format == "csv":
+    import csv
+    import io
+    from fastapi.responses import Response
+
+    output = io.StringIO()
+    writer = csv.DictWriter(
+      output,
+      fieldnames=[
+        "timestamp", "batch_uid", "step", "raw_progress_pct",
+        "virtual_progress_pct", "elapsed_seconds", "eta_seconds",
+        "naive_eta_seconds", "cpu_percent", "iowait_percent",
+        "read_mbs", "write_mbs"
+      ]
+    )
+    writer.writeheader()
+    for row in samples:
+      writer.writerow(row)
+
+    return Response(
+      content=output.getvalue(),
+      media_type="text/csv",
+      headers={"Content-Disposition": f"attachment; filename=batch_telemetry_{batch_uid or 'all'}.csv"}
+    )
+
+  return {
+    "status": "success",
+    "count": len(samples),
+    "samples": samples
   }
 
 

@@ -54,7 +54,7 @@ function parseIsoDuration(value) {
  * can be hours wide. Without this panel a stalled harvest and a finished one look
  * exactly the same from the dashboard.
  */
-const IndexingProgress = ({ indexing }) => {
+const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
   if (!indexing) {
     return (
       <div className="bg-card border border-border rounded-lg p-5">
@@ -201,9 +201,14 @@ const IndexingProgress = ({ indexing }) => {
                 : 'Streaming S3 bulk export...'}
             </span>
             {indexing.eta_seconds != null && (
-              <span className="font-medium text-accent">
+              <button
+                type="button"
+                onClick={() => onOpenTelemetry?.(batch?.uid || 'all')}
+                className="font-medium text-accent hover:underline cursor-pointer transition-colors flex items-center gap-1"
+                title="Click to open batch telemetry & debug charts"
+              >
                 ETA: ~{formatDuration(indexing.eta_seconds)}
-              </span>
+              </button>
             )}
           </div>
 
@@ -237,9 +242,14 @@ const IndexingProgress = ({ indexing }) => {
               {batch.documents?.toLocaleString()} docs ·{' '}
               {formatDuration(batch.elapsed_seconds)}
               {indexing.eta_seconds != null ? (
-                <span className="text-accent font-medium ml-1">
+                <button
+                  type="button"
+                  onClick={() => onOpenTelemetry?.(batch.uid)}
+                  className="text-accent font-medium hover:underline ml-1 cursor-pointer transition-colors inline-flex items-center gap-1"
+                  title="Click to view batch telemetry charts"
+                >
                   · ETA ~{formatDuration(indexing.eta_seconds)}
-                </span>
+                </button>
               ) : (
                 indexing.recent_batches?.length > 0 && (
                   <span className="text-accent/80 font-medium ml-1" title="Estimated based on average duration of recent completed batches">
@@ -321,7 +331,7 @@ const IndexingProgress = ({ indexing }) => {
       {indexing.recent_batches?.length > 0 && (
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-secondary/70 mb-2">
-            Recently completed
+            Recently completed (Click batch to view telemetry)
           </p>
           <ul className="space-y-1">
             {indexing.recent_batches.map((b) => {
@@ -331,16 +341,23 @@ const IndexingProgress = ({ indexing }) => {
               const perSecond =
                 seconds && seconds > 0 && b.documents ? b.documents / seconds : null;
               return (
-                <li key={b.uid} className="flex justify-between gap-3 text-[11px]">
-                  <span className="text-secondary">
-                    Batch {b.uid}
-                    <span className="text-secondary/60"> · {b.tasks?.toLocaleString()} tasks</span>
-                  </span>
-                  <span className="text-secondary/70 shrink-0 tabular-nums">
-                    {stamp(b.started_at || b.finished_at)}
-                    {seconds === null ? '' : ` · ${formatDuration(seconds)}`}
-                    {perSecond ? ` · ${Math.round(perSecond).toLocaleString()}/s` : ''}
-                  </span>
+                <li key={b.uid}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenTelemetry?.(b.uid)}
+                    className="w-full flex justify-between gap-3 text-[11px] p-1.5 rounded-md hover:bg-accent/10 transition-colors cursor-pointer text-left group"
+                    title={`Click to view telemetry & charts for Batch ${b.uid}`}
+                  >
+                    <span className="text-secondary group-hover:text-primary font-medium transition-colors">
+                      Batch {b.uid}
+                      <span className="text-secondary/60"> · {b.tasks?.toLocaleString()} tasks</span>
+                    </span>
+                    <span className="text-secondary/70 group-hover:text-accent shrink-0 tabular-nums font-mono transition-colors">
+                      {stamp(b.started_at || b.finished_at)}
+                      {seconds === null ? '' : ` · ${formatDuration(seconds)}`}
+                      {perSecond ? ` · ${Math.round(perSecond).toLocaleString()}/s` : ''}
+                    </span>
+                  </button>
                 </li>
               );
             })}

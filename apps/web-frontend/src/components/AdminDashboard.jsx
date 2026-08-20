@@ -12,6 +12,7 @@ import ArchiveQuery from './ArchiveQuery';
 import ArchiveCoverage from './ArchiveCoverage';
 import IndexingProgress from './IndexingProgress';
 import HarvestCatalog from './HarvestCatalog';
+import { BatchTelemetryModal } from './BatchTelemetryModal';
 
 const REFRESH_MS = 15_000;
 
@@ -91,6 +92,14 @@ const AdminDashboard = ({ getIdToken }) => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);
+
+  const [telemetryModalOpen, setTelemetryModalOpen] = useState(false);
+  const [telemetryBatchUid, setTelemetryBatchUid] = useState('all');
+
+  const handleOpenTelemetry = useCallback((batchUid = 'all') => {
+    setTelemetryBatchUid(String(batchUid));
+    setTelemetryModalOpen(true);
+  }, []);
 
   const [reconnecting, setReconnecting] = useState(false);
   const failures = useRef(0);
@@ -363,7 +372,7 @@ const AdminDashboard = ({ getIdToken }) => {
             {/* Tab 2: Ingest & Harvester Queue */}
             {activeTab === 'harvesting' && (
               <div className="space-y-8">
-                <IndexingProgress indexing={indexing} />
+                <IndexingProgress indexing={indexing} onOpenTelemetry={handleOpenTelemetry} />
                 <HarvestCatalog getIdToken={getIdToken} onHarvestQueued={load} />
               </div>
             )}
@@ -405,6 +414,13 @@ const AdminDashboard = ({ getIdToken }) => {
           </div>
         )}
       </div>
+
+      <BatchTelemetryModal
+        isOpen={telemetryModalOpen}
+        onClose={() => setTelemetryModalOpen(false)}
+        initialBatchUid={telemetryBatchUid}
+        getIdToken={getIdToken}
+      />
     </main>
   );
 };
