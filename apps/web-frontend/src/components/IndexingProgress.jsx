@@ -1,5 +1,6 @@
 import React from 'react';
 import { Layers, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { getArchiveName } from '../config';
 
 /**
  * How long everything must be frozen before it is worth mentioning.
@@ -170,6 +171,51 @@ const IndexingProgress = ({ indexing }) => {
         </p>
       )}
 
+      {/* Stage 1: Active Harvester Dataset Banner */}
+      {job && (
+        <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-sm text-primary">
+                {getArchiveName(job.archive)}
+              </span>
+              <span className="px-1.5 py-0.5 rounded bg-card border border-border text-[10px] font-mono font-bold text-accent">
+                {job.archive}.{job.kind}
+              </span>
+              <span className="text-xs text-secondary">
+                · File {job.files_completed + 1}
+                {job.files_total ? ` of ${job.files_total}` : ''}
+              </span>
+            </div>
+            {Number.isFinite(job.rows_per_second) && (
+              <span className="text-xs font-mono font-semibold text-green-600">
+                {Math.round(job.rows_per_second).toLocaleString()} rows/s
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between gap-3 text-xs text-secondary flex-wrap">
+            <span>
+              {Number.isFinite(job.submitted)
+                ? `${job.submitted.toLocaleString()} rows streamed & parsed`
+                : 'Streaming S3 bulk export...'}
+            </span>
+            {indexing.eta_seconds != null && (
+              <span className="font-medium text-accent">
+                ETA: ~{formatDuration(indexing.eta_seconds)}
+              </span>
+            )}
+          </div>
+
+          {job.waiting_for_queue && (
+            <p className="text-[10px] text-amber-500 mt-2 font-medium">
+              Throttled by backpressure — harvester is waiting for queue to drain to preserve RAM.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Stage 2: In-Flight Engine Batch */}
       {batch && (
         <div className="border border-border/60 rounded-lg p-4 mb-4">
           <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
@@ -195,19 +241,13 @@ const IndexingProgress = ({ indexing }) => {
             {pct === null ? 'progress unreported' : `${pct.toFixed(1)}%`}
           </p>
 
-          {/* The engine's own step counters. When the percentage is not moving,
-              this is what shows which phase it is wedged in.
-
-              These are nested, not parallel: each step is a stage *within* the
-              one above it, so `processing tasks 0/2` and `payload 911/1121`
-              describe the same work at different depths. Rendered flat they read
-              as four contradictory progress bars, so the nesting is drawn. */}
+          {/* Engine internal step counters (preserving exact engine terminology) */}
           {batch.steps?.length > 0 && (
             <ul className="space-y-1">
               {batch.steps.map((s, i) => (
                 <li key={i} className="flex justify-between gap-3 text-[11px]">
                   <span
-                    className={i === batch.steps.length - 1 ? 'text-primary' : 'text-secondary'}
+                    className={i === batch.steps.length - 1 ? 'text-primary font-medium' : 'text-secondary'}
                     style={{ paddingLeft: `${i * 0.85}rem` }}
                   >
                     {i > 0 && <span className="text-secondary/40 mr-1.5">└</span>}
@@ -215,7 +255,7 @@ const IndexingProgress = ({ indexing }) => {
                   </span>
                   <span
                     className={`tabular-nums shrink-0 ${
-                      i === batch.steps.length - 1 ? 'text-primary' : 'text-secondary/70'
+                      i === batch.steps.length - 1 ? 'text-primary font-medium' : 'text-secondary/70'
                     }`}
                   >
                     {s.finished}/{s.total}
@@ -223,37 +263,6 @@ const IndexingProgress = ({ indexing }) => {
                 </li>
               ))}
             </ul>
-          )}
-          {/* What is actually being harvested. Meilisearch only ever sees
-              documents, never which export they came from, so this comes from
-              the harvester's own log. */}
-          {job && (
-            <div className="mt-3 pt-3 border-t border-border/60">
-              <div className="flex items-baseline justify-between gap-3 flex-wrap">
-                <span className="text-[11px] text-secondary">
-                  Harvesting{' '}
-                  <span className="tabular-nums text-primary">
-                    {job.archive}.{job.kind}
-                  </span>
-                  <span className="text-secondary/60">
-                    {' '}· file {job.files_completed + 1}
-                    {job.files_total ? ` of ${job.files_total}` : ''}
-                  </span>
-                </span>
-                <span className="text-[11px] tabular-nums text-secondary">
-                  {Number.isFinite(job.submitted) &&
-                    `${job.submitted.toLocaleString()} rows`}
-                  {Number.isFinite(job.rows_per_second) &&
-                    ` · ${Math.round(job.rows_per_second).toLocaleString()}/s`}
-                </span>
-              </div>
-              {job.waiting_for_queue && (
-                <p className="text-[10px] text-secondary/60 mt-1">
-                  Throttled by backpressure — the harvester is waiting for the
-                  queue to drain, which keeps batches inside available memory.
-                </p>
-              )}
-            </div>
           )}
         </div>
       )}

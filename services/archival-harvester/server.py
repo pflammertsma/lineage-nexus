@@ -249,10 +249,14 @@ async def _sample_metrics() -> None:
       disk = psutil.disk_usage("/")
       docs = None
       indexing = None
+      archives = {}
       try:
-        stats = meili_client.index(INDEX_NAME).get_stats()
+        idx = meili_client.index(INDEX_NAME)
+        stats = idx.get_stats()
         docs = stats.number_of_documents
         indexing = stats.is_indexing
+        facets = idx.search("", {"limit": 0, "facets": ["archive"]})
+        archives = facets.get("facetDistribution", {}).get("archive", {}) or {}
       except Exception:
         # Meilisearch being unreachable should not stop CPU/memory history.
         pass
@@ -299,6 +303,7 @@ async def _sample_metrics() -> None:
         "mem": round(mem.percent, 1),
         "disk": round(disk.percent, 1),
         "docs": docs,
+        "archives": archives,
         "done": done,
         "pct": pct,
         "indexing": indexing,
@@ -742,6 +747,7 @@ def admin_indexing():
     "status": "success",
     "documents": documents,
     "is_indexing": is_indexing,
+    "archive_names": ARCHIVE_NAMES,
     "queue": {
       "enqueued": enqueued,
       "processing": processing,

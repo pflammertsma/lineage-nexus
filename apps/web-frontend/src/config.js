@@ -46,3 +46,19 @@ export const isMonitoringConfigured = Boolean(SENTRY_DSN);
 // The archival/admin service (separate from the research API above). Unset means
 // the admin dashboard reports that it is not configured rather than guessing a host.
 export const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_BASE_URL || '';
+
+// Dynamic store for Archive Names supplied by the archival API server (server.py).
+// The backend API is the single authoritative owner of institutional archive names.
+let dynamicArchiveNames = {};
+
+export function setArchiveNames(names) {
+  if (names && typeof names === 'object') {
+    dynamicArchiveNames = { ...dynamicArchiveNames, ...names };
+  }
+}
+
+export function getArchiveName(code) {
+  if (!code) return 'Unknown Archive';
+  const key = String(code).toLowerCase();
+  return dynamicArchiveNames[key] || `Archive ${String(code).toUpperCase()}`;
+}

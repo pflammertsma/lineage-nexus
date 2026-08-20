@@ -5,8 +5,9 @@ import {
   Database, AlertTriangle, CheckCircle2,
   Layers, Search, PieChart,
 } from 'lucide-react';
-import { ADMIN_API_BASE_URL } from '../config';
+import { ADMIN_API_BASE_URL, setArchiveNames } from '../config';
 import MetricChart from './MetricChart';
+import CorpusGrowthChart from './CorpusGrowthChart';
 import ArchiveQuery from './ArchiveQuery';
 import ArchiveCoverage from './ArchiveCoverage';
 import IndexingProgress from './IndexingProgress';
@@ -155,7 +156,10 @@ const AdminDashboard = ({ getIdToken }) => {
         });
         if (idxRes.ok) {
           const body = await idxRes.json();
-          if (body.status === 'success') setIndexing(body);
+          if (body.status === 'success') {
+            setIndexing(body);
+            if (body.archive_names) setArchiveNames(body.archive_names);
+          }
         }
       } catch {
         // Non-critical
@@ -333,6 +337,11 @@ const AdminDashboard = ({ getIdToken }) => {
             {activeTab === 'harvesting' && (
               <div className="space-y-8">
                 <IndexingProgress indexing={indexing} />
+                <CorpusGrowthChart
+                  points={history}
+                  rangeMinutes={rangeMinutes}
+                  onRangeChange={setRangeMinutes}
+                />
                 <HarvestCatalog getIdToken={getIdToken} onHarvestQueued={load} />
               </div>
             )}
@@ -340,6 +349,11 @@ const AdminDashboard = ({ getIdToken }) => {
             {/* Tab 3: Corpus Coverage */}
             {activeTab === 'coverage' && (
               <div className="space-y-8">
+                <CorpusGrowthChart
+                  points={history}
+                  rangeMinutes={rangeMinutes}
+                  onRangeChange={setRangeMinutes}
+                />
                 <ArchiveCoverage coverage={coverage} />
               </div>
             )}
