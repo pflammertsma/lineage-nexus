@@ -1,28 +1,36 @@
-# Never include .env
+# Environment Secrets
 .env
-
-# Never include local .env secrets
 **/.env
 
 # Deployment target (project id, domain). Kept out of the repo because it is public.
 .deploy.env
 
-# Written by `firebase init`; we pass --project explicitly instead so no
-# project id is ever committed.
+# Firebase CLI & Logs
 .firebaserc
+.firebase/
+firebase-debug.log*
 
-# Don't include python virtual environment
-.venv/
-# or Python cache
-__pycache__/
-
-# Mac stuff
-.DS_Store
-
-# Node
+# Node & Frontend Build
 node_modules/
+**/dist/
+**/.vite/
 
-# Log files
+# Python Virtual Environment & Caches
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 archived/adk-app/*.log
 
 # Plotly Dash (archived)
@@ -31,14 +39,22 @@ archived/dash-app/cache/
 
 # Written transiently by scripts/deploy.mjs
 .cloudrun-env.yaml
-
-# Firebase CLI deploy cache — local build artefact, not source
-.firebase/
+.archival-env
 
 # SSH keys and local SSH configs
 .ssh/
 *.key
 *.pem
 
-# Written transiently by scripts/deploy.mjs (archival secrets)
-.archival-env
+# Editor & IDE Configs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Windows & macOS OS Junk
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
