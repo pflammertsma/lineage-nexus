@@ -306,24 +306,96 @@ def configure_index(client) -> Any:
     return index
 
 
+# Guard against a pathological source record. The longest legitimate run seen is
+# 165 rows (a single notarial deed naming 165 people); this only exists so one
+# malformed GUID cannot accumulate an unbounded document.
+MAX_PERSONS_PER_RECORD = 1000
+
+
+def merged_documents(rows: Iterator[Dict[str, str]], archive: str, kind: str,
+                     prefixes: List[str]) -> Iterator[Dict[str, Any]]:
+    """
+    One document per *source record*, not per CSV row.
+
+    Some exports emit a row per person rather than a row per record: in
+    `frl.not`, 40,000 rows carry only 17,930 distinct GUIDs, and a single
+    notarial deed appears as three rows naming three different people. Keying on
+    `{archive}_{guid}` and submitting each row separately meant Meilisearch
+    treated them as repeated updates of one document, so only the last person
+    survived — 1,555,164 rows of `frl.not` and 320,907 of `frl.bev` silently
+    collapsed, and the people on the discarded rows became unfindable.
+
+    Rows sharing a GUID are always contiguous (verified across 200,000 rows of
+    `frl.not`: zero reappear after a gap), so they can be merged while streaming.
+    A dictionary keyed by GUID would work too, but would have to hold the whole
+    file — this holds one record at a time.
+    """
+    current: Optional[Dict[str, Any]] = None
+    current_guid: Optional[str] = None
+    seen: set = set()
+
+    for row in rows:
+        guid = _GUID_BRACES.sub("", _clean(row.get("SOURCE_RECORD_GUID")))
+
+        if guid != current_guid:
+            if current is not None:
+                yield current
+            current, current_guid, seen = None, guid, set()
+
+        doc = transform(row, archive, kind, prefixes)
+        if doc is None:
+            continue
+
+        if current is None:
+            current = doc
+            seen = {(p["n"], p["r"]) for p in doc["persons"]}
+            continue
+
+        # Same record, more people. Deduplicated because a person can repeat
+        # across rows in more than one role.
+        for person in doc["persons"]:
+            key = (person["n"], person["r"])
+            if key in seen or len(current["persons"]) >= MAX_PERSONS_PER_RECORD:
+                continue
+            seen.add(key)
+            current["persons"].append(person)
+            current["names"] = f"{current['names']} {person['n']}"
+
+        # Later rows sometimes carry event detail the first row left blank.
+        for field in ("event_type", "event_date", "event_place", "institution",
+                      "last_changed"):
+            if not current.get(field) and doc.get(field):
+                current[field] = doc[field]
+        if not current.get("event_year") and doc.get("event_year"):
+            current["event_year"] = doc["event_year"]
+
+    if current is not None:
+        yield current
+
+
 def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None) -> int:
     url = f"{EXPORT_BASE}/{archive}.{kind}.csv.gz"
     logger.info("streaming %s.%s", archive, kind)
 
     batch: List[Dict[str, Any]] = []
     count = 0
-    skipped = 0
     started = time.time()
 
     rows = stream_rows(url)
     prefixes = role_prefixes(next(rows))
     logger.info("  %s.%s: %d person roles in this schema", archive, kind, len(prefixes))
 
-    for row in rows:
-        doc = transform(row, archive, kind, prefixes)
-        if doc is None:
-            skipped += 1
-            continue
+    # Rows are counted as they stream past, so the summary can report how many
+    # collapsed into a shared record rather than implying one row per document.
+    row_count = 0
+
+    def counted(source):
+        nonlocal row_count
+        for item in source:
+            row_count += 1
+            yield item
+
+    for doc in merged_documents(counted(rows), archive, kind, prefixes):
         batch.append(doc)
         count += 1
 
@@ -342,8 +414,9 @@ def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None) -> 
         index.add_documents(batch)
         await_queue()
 
-    logger.info("  %s.%s: %d submitted, %d skipped (no name or guid), %.1fs",
-                archive, kind, count, skipped, time.time() - started)
+    logger.info("  %s.%s: %d records from %d rows (%d merged or dropped), %.1fs",
+                archive, kind, count, row_count, row_count - count,
+                time.time() - started)
     return count
 
 

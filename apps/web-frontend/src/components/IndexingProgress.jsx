@@ -124,8 +124,10 @@ const IndexingProgress = ({ indexing }) => {
           <p className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1">
             Rate
           </p>
+          {/* An idle index has no rate. Showing 0/s reads as "stopped
+              unexpectedly" rather than "nothing to do". */}
           <p className="font-serif text-2xl text-primary leading-none">
-            {Number.isFinite(indexing.documents_per_second)
+            {busy && Number.isFinite(indexing.documents_per_second)
               ? `${Math.round(indexing.documents_per_second).toLocaleString()}/s`
               : '—'}
           </p>

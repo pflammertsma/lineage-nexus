@@ -263,7 +263,10 @@ function deployArchival(config) {
       'sudo docker stop gateway || true',
       'sudo docker rm gateway || true',
       'sudo docker build -t archival-gateway .',
-      'sudo docker run -d --name gateway --env-file /opt/archival-harvester/.env --restart always --net=host archival-gateway',
+      // Metrics history lives on the host, not in the container, so redeploying
+      // does not blank the dashboard's 24-hour chart.
+      'sudo mkdir -p /opt/archival-state',
+      'sudo docker run -d --name gateway --env-file /opt/archival-harvester/.env --restart always --net=host -v /opt/archival-state:/state archival-gateway',
       // The container has the values now; leave nothing readable at rest.
       'shred -u /opt/archival-harvester/.env 2>/dev/null || rm -f /opt/archival-harvester/.env',
     ].join(' && ');

@@ -142,11 +142,86 @@ searches are served from our own index.
     history, which is worth avoiding while the current run is being watched.
   - [ ] Consider more RAM before attempting the full corpus. 6 GB was enough to
     thrash at 13M documents; the 2 GiB cap works but leaves little headroom.
-- [ ] **Metrics history does not survive a deploy.** The ring buffer is
-  in-process, so redeploying the gateway empties the chart and resets the stall
-  clock on the indexing panel — which is exactly when someone is most likely to
-  be watching. Persisting samples, or reading them back from Meilisearch's own
-  task history, would fix it.
+  - [x] **Dashboard polish.** Rate reads `—` when the index is idle rather than
+        `0/s`, which looked like a stall instead of "nothing to do" (`0/s` still
+        shows while actively indexing, where it genuinely means stalled).
+        "Records held" is now "Records", with a `?` that opens a glossary of both
+        archive codes and record types — `title` tooltips need a mouse, so on a
+        phone the abbreviations were simply unexplained. Archive names come from
+        the index's own `institution` field rather than a table maintained here:
+        `ade` is **Archief Delft**, which the abbreviation does not suggest, and a
+        hardcoded list would be wrong the first time an unfamiliar archive is
+        harvested. Chart readouts moved from the legend into a card pinned to the
+        crosshair, flipping side near the right edge, with touch scrubbing.
+        *Verified in a temporary harness against real geometry: card stays inside
+        the plot at 25% and 95%, clears on mouseout and touchend, glossary opens
+        and closes, nested steps render indented.*
+- [x] **VM scaled to 2 OCPU / 12 GB** — `VM.Standard.A1.Flex` in `eu-zurich-1`,
+  up from 1 OCPU / 6 GB. The stop/start was clean: `gateway` and `meilisearch`
+  are `restart: always`, `cloudflared` is an enabled systemd unit, Docker starts
+  at boot, and the Meilisearch bind mount is on the root filesystem.
+
+  **Correction to earlier advice in this file, which said to go to 4 OCPU /
+  24 GB: that is no longer free.** Oracle halved the Always Free Ampere
+  allowance to **2 OCPUs / 12 GB** effective 15 June 2026 (documented as 1,500
+  OCPU hours and 9,000 GB hours per month), with no announcement — the docs
+  simply changed. Tenancies over the limit had until **18 August 2026** to
+  comply. 2/12 is now the ceiling, and the instance sits exactly on it.
+- [ ] **Idle reclamation is a live risk.** Oracle may reclaim an Always Free A1
+  instance idle for 7 days — 95th-percentile CPU under 20%, network under 20%,
+  *and* memory under 20% (the memory clause applies to A1 only). With no users,
+  this box is idle nearly all the time. Worth confirming what the sampled
+  metrics actually show against those thresholds before assuming we are safe.
+- [x] **Metrics history now survives a deploy.** The ring buffer is mirrored to
+  `/opt/archival-state/metrics.jsonl` through a bind mount, as JSON Lines so a
+  truncated final line costs one sample rather than the file. Loaded on startup
+  filtered to the retention window, compacted hourly to stay ~0.5 MB, and it
+  degrades to memory-only rather than raising if the path is unwritable.
+  The dashboard also tolerates one missed poll — a redeploy shows
+  "Reconnecting…" with the last good reading still on screen, instead of an
+  error banner, since a rebuild takes the API down for a few seconds.
+  *Verified end to end: 5 samples before a redeploy, same oldest timestamp
+  after, gateway logged `restored 5 metric samples`. Unit tests cover reload,
+  window filtering, truncated lines, compaction and an unwritable path.*
+  - [x] **It finished: 11,782,742 records searchable, 0 tasks failed.** That one
+        batch took **9h 2m** (`PT32555.9S`). It was thrashing the whole time and
+        still completed, so "no forward progress" was the wrong call — the right
+        reading was "progressing at a rate that makes the run untenable".
+  - [x] **Dashboard now shows I/O wait.** `cpu_percent` excludes it, so a box
+        pinned at 98 MB/s of page-fault reads reported 4.9% CPU and 20% memory
+        while `vmstat` showed 0% idle and 94% iowait — idle-looking on every
+        metric we had. Memory misleads the same way: psutil counts page cache as
+        "available", but during indexing the cache *is* the working set (4.87 GB
+        cached, 70 MB free). Both now visible.
+  - [x] **Nested step counters no longer read as contradictory.** Meilisearch
+        reports a stack — `processing tasks 0/2` contains `computing document
+        changes 1/3` contains `payload 911/1121` — and rendering it flat made one
+        batch look like four disagreeing progress bars.
+  - [x] **Found and fixed silent person-loss in `not` and `bev`.** Confirmed
+        against the finished index: six of eight `frl` record types matched their
+        submitted counts exactly, while `bev` lost 320,907 and `not` lost
+        1,555,164.
+
+        Cause: those exports emit **one row per person**, not one per record. In
+        `frl.not`, 40,000 rows carry 17,930 distinct GUIDs, and a single notarial
+        deed appears as three rows naming three different people. Keying on
+        `{archive}_{guid}` made Meilisearch treat them as repeated updates of one
+        document, so only the last person survived and the rest became
+        unfindable. The earlier 30,000-row GUID check missed it because it
+        sampled `dtb_d`, which is genuinely one row per record.
+
+        `merged_documents()` now merges consecutive rows sharing a GUID into one
+        document holding every person. Safe to stream: across 200,000 rows of
+        `frl.not`, zero GUIDs reappear after a gap, so runs are always contiguous
+        and only one record is held at a time.
+
+        *Verified against the live export: 40,000 rows collapse to exactly 17,930
+        records with unique ids, retaining 39,912 people where the old code kept
+        17,930.* Longest legitimate run is 127 people on one deed.
+  - [ ] **Re-ingest `frl` and `gra` to recover the lost people.** The index is
+        complete-looking but wrong: ~1.88M records are missing everyone except
+        one person. Needs the RAM decision first — a repeat at 9h per batch is
+        not worth doing twice.
   - [ ] Confirm the final document count against the 13,658,813 submitted.
     Per-task stats report ~9% fewer `indexedDocuments` than received. Sampling
     30,000 rows of `frl.dtb_d` found no repeated `SOURCE_RECORD_GUID`, so it is

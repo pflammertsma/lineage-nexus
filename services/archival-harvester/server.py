@@ -1,4 +1,6 @@
 import asyncio
+import json
+import logging
 import os
 import time
 import psutil
@@ -26,6 +28,9 @@ app.add_middleware(
 MEILI_HOST = os.environ.get("MEILI_HOST", "http://127.0.0.1:7700")
 MEILI_MASTER_KEY = os.environ.get("MEILI_MASTER_KEY", "")
 ADMIN_SECRET_TOKEN = os.environ.get("ADMIN_SECRET_TOKEN", "")
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("gateway")
+
 INDEX_NAME = "records"
 START_TIME = time.time()
 
@@ -149,14 +154,90 @@ if __name__ == "__main__":
 # buffer of samples gives the dashboard six hours of history without a
 # time-series database: 6h at 15s is 1440 points, a few hundred kB.
 #
-# 24h at 15s is 5,760 samples, a few hundred kB. In memory only, so it resets
-# when the container restarts — a fair trade for the complexity avoided; if
-# history needs to survive deploys, this is the point to swap in real storage.
+# 24h at 15s is 5,760 samples, a few hundred kB. Mirrored to disk (see
+# METRICS_STATE_PATH below) so a deploy does not blank the chart.
 METRICS_INTERVAL_SECONDS = 15
 METRICS_WINDOW_SECONDS = 24 * 60 * 60
 METRICS_CAPACITY = METRICS_WINDOW_SECONDS // METRICS_INTERVAL_SECONDS
 
 _metrics: Deque[Dict[str, Any]] = deque(maxlen=METRICS_CAPACITY)
+
+# Where the history is kept between restarts.
+#
+# The buffer used to be memory-only, so every deploy blanked the 24-hour chart
+# and reset the stall clock on the indexing panel — precisely when someone is
+# most likely to be watching. A bind mount on the host survives the container
+# being rebuilt, which is what a deploy actually does.
+#
+# JSON Lines rather than a single document: appending one line per sample costs
+# nothing, and a truncated final line from an unlucky restart loses one sample
+# instead of the whole file.
+METRICS_STATE_PATH = os.environ.get("METRICS_STATE_PATH", "/state/metrics.jsonl")
+
+# Rewrite the file this often to drop samples that have aged out. At 15s a day
+# of history is ~5,760 lines, so this keeps it around half a megabyte.
+METRICS_COMPACT_EVERY = 240
+
+_metrics_writable = True
+_samples_since_compact = 0
+
+
+def _load_metrics() -> None:
+  """Restores the ring buffer from disk, keeping only what is still in window."""
+  global _metrics_writable
+  cutoff = time.time() - METRICS_WINDOW_SECONDS
+  try:
+    with open(METRICS_STATE_PATH, "r", encoding="utf-8") as handle:
+      restored = 0
+      for line in handle:
+        line = line.strip()
+        if not line:
+          continue
+        try:
+          sample = json.loads(line)
+        except ValueError:
+          # A partial last line from an interrupted write. Skip it.
+          continue
+        if isinstance(sample, dict) and sample.get("t", 0) >= cutoff:
+          _metrics.append(sample)
+          restored += 1
+    logger.info("restored %d metric samples from %s", restored, METRICS_STATE_PATH)
+  except FileNotFoundError:
+    pass
+  except OSError as exc:
+    logger.warning("could not read metric history: %s", exc)
+
+
+def _persist_metric(sample: Dict[str, Any]) -> None:
+  """
+  Appends one sample, compacting periodically.
+
+  Never raises: history is a convenience, and losing it must not take the
+  metrics loop — or the service — down with it.
+  """
+  global _metrics_writable, _samples_since_compact
+  if not _metrics_writable:
+    return
+  try:
+    os.makedirs(os.path.dirname(METRICS_STATE_PATH) or ".", exist_ok=True)
+    with open(METRICS_STATE_PATH, "a", encoding="utf-8") as handle:
+      handle.write(json.dumps(sample) + "\n")
+
+    _samples_since_compact += 1
+    if _samples_since_compact >= METRICS_COMPACT_EVERY:
+      _samples_since_compact = 0
+      cutoff = time.time() - METRICS_WINDOW_SECONDS
+      temp = f"{METRICS_STATE_PATH}.tmp"
+      with open(temp, "w", encoding="utf-8") as handle:
+        for kept in _metrics:
+          if kept.get("t", 0) >= cutoff:
+            handle.write(json.dumps(kept) + "\n")
+      # Atomic: a crash mid-compaction leaves the old file intact.
+      os.replace(temp, METRICS_STATE_PATH)
+  except OSError as exc:
+    # No mount, or read-only. Say so once and carry on in memory.
+    logger.warning("metric history disabled (%s); history will not survive a restart", exc)
+    _metrics_writable = False
 
 
 async def _sample_metrics() -> None:
@@ -197,6 +278,7 @@ async def _sample_metrics() -> None:
         "docs": docs,
         "indexing": indexing,
       })
+      _persist_metric(_metrics[-1])
     except Exception:
       pass
     await asyncio.sleep(METRICS_INTERVAL_SECONDS)
@@ -205,6 +287,7 @@ async def _sample_metrics() -> None:
 @app.on_event("startup")
 async def _start_metrics() -> None:
   psutil.cpu_percent(interval=None)  # prime the counter; the first read is always 0
+  _load_metrics()
   asyncio.create_task(_sample_metrics())
 
 
@@ -319,13 +402,35 @@ def admin_coverage():
   by_archive = distribution.get("archive", {}) or {}
   by_kind = distribution.get("kind", {}) or {}
 
+  # The human name for each archive code comes from the records themselves
+  # rather than a table maintained here. `ade` is Archief Delft, which is not
+  # what the abbreviation suggests, and a hardcoded list would be wrong the first
+  # time an archive is harvested that nobody thought to add. One cheap
+  # single-hit query per archive; there are only ever a few dozen.
+  institutions: Dict[str, str] = {}
+  for code in list(by_archive)[:60]:
+    try:
+      hit = index.search("", {
+        "limit": 1,
+        "filter": f"archive = {code}",
+        "attributesToRetrieve": ["institution"],
+      }).get("hits", [])
+      if hit and hit[0].get("institution"):
+        institutions[code] = hit[0]["institution"]
+    except Exception:
+      # A missing label is cosmetic; the count still stands.
+      continue
+
   return {
     "status": "success",
     "total_records": stats.number_of_documents,
     "is_indexing": stats.is_indexing,
     "archive_count": len(by_archive),
     "by_archive": sorted(
-      ({"archive": k, "records": v} for k, v in by_archive.items()),
+      (
+        {"archive": k, "records": v, "institution": institutions.get(k)}
+        for k, v in by_archive.items()
+      ),
       key=lambda r: -r["records"],
     ),
     "by_kind": sorted(

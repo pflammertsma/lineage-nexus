@@ -2,6 +2,10 @@ import React, { useMemo, useState } from 'react';
 
 const SERIES = [
   { field: 'cpu', label: 'CPU', colour: 'var(--color-accent)' },
+  // I/O wait is not part of CPU: a box pinned at 98 MB/s of page-fault reads
+  // reported 4.9% CPU and 20% memory while vmstat showed 0% idle. Without this
+  // line an engine saturated on disk is indistinguishable from an idle one.
+  { field: 'iowait', label: 'I/O wait', colour: '#EF4444' },
   { field: 'mem', label: 'Memory', colour: '#10B981' },
   { field: 'disk', label: 'Disk', colour: '#C8A464' },
 ];
@@ -116,6 +120,16 @@ const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }
 
   const { usable, series, x } = chart;
   const hovered = hoverIndex === null ? null : usable[hoverIndex];
+
+  /** Nearest sample to a client x-coordinate, shared by mouse and touch. */
+  const pick = (clientX, element) => {
+    const box = element.getBoundingClientRect();
+    const ratio = (clientX - box.left) / box.width;
+    setHoverIndex(
+      Math.max(0, Math.min(usable.length - 1, Math.round(ratio * (usable.length - 1))))
+    );
+  };
+
   const stamp = (t) =>
     new Date(t * 1000).toLocaleString([], {
       day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
@@ -144,30 +158,37 @@ const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }
             ))}
           </div>
         </div>
+        {/* Legend only. The values moved into the card at the crosshair, so the
+            number you are reading sits next to the point it describes rather
+            than in a corner you have to look away to. */}
         <div className="flex items-center gap-4 flex-wrap">
           {series.map((s) => (
             <span key={s.field} className="flex items-center gap-1.5 text-[11px]">
               <span className="w-2.5 h-0.5 rounded-full" style={{ background: s.colour }} />
               <span className="text-secondary">{s.label}</span>
-              <span className="font-mono" style={{ color: s.colour }}>
-                {(hovered ? hovered[s.field] : s.last)?.toFixed(1)}%
-              </span>
+              {!hovered && (
+                <span className="font-mono" style={{ color: s.colour }}>
+                  {s.last?.toFixed(1)}%
+                </span>
+              )}
             </span>
           ))}
         </div>
       </div>
 
+      <div className="relative">
       <svg
         viewBox={`0 0 ${W} ${height}`}
         preserveAspectRatio="none"
-        className="w-full block"
+        className="w-full block touch-none"
         style={{ height }}
         onMouseLeave={() => setHoverIndex(null)}
-        onMouseMove={(e) => {
-          const box = e.currentTarget.getBoundingClientRect();
-          const ratio = (e.clientX - box.left) / box.width;
-          setHoverIndex(Math.max(0, Math.min(usable.length - 1, Math.round(ratio * (usable.length - 1)))));
-        }}
+        onMouseMove={(e) => pick(e.clientX, e.currentTarget)}
+        // Touch: drag a finger to scrub. touch-none stops the browser claiming
+        // the gesture for a scroll before the handler sees it.
+        onTouchStart={(e) => pick(e.touches[0].clientX, e.currentTarget)}
+        onTouchMove={(e) => pick(e.touches[0].clientX, e.currentTarget)}
+        onTouchEnd={() => setHoverIndex(null)}
       >
         <defs>
           {series.map((s) => (
@@ -201,10 +222,43 @@ const MetricChart = ({ points, height = 200, rangeMinutes = 360, onRangeChange }
         )}
       </svg>
 
+      {/* Readout card, pinned to the crosshair. Flips to the other side of the
+          line near the right edge so it never runs off the panel. */}
+      {hovered && (
+        <div
+          className="absolute top-0 pointer-events-none z-10"
+          style={{
+            left: `${(x(hovered.t) / W) * 100}%`,
+            transform:
+              x(hovered.t) / W > 0.62
+                ? 'translateX(calc(-100% - 10px))'
+                : 'translateX(10px)',
+          }}
+        >
+          <div className="bg-card border border-border-strong rounded-lg px-3 py-2 shadow-lg min-w-[9.5rem]">
+            <p className="text-[10px] font-mono text-secondary mb-1.5 whitespace-nowrap">
+              {stamp(hovered.t)}
+            </p>
+            <ul className="space-y-1">
+              {series.map((s) => (
+                <li key={s.field} className="flex items-center justify-between gap-3 text-[11px]">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-0.5 rounded-full shrink-0" style={{ background: s.colour }} />
+                    <span className="text-secondary whitespace-nowrap">{s.label}</span>
+                  </span>
+                  <span className="font-mono shrink-0" style={{ color: s.colour }}>
+                    {Number.isFinite(hovered[s.field]) ? `${hovered[s.field].toFixed(1)}%` : '—'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
+      </div>
+
       <div className="flex justify-between items-center mt-2 text-[10px] font-mono text-secondary">
         <span>{stamp(usable[0].t)}</span>
-        {/* Fixed height so the row does not jump as the readout appears. */}
-        <span className="text-primary h-4">{hovered ? stamp(hovered.t) : ''}</span>
         <span>{stamp(usable[usable.length - 1].t)}</span>
       </div>
     </div>

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowLeft, Activity, Cpu, HardDrive, MemoryStick,
@@ -74,6 +74,25 @@ const AdminDashboard = ({ getIdToken }) => {
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);
 
+  // Redeploying the gateway takes it down for a few seconds. Reporting that as
+  // an error on the first missed poll makes an ordinary deploy look like an
+  // outage, so a single failure is shown as "reconnecting" and the last good
+  // reading stays on screen. Two in a row (30s) is a real problem.
+  const [reconnecting, setReconnecting] = useState(false);
+  const failures = useRef(0);
+  const TRANSIENT_TOLERANCE = 2;
+
+  /** Network-level failure: quiet the first time, an error once it persists. */
+  const noteFailure = useCallback((message) => {
+    failures.current += 1;
+    if (failures.current >= TRANSIENT_TOLERANCE) {
+      setReconnecting(false);
+      setError(message);
+    } else {
+      setReconnecting(true);
+    }
+  }, []);
+
   const load = useCallback(async () => {
     if (!ADMIN_API_BASE_URL) {
       setError('No admin API configured. Set VITE_ADMIN_API_BASE_URL and rebuild.');
@@ -91,6 +110,8 @@ const AdminDashboard = ({ getIdToken }) => {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.status === 401 || res.status === 403) {
+        failures.current = 0;
+        setReconnecting(false);
         setError(
           'The archival API rejected this account. It must verify the Firebase ID token ' +
           'and require an `admin` custom claim.'
@@ -98,10 +119,14 @@ const AdminDashboard = ({ getIdToken }) => {
         return;
       }
       if (!res.ok) {
+        failures.current = 0;
+        setReconnecting(false);
         setError(`The archival API returned ${res.status}.`);
         return;
       }
       setStatus(await res.json());
+      failures.current = 0;
+      setReconnecting(false);
       setError(null);
       setFetchedAt(new Date());
 
@@ -127,12 +152,13 @@ const AdminDashboard = ({ getIdToken }) => {
         // dashboard for.
       }
     } catch {
-      // A CORS rejection and a dead host are indistinguishable from here.
-      setError('Could not reach the archival API. It may be offline, or not permit this origin.');
+      // A CORS rejection and a dead host are indistinguishable from here, and a
+      // redeploy looks exactly like both for a few seconds.
+      noteFailure('Could not reach the archival API. It may be offline, or not permit this origin.');
     } finally {
       setLoading(false);
     }
-  }, [getIdToken, rangeMinutes]);
+  }, [getIdToken, rangeMinutes, noteFailure]);
 
   useEffect(() => {
     load();
@@ -162,7 +188,9 @@ const AdminDashboard = ({ getIdToken }) => {
               Archival API
             </h1>
             <p className="text-sm text-secondary">
-              {fetchedAt
+              {reconnecting
+                ? 'Reconnecting…'
+                : fetchedAt
                 ? `Updated ${fetchedAt.toLocaleTimeString()} · refreshes every ${REFRESH_MS / 1000}s`
                 : 'Contacting the service…'}
             </p>
