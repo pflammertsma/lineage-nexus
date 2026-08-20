@@ -15,6 +15,7 @@ function downsample(values, target) {
     out.push({
       t: slice[Math.floor(slice.length / 2)].t,
       v: slice.reduce((a, b) => a + b.v, 0) / slice.length,
+      item: slice[Math.floor(slice.length / 2)].item,
     });
   }
   return out;
@@ -92,13 +93,14 @@ const DEFAULT_RANGES = [
 
 /**
  * Shared SVG Time-Series Chart Component.
- * Implements smooth monotone curve paths, crosshairs, tooltips, and timeframe controls.
+ * Supports standard multi-line and stacked area chart modes with smooth monotone curves.
  */
 const SmoothLineChart = ({
   icon: Icon,
   title,
   points = [],
   series = [],
+  stacked = false,
   autoScaleY = false,
   maxY = 100,
   height = 200,
@@ -124,6 +126,59 @@ const SmoothLineChart = ({
 
     const x = (t) => ((t - t0) / span) * W;
 
+    if (stacked) {
+      // Calculate cumulative totals per point for stacked area layers
+      const stackedPoints = points.map((p) => {
+        let acc = 0;
+        const cum = {};
+        series.forEach((s) => {
+          const val = typeof p[s.field] === 'number' ? p[s.field] : 0;
+          acc += val;
+          cum[s.field] = acc;
+        });
+        return { ...p, _cum: cum, _total: acc };
+      });
+
+      const maxVRaw = Math.max(...stackedPoints.map((p) => p._total), 1);
+      const pad = maxVRaw * 0.05;
+      const minV = 0;
+      const maxV = maxVRaw + pad;
+
+      const y = (v) =>
+        height - PAD_BOTTOM - ((Math.max(minV, Math.min(maxV, v)) - minV) / (maxV - minV || 1)) * (height - PAD_TOP - PAD_BOTTOM);
+
+      const processedSeries = series.map((s, sIdx) => {
+        const rawTop = stackedPoints.map((p) => ({ t: p.t, v: p._cum[s.field] }));
+        const rawBot =
+          sIdx > 0
+            ? stackedPoints.map((p) => ({ t: p.t, v: p._cum[series[sIdx - 1].field] }))
+            : stackedPoints.map((p) => ({ t: p.t, v: 0 }));
+
+        const sampledTop = downsample(rawTop, MAX_POINTS);
+        const sampledBot = downsample(rawBot, MAX_POINTS);
+
+        const ptsTop = sampledTop.map((p) => ({ x: x(p.t), y: y(p.v) }));
+        const ptsBot = sampledBot.map((p) => ({ x: x(p.t), y: y(p.v) }));
+
+        const topLine = smoothPath(ptsTop, PAD_TOP, height - PAD_BOTTOM);
+        const botLine = sIdx > 0 ? smoothPath([...ptsBot].reverse(), PAD_TOP, height - PAD_BOTTOM) : null;
+
+        const area = botLine
+          ? `${topLine} ${botLine.replace(/^M/, 'L')} Z`
+          : `${topLine} L${W},${height - PAD_BOTTOM} L0,${height - PAD_BOTTOM} Z`;
+
+        return {
+          ...s,
+          line: topLine,
+          area,
+          last: points[points.length - 1]?.[s.field] ?? 0,
+        };
+      });
+
+      return { points: stackedPoints, processedSeries, x, minV, maxV };
+    }
+
+    // Standard unstacked line chart mode
     let minV = 0;
     let maxV = maxY;
 
@@ -169,7 +224,7 @@ const SmoothLineChart = ({
     });
 
     return { points, processedSeries, x, minV, maxV };
-  }, [points, series, autoScaleY, maxY, height]);
+  }, [points, series, stacked, autoScaleY, maxY, height]);
 
   if (!chart) {
     return (
@@ -251,8 +306,8 @@ const SmoothLineChart = ({
           <defs>
             {processedSeries.map((s) => (
               <linearGradient key={s.field} id={`g-${s.field}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={s.colour} stopOpacity="0.25" />
-                <stop offset="100%" stopColor={s.colour} stopOpacity="0.01" />
+                <stop offset="0%" stopColor={s.colour} stopOpacity={stacked ? '0.45' : '0.25'} />
+                <stop offset="100%" stopColor={s.colour} stopOpacity={stacked ? '0.25' : '0.01'} />
               </linearGradient>
             ))}
           </defs>
@@ -273,22 +328,24 @@ const SmoothLineChart = ({
             );
           })}
 
+          {/* Draw stacked areas from top to bottom or bottom to top */}
           {processedSeries.map((s) => (
             <path key={`a-${s.field}`} d={s.area} fill={`url(#g-${s.field})`} />
           ))}
 
-          {processedSeries.map((s) => (
-            <path
-              key={`l-${s.field}`}
-              d={s.line}
-              fill="none"
-              stroke={s.colour}
-              strokeWidth="2"
-              vectorEffect="non-scaling-stroke"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-          ))}
+          {!stacked &&
+            processedSeries.map((s) => (
+              <path
+                key={`l-${s.field}`}
+                d={s.line}
+                fill="none"
+                stroke={s.colour}
+                strokeWidth="2"
+                vectorEffect="non-scaling-stroke"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            ))}
 
           {hovered && (
             <line
@@ -316,7 +373,7 @@ const SmoothLineChart = ({
                   : 'translateX(10px)',
             }}
           >
-            <div className="bg-card border border-border-strong rounded-lg px-3 py-2 shadow-lg min-w-[9.5rem]">
+            <div className="bg-card border border-border-strong rounded-lg px-3 py-2 shadow-lg min-w-[10.5rem] max-h-48 overflow-y-auto">
               <p className="text-[10px] tabular-nums text-secondary mb-1.5 whitespace-nowrap">
                 {stamp(hovered.t)}
               </p>
@@ -330,9 +387,9 @@ const SmoothLineChart = ({
                     : '—';
                   return (
                     <li key={s.field} className="flex items-center justify-between gap-3 text-[11px]">
-                      <span className="flex items-center gap-1.5 truncate max-w-[8rem]">
+                      <span className="flex items-center gap-1.5 truncate max-w-[8.5rem]">
                         <span
-                          className="w-2.5 h-0.5 rounded-full shrink-0"
+                          className="w-2.5 h-2.5 rounded-sm shrink-0"
                           style={{ background: s.colour }}
                         />
                         <span className="text-secondary truncate">{s.label}</span>
