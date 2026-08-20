@@ -756,3 +756,136 @@ def admin_indexing():
     "pending_documents": pending_documents,
     "eta_seconds": eta_seconds,
   }
+
+
+# --- Archival Catalog & Ingest Queue Management ----------------------------
+
+import pydantic
+import subprocess
+
+ARCHIVE_NAMES = {
+  "ade": "Archief Delft",
+  "frl": "Tresoar Fryslân",
+  "gra": "Groninger Archieven",
+  "dha": "Haags Gemeentearchief",
+  "hga": "Het Utrechts Archief",
+  "utr": "Het Utrechts Archief",
+  "zld": "Zeeuws Archief",
+  "vkk": "West-Fries Archief",
+  "brb": "Brabants Historisch Informatie Centrum",
+  "gel": "Gelders Archief",
+  "ovr": "Historisch Centrum Overijssel",
+  "lim": "Regionaal Historisch Centrum Limburg",
+  "dnt": "Drents Archief",
+  "nha": "Noord-Hollands Archief",
+  "mhi": "Museum & Archief Hoorn",
+  "sal": "Stadsarchief Amsterdam",
+}
+
+_active_ingest_process = None
+
+@app.get("/api/v1/admin/harvest/exports", dependencies=[Depends(require_admin)])
+def admin_harvest_exports():
+  """
+  Catalog of all ~375 Open Archieven CSV exports across ~83 Dutch regional archives.
+  Enriched with searchable document counts, status, and record types.
+  """
+  from ingest import list_exports
+  try:
+    available_files = list_exports()
+  except Exception as exc:
+    return {"status": "error", "error_message": f"Failed to list exports: {str(exc)}"}
+
+  index = meili_client.index(INDEX_NAME)
+  indexed_by_archive = {}
+  try:
+    facets = index.search("", {"limit": 0, "facets": ["archive"]})
+    indexed_by_archive = facets.get("facetDistribution", {}).get("archive", {}) or {}
+  except Exception:
+    pass
+
+  active_plan_files = set()
+  try:
+    plan_file = os.path.join(os.environ.get("INGEST_LOG_DIR", "/logs"), "plan.json")
+    if os.path.exists(plan_file):
+      with open(plan_file, "r", encoding="utf-8") as f:
+        data = json.load(f)
+        active_plan_files = set(data.get("files", []))
+  except Exception:
+    pass
+
+  archives_dict = {}
+  for file_name in available_files:
+    if "." not in file_name:
+      continue
+    code, kind = file_name.split(".", 1)
+    if code not in archives_dict:
+      archives_dict[code] = {
+        "code": code,
+        "name": ARCHIVE_NAMES.get(code, f"Archive {code.upper()}"),
+        "kinds": [],
+        "files": [],
+        "indexed_records": indexed_by_archive.get(code, 0),
+        "status": "available"
+      }
+    archives_dict[code]["kinds"].append(kind)
+    archives_dict[code]["files"].append(file_name)
+
+    if indexed_by_archive.get(code, 0) > 0:
+      archives_dict[code]["status"] = "indexed"
+    elif any(f in active_plan_files for f in archives_dict[code]["files"]):
+      archives_dict[code]["status"] = "queued"
+
+  archives_list = sorted(archives_dict.values(), key=lambda a: (-a["indexed_records"], a["code"]))
+  
+  return {
+    "status": "success",
+    "summary": {
+      "total_archives": len(archives_list),
+      "indexed_archives": sum(1 for a in archives_list if a["indexed_records"] > 0),
+      "total_export_files": len(available_files),
+    },
+    "archives": archives_list
+  }
+
+
+class HarvestQueueRequest(pydantic.BaseModel):
+  archives: List[str] = []
+
+@app.post("/api/v1/admin/harvest/queue", dependencies=[Depends(require_admin)])
+def admin_queue_harvest(req: HarvestQueueRequest):
+  """
+  Queues selected archive codes for background ingestion using ingest.py.
+  """
+  global _active_ingest_process
+  if not req.archives:
+    raise HTTPException(status_code=400, detail="No archive codes specified to queue.")
+
+  if _active_ingest_process and _active_ingest_process.poll() is None:
+    return {
+      "status": "error",
+      "error_message": "An ingestion run is already in progress on the server."
+    }
+
+  cmd = ["python", "ingest.py"] + req.archives
+  try:
+    log_dir = os.environ.get("INGEST_LOG_DIR", "/logs")
+    os.makedirs(log_dir, exist_ok=True)
+    log_path = os.path.join(log_dir, "ingest.log")
+    log_file = open(log_path, "a", encoding="utf-8")
+    
+    _active_ingest_process = subprocess.Popen(
+      cmd,
+      stdout=log_file,
+      stderr=subprocess.STDOUT,
+      cwd=os.path.dirname(__file__) or "."
+    )
+    return {
+      "status": "success",
+      "queued_archives": req.archives,
+      "pid": _active_ingest_process.pid,
+      "message": f"Queued {len(req.archives)} archives for ingestion."
+    }
+  except Exception as exc:
+    return {"status": "error", "error_message": str(exc)}
+

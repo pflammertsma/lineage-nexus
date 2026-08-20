@@ -9,6 +9,7 @@ import MetricChart from './MetricChart';
 import ArchiveQuery from './ArchiveQuery';
 import ArchiveCoverage from './ArchiveCoverage';
 import IndexingProgress from './IndexingProgress';
+import HarvestCatalog from './HarvestCatalog';
 
 const REFRESH_MS = 15_000;
 
@@ -260,6 +261,10 @@ const AdminDashboard = ({ getIdToken }) => {
                 below is final or still climbing. */}
             <div className="mb-8">
               <IndexingProgress indexing={indexing} />
+            </div>
+
+            <div className="mb-8">
+              <HarvestCatalog getIdToken={getIdToken} onHarvestQueued={load} />
             </div>
 
             <div className="mb-8">
