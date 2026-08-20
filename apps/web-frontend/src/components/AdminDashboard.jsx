@@ -45,9 +45,8 @@ const Meter = ({ icon: Icon, label, percent, detail }) => (
     </p>
     <div aria-hidden="true" className="h-1.5 rounded-full bg-muted overflow-hidden mb-2">
       <div
-        className={`h-full rounded-full transition-all duration-500 ${
-          percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-amber-500' : 'bg-green-600'
-        }`}
+        className={`h-full rounded-full transition-all duration-500 ${percent >= 90 ? 'bg-red-500' : percent >= 70 ? 'bg-amber-500' : 'bg-green-600'
+          }`}
         style={{ width: `${Math.min(100, Math.max(0, percent || 0))}%` }}
       />
     </div>
@@ -209,49 +208,6 @@ const AdminDashboard = ({ getIdToken }) => {
   return (
     <main className="admin-page-container">
       <div className="admin-content-wrap">
-        {/* Mobile Navigation Tabs (visible only on narrow screens) */}
-        <div className="md:hidden admin-tabs-nav mb-6">
-          <button
-            type="button"
-            onClick={() => setTab('overview')}
-            className={`admin-tab-btn ${
-              activeTab === 'overview' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
-            }`}
-          >
-            <Activity size={14} />
-            System
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('harvesting')}
-            className={`admin-tab-btn ${
-              activeTab === 'harvesting' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
-            }`}
-          >
-            <Layers size={14} />
-            Ingestion
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('coverage')}
-            className={`admin-tab-btn ${
-              activeTab === 'coverage' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
-            }`}
-          >
-            <PieChart size={14} />
-            Corpus
-          </button>
-          <button
-            type="button"
-            onClick={() => setTab('query')}
-            className={`admin-tab-btn ${
-              activeTab === 'query' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
-            }`}
-          >
-            <Search size={14} />
-            Index
-          </button>
-        </div>
 
         {error && (
           <div className="flex items-start gap-3 bg-card border border-amber-500/40 rounded-lg p-4 mb-6">
@@ -262,32 +218,23 @@ const AdminDashboard = ({ getIdToken }) => {
 
         {status && (
           <>
-            {/* Status & Last Updated Bar */}
-            <div className="flex items-center justify-between gap-4 mb-6 text-xs text-secondary flex-wrap">
-              <div className="flex items-center gap-2">
-                {online ? (
-                  <CheckCircle2 size={15} className="text-green-600 shrink-0" />
-                ) : (
-                  <AlertTriangle size={15} className="text-red-500 shrink-0" />
-                )}
-                <span className="font-semibold text-primary">
-                  {online ? 'Online' : String(status.status || 'Unknown')}
-                </span>
-                <span>· up {formatUptime(status.uptime_seconds)}</span>
-              </div>
-
-              <div>
-                {reconnecting
-                  ? 'Reconnecting…'
-                  : fetchedAt
-                  ? `Updated ${fetchedAt.toLocaleTimeString()} · refreshes every ${REFRESH_MS / 1000}s`
-                  : 'Contacting service…'}
-              </div>
-            </div>
-
             {/* Tab 1: System Overview */}
             {activeTab === 'overview' && (
               <div className="space-y-8">
+                <div className="flex items-center justify-between gap-3 flex-wrap bg-card border border-border rounded-lg p-3 px-4">
+                  <div className="flex items-center gap-2 text-xs">
+                    {online ? (
+                      <CheckCircle2 size={15} className="text-green-600 shrink-0" />
+                    ) : (
+                      <AlertTriangle size={15} className="text-red-500 shrink-0" />
+                    )}
+                    <span className="font-semibold text-primary">
+                      {online ? 'Online' : String(status.status || 'Unknown')}
+                    </span>
+                    <span className="text-secondary">· up {formatUptime(status.uptime_seconds)}</span>
+                  </div>
+                </div>
+
                 <div className="grid gap-4 sm:grid-cols-3">
                   <Meter
                     icon={Cpu}
@@ -354,11 +301,6 @@ const AdminDashboard = ({ getIdToken }) => {
             {activeTab === 'harvesting' && (
               <div className="space-y-8">
                 <IndexingProgress indexing={indexing} />
-                <CorpusGrowthChart
-                  points={history}
-                  rangeMinutes={rangeMinutes}
-                  onRangeChange={setRangeMinutes}
-                />
                 <HarvestCatalog getIdToken={getIdToken} onHarvestQueued={load} />
               </div>
             )}
@@ -381,6 +323,15 @@ const AdminDashboard = ({ getIdToken }) => {
                 <ArchiveQuery getIdToken={getIdToken} />
               </div>
             )}
+
+            {/* Page Footer: Refresh Timestamp */}
+            <footer className="mt-4 text-center text-xs text-secondary/70">
+              {reconnecting
+                ? 'Reconnecting…'
+                : fetchedAt
+                  ? `Updated ${fetchedAt.toLocaleTimeString()} · refreshes every ${REFRESH_MS / 1000}s`
+                  : 'Contacting service…'}
+            </footer>
           </>
         )}
 

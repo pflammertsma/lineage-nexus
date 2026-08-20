@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import {
   Sun, Moon, Monitor, Settings, LogOut, Menu, ShieldCheck, AlertTriangle, Gauge,
-  Activity, Layers, PieChart, Search, RefreshCw,
+  Activity, Layers, PieChart, Search, RefreshCw, ChevronDown,
 } from 'lucide-react';
 import logo from '../assets/logo.svg';
 
@@ -12,6 +12,13 @@ const THEME_LABEL = {
   dark: 'Dark theme',
   system: 'Match system theme',
 };
+
+const ADMIN_TABS = [
+  { id: 'overview', label: 'System', icon: Activity },
+  { id: 'harvesting', label: 'Ingestion', icon: Layers },
+  { id: 'coverage', label: 'Corpus', icon: PieChart },
+  { id: 'query', label: 'Index', icon: Search },
+];
 
 const initialsFor = (name, email) => {
   const source = (name || email || '').trim();
@@ -35,13 +42,17 @@ const Header = ({
 }) => {
   const ThemeIcon = THEME_ICON[themePreference] || Monitor;
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [adminMobileMenuOpen, setAdminMobileMenuOpen] = useState(false);
   const dropdownRef = useRef(null);
+  const adminMobileMenuRef = useRef(null);
   const location = useLocation();
   const [searchParams, setSearchParams] = useSearchParams();
 
   const onLandingPage = location.pathname === '/';
   const isAdminPage = location.pathname === '/admin';
-  const activeTab = searchParams.get('tab') || 'overview';
+  const activeTabId = searchParams.get('tab') || 'overview';
+  const activeTabObj = ADMIN_TABS.find((t) => t.id === activeTabId) || ADMIN_TABS[0];
+  const ActiveTabIcon = activeTabObj.icon;
 
   const initials = initialsFor(displayName, email);
 
@@ -49,6 +60,9 @@ const Header = ({
     const handleClickOutside = (e) => {
       if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setDropdownOpen(false);
+      }
+      if (adminMobileMenuRef.current && !adminMobileMenuRef.current.contains(e.target)) {
+        setAdminMobileMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -58,8 +72,8 @@ const Header = ({
   return (
     <header className="h-[var(--h-header)] bg-surface border-b border-border sticky top-0 z-[1000]">
       <div className={isLoggedIn || isAdminPage ? 'app-bar' : 'container h-full flex items-center justify-between'}>
-        {/* Left Section: Logo / Title */}
-        <div className="flex items-center gap-1 sm:gap-3 select-none min-w-0">
+        {/* Left Section: Logo & Title / Mobile Section Dropdown */}
+        <div className="flex items-center gap-2 sm:gap-3 select-none min-w-0">
           {isLoggedIn && !isAdminPage && (
             <button
               type="button"
@@ -71,60 +85,74 @@ const Header = ({
             </button>
           )}
 
-          <Link to="/" className="flex items-center gap-3 min-w-0" aria-label="Lineage Nexus home">
+          <Link to="/" className="flex items-center gap-2.5 shrink-0" aria-label="Lineage Nexus home">
             <img src={logo} alt="" className="w-7 h-7 shrink-0 pointer-events-none" />
-            <span className="text-lg font-extrabold tracking-tight text-accent truncate">
+            <span className={`text-lg font-extrabold tracking-tight text-accent ${isAdminPage ? 'hidden md:inline' : ''}`}>
               {isAdminPage ? 'Archival Control Panel' : 'Lineage Nexus'}
             </span>
           </Link>
+
+          {/* Admin Mobile Section Dropdown Selector (replaces static title on mobile) */}
+          {isAdminPage && (
+            <div className="relative md:hidden shrink-0" ref={adminMobileMenuRef}>
+              <button
+                type="button"
+                onClick={() => setAdminMobileMenuOpen((open) => !open)}
+                className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-card border border-border text-sm font-bold text-primary hover:border-accent transition-colors cursor-pointer shadow-xs"
+              >
+                <ActiveTabIcon size={16} className="text-accent shrink-0" />
+                <span>{activeTabObj.label}</span>
+                <ChevronDown size={14} className="text-secondary shrink-0 ml-0.5" />
+              </button>
+
+              {adminMobileMenuOpen && (
+                <div className="absolute left-0 mt-2 w-48 bg-card border border-border-strong rounded-xl shadow-2xl py-1.5 z-[1100]">
+                  {ADMIN_TABS.map((tab) => {
+                    const TabIcon = tab.icon;
+                    const isActive = activeTabId === tab.id;
+                    return (
+                      <button
+                        key={tab.id}
+                        type="button"
+                        onClick={() => {
+                          setSearchParams({ tab: tab.id }, { replace: true });
+                          setAdminMobileMenuOpen(false);
+                        }}
+                        className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
+                          isActive
+                            ? 'bg-accent/10 text-accent font-bold'
+                            : 'text-primary hover:bg-muted'
+                        }`}
+                      >
+                        <TabIcon size={16} className={isActive ? 'text-accent' : 'text-secondary'} />
+                        <span>{tab.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Middle Section: Marketing links or Admin Navigation Tabs */}
+        {/* Middle Section: Marketing links or Desktop Admin Navigation Tabs */}
         {isAdminPage ? (
           <nav className="hidden md:flex items-stretch gap-1 h-full">
-            <button
-              type="button"
-              onClick={() => setSearchParams({ tab: 'overview' }, { replace: true })}
-              className={`admin-tab-btn ${
-                activeTab === 'overview' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
-              }`}
-            >
-              <Activity size={16} />
-              System
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSearchParams({ tab: 'harvesting' }, { replace: true })}
-              className={`admin-tab-btn ${
-                activeTab === 'harvesting' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
-              }`}
-            >
-              <Layers size={16} />
-              Ingestion
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSearchParams({ tab: 'coverage' }, { replace: true })}
-              className={`admin-tab-btn ${
-                activeTab === 'coverage' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
-              }`}
-            >
-              <PieChart size={16} />
-              Corpus
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setSearchParams({ tab: 'query' }, { replace: true })}
-              className={`admin-tab-btn ${
-                activeTab === 'query' ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'
-              }`}
-            >
-              <Search size={16} />
-              Index
-            </button>
+            {ADMIN_TABS.map((tab) => {
+              const TabIcon = tab.icon;
+              const isActive = activeTabId === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setSearchParams({ tab: tab.id }, { replace: true })}
+                  className={`admin-tab-btn ${isActive ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'}`}
+                >
+                  <TabIcon size={16} />
+                  {tab.label}
+                </button>
+              );
+            })}
           </nav>
         ) : (
           !isLoggedIn && (
@@ -143,13 +171,13 @@ const Header = ({
         )}
 
         {/* Right Section: Admin Refresh, Theme, Account Dropdown */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
           {isAdminPage && (
             <button
               type="button"
               onClick={() => window.dispatchEvent(new Event('admin-refresh'))}
               title="Refresh status"
-              className="admin-btn-secondary py-1.5 px-3 text-xs"
+              className="admin-btn-secondary py-1.5 px-2.5 sm:px-3 text-xs"
             >
               <RefreshCw size={13} />
               <span className="hidden sm:inline">Refresh</span>
@@ -198,64 +226,60 @@ const Header = ({
               </button>
 
               {dropdownOpen && (
-                <div className="absolute right-0 top-12 w-64 z-[2000] bg-surface border border-border shadow-2xl rounded-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-150">
-                  <div className="px-3 py-2.5 border-b border-border/60 flex items-center gap-3">
-                    {photoURL ? (
-                      <img src={photoURL} alt="" className="w-8 h-8 rounded-full object-cover shrink-0 border border-accent/30" />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-accent-soft text-accent font-bold text-xs flex items-center justify-center shrink-0">
-                        {initials}
-                      </div>
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-bold text-primary truncate">{displayName || 'User'}</p>
-                      <p className="text-[11px] text-secondary/70 truncate">{email || 'Signed in'}</p>
-                    </div>
+                <div className="absolute right-0 mt-2 w-56 bg-card border border-border-strong rounded-xl shadow-2xl py-2 z-[1100]">
+                  <div className="px-4 py-2.5 border-b border-border/50">
+                    <p className="text-xs font-semibold text-primary truncate">{displayName || 'Logged In User'}</p>
+                    <p className="text-[11px] text-secondary truncate">{email || 'No email attached'}</p>
                   </div>
+
+                  {isAdmin && !isAdminPage && (
+                    <div className="py-1 border-b border-border/50">
+                      <Link
+                        to="/admin"
+                        onClick={() => setDropdownOpen(false)}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-primary hover:bg-muted transition-colors font-medium"
+                      >
+                        <ShieldCheck size={14} className="text-accent" />
+                        Archival Admin Panel
+                      </Link>
+                    </div>
+                  )}
+
+                  {isAdminPage && (
+                    <div className="py-1 border-b border-border/50">
+                      <Link
+                        to="/"
+                        onClick={() => setDropdownOpen(false)}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-xs text-primary hover:bg-muted transition-colors font-medium"
+                      >
+                        <Gauge size={14} className="text-accent" />
+                        Return to Research Hub
+                      </Link>
+                    </div>
+                  )}
 
                   <div className="py-1">
                     <button
                       type="button"
                       onClick={() => {
                         setDropdownOpen(false);
-                        if (onOpenSettings) onOpenSettings();
+                        onOpenSettings?.();
                       }}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-secondary hover:text-accent hover:bg-card transition-colors cursor-pointer"
+                      className="w-full flex items-center gap-2 px-4 py-2 text-xs text-primary hover:bg-muted transition-colors"
                     >
-                      <Settings size={15} className="shrink-0" />
-                      <span>Settings & API Keys</span>
+                      <Settings size={14} className="text-secondary" />
+                      Settings & Keys
                     </button>
-
-                    {isAdmin && !isAdminPage && (
-                      <Link
-                        to="/admin"
-                        onClick={() => setDropdownOpen(false)}
-                        className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-secondary hover:text-accent hover:bg-card transition-colors cursor-pointer"
-                      >
-                        <Gauge size={15} className="shrink-0" />
-                        <span>Admin dashboard</span>
-                      </Link>
-                    )}
-
-                    <Link
-                      to="/privacy"
-                      onClick={() => setDropdownOpen(false)}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-secondary hover:text-accent hover:bg-card transition-colors cursor-pointer"
-                    >
-                      <ShieldCheck size={15} className="shrink-0" />
-                      <span>Privacy & Terms</span>
-                    </Link>
-
                     <button
                       type="button"
                       onClick={() => {
                         setDropdownOpen(false);
-                        onSignIn();
+                        window.dispatchEvent(new Event('lineage-signout'));
                       }}
-                      className="w-full flex items-center gap-3 px-3 py-2 rounded-xl text-xs font-medium text-red-400 hover:text-red-500 hover:bg-red-500/10 transition-colors cursor-pointer mt-1"
+                      className="w-full flex items-center gap-2 px-4 py-2 text-xs text-red-500 hover:bg-muted transition-colors"
                     >
-                      <LogOut size={15} className="shrink-0" />
-                      <span>Log Out</span>
+                      <LogOut size={14} />
+                      Sign Out
                     </button>
                   </div>
                 </div>
