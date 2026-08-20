@@ -14,6 +14,10 @@ export const FALLBACK_API_KEY_STORAGE = 'google_fallback_api_key';
 export const SESSIONS_STORAGE = 'lineage_sessions';
 export const SYNC_CONSENT_STORAGE = 'lineage_sync_consent';
 
+export const ADMIN_HARVEST_STATUS_FILTER_STORAGE = 'lineage_admin_harvest_status_filter';
+export const ADMIN_CHART_ARCHIVE_FILTER_STORAGE = 'lineage_admin_chart_archive_filter';
+export const ADMIN_CHART_RANGE_STORAGE = 'lineage_admin_chart_range';
+
 // Firebase web config. These values are not secrets — they identify the project to the
 // client, and access is governed by the Firestore security rules in firestore.rules.
 // See .env.example; when unset the app runs local-only with sync unavailable.

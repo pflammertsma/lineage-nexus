@@ -3,17 +3,32 @@ import {
   Layers, Search, CheckSquare, Square, Play, RefreshCw,
   AlertCircle, CheckCircle, Clock, Archive, FileText, Sparkles, Filter,
 } from 'lucide-react';
-import { ADMIN_API_BASE_URL } from '../config';
+import { ADMIN_API_BASE_URL, ADMIN_HARVEST_STATUS_FILTER_STORAGE } from '../config';
 
 export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [catalog, setCatalog] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState(() => {
+    try {
+      return localStorage.getItem(ADMIN_HARVEST_STATUS_FILTER_STORAGE) || 'all';
+    } catch {
+      return 'all';
+    }
+  });
   const [selectedCodes, setSelectedCodes] = useState(new Set());
   const [submitting, setSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState(null);
+
+  const handleStatusFilterChange = (st) => {
+    setStatusFilter(st);
+    try {
+      localStorage.setItem(ADMIN_HARVEST_STATUS_FILTER_STORAGE, st);
+    } catch {
+      // Ignore storage error
+    }
+  };
 
   const fetchCatalog = useCallback(async () => {
     setLoading(true);
@@ -166,11 +181,10 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
       {/* Submission Feedback */}
       {submitMessage && (
         <div
-          className={`flex items-start gap-2.5 p-3 rounded-md mb-5 text-xs ${
-            submitMessage.type === 'success'
+          className={`flex items-start gap-2.5 p-3 rounded-md mb-5 text-xs ${submitMessage.type === 'success'
               ? 'bg-green-500/10 border border-green-500/30 text-green-700 dark:text-green-400'
               : 'bg-red-500/10 border border-red-500/30 text-red-700 dark:text-red-400'
-          }`}
+            }`}
         >
           {submitMessage.type === 'success' ? (
             <CheckCircle size={14} className="mt-0.5 shrink-0" />
@@ -201,12 +215,11 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
             <button
               key={st}
               type="button"
-              onClick={() => setStatusFilter(st)}
-              className={`admin-pill-filter ${
-                statusFilter === st
+              onClick={() => handleStatusFilterChange(st)}
+              className={`admin-pill-filter ${statusFilter === st
                   ? 'bg-card text-primary shadow-xs'
                   : 'text-secondary hover:text-primary'
-              }`}
+                }`}
             >
               {st}
             </button>
@@ -257,9 +270,8 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
               <div
                 key={archive.code}
                 onClick={() => toggleSelect(archive.code)}
-                className={`admin-list-item ${
-                  isSelected ? 'admin-list-item-selected' : 'admin-list-item-default'
-                }`}
+                className={`admin-list-item ${isSelected ? 'admin-list-item-selected' : 'admin-list-item-default'
+                  }`}
               >
                 <div className="flex items-start gap-3 min-w-0">
                   <button
@@ -290,11 +302,11 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
                       ) : archive.status === 'queued' ? (
                         <span className="admin-badge-warning">
                           <Clock size={10} />
-                          Queued in plan
+                          Queued
                         </span>
                       ) : (
                         <span className="admin-badge-neutral">
-                          Available for Harvest
+                          Available
                         </span>
                       )}
                     </div>

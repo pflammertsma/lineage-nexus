@@ -5,7 +5,7 @@ import {
   Database, AlertTriangle, CheckCircle2,
   Layers, Search, PieChart,
 } from 'lucide-react';
-import { ADMIN_API_BASE_URL, setArchiveNames } from '../config';
+import { ADMIN_API_BASE_URL, setArchiveNames, ADMIN_CHART_RANGE_STORAGE } from '../config';
 import MetricChart from './MetricChart';
 import CorpusGrowthChart from './CorpusGrowthChart';
 import ArchiveQuery from './ArchiveQuery';
@@ -71,7 +71,24 @@ const AdminDashboard = ({ getIdToken }) => {
   const [history, setHistory] = useState([]);
   const [coverage, setCoverage] = useState(null);
   const [indexing, setIndexing] = useState(null);
-  const [rangeMinutes, setRangeMinutes] = useState(360);
+  const [rangeMinutes, setRangeMinutesState] = useState(() => {
+    try {
+      const stored = localStorage.getItem(ADMIN_CHART_RANGE_STORAGE);
+      return stored ? Number(stored) : 360;
+    } catch {
+      return 360;
+    }
+  });
+
+  const setRangeMinutes = useCallback((mins) => {
+    setRangeMinutesState(mins);
+    try {
+      localStorage.setItem(ADMIN_CHART_RANGE_STORAGE, String(mins));
+    } catch {
+      // Ignore storage error
+    }
+  }, []);
+
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);

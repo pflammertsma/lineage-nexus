@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Database, Filter } from 'lucide-react';
-import { getArchiveName } from '../config';
+import { getArchiveName, ADMIN_CHART_ARCHIVE_FILTER_STORAGE } from '../config';
 import SmoothLineChart from './SmoothLineChart';
 
 /**
@@ -19,7 +19,22 @@ export function getArchiveColor(index) {
  * Supports Total Corpus, Stacked Area Breakdown, and Single Archive drilldown modes.
  */
 const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRangeChange }) => {
-  const [selectedArchive, setSelectedArchive] = useState('all');
+  const [selectedArchive, setSelectedArchive] = useState(() => {
+    try {
+      return localStorage.getItem(ADMIN_CHART_ARCHIVE_FILTER_STORAGE) || 'all';
+    } catch {
+      return 'all';
+    }
+  });
+
+  const handleArchiveChange = (val) => {
+    setSelectedArchive(val);
+    try {
+      localStorage.setItem(ADMIN_CHART_ARCHIVE_FILTER_STORAGE, val);
+    } catch {
+      // Ignore storage error
+    }
+  };
 
   // Extract all distinct archive codes seen in metrics
   const availableArchives = useMemo(() => {
@@ -94,7 +109,7 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
       <Filter size={12} className="text-secondary shrink-0" />
       <select
         value={selectedArchive}
-        onChange={(e) => setSelectedArchive(e.target.value)}
+        onChange={(e) => handleArchiveChange(e.target.value)}
         className="bg-transparent text-xs text-primary font-medium focus:outline-none cursor-pointer"
       >
         <option value="all" className="bg-card text-primary font-medium py-1">
