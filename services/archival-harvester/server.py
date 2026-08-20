@@ -99,6 +99,35 @@ def get_record(archive_code: str, identifier: str):
   except Exception as e:
     raise HTTPException(status_code=404, detail=f"Record not found: {str(e)}")
 
+_prev_disk_io = None
+_prev_disk_io_t = None
+
+def _get_disk_io_rates() -> Dict[str, Any]:
+  global _prev_disk_io, _prev_disk_io_t
+  read_mbs = 0.0
+  write_mbs = 0.0
+  iops = 0
+  try:
+    counters = psutil.disk_io_counters()
+    now = time.time()
+    if counters and _prev_disk_io and _prev_disk_io_t and (now > _prev_disk_io_t):
+      dt = now - _prev_disk_io_t
+      if dt > 0:
+        read_mbs = max(0.0, round((counters.read_bytes - _prev_disk_io.read_bytes) / (dt * 1024 * 1024), 2))
+        write_mbs = max(0.0, round((counters.write_bytes - _prev_disk_io.write_bytes) / (dt * 1024 * 1024), 2))
+        iops = max(0, int(((counters.read_count - _prev_disk_io.read_count) + (counters.write_count - _prev_disk_io.write_count)) / dt))
+    _prev_disk_io = counters
+    _prev_disk_io_t = now
+  except Exception:
+    pass
+
+  return {
+    "read_mbs": read_mbs,
+    "write_mbs": write_mbs,
+    "iops": iops,
+  }
+
+
 @app.get("/api/v1/admin/status", dependencies=[Depends(require_admin)])
 def get_admin_status():
   """
@@ -132,6 +161,7 @@ def get_admin_status():
     "system": {
       "cpu_percent": psutil.cpu_percent(interval=None),
       "iowait_percent": iowait_percent,
+      "disk_io": _get_disk_io_rates(),
       "memory": {
         "total_mb": round(mem.total / (1024 * 1024), 2),
         "used_mb": round(mem.used / (1024 * 1024), 2),

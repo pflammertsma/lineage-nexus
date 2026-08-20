@@ -101,6 +101,9 @@ const AdminDashboard = ({ getIdToken }) => {
     if (failures.current >= TRANSIENT_TOLERANCE) {
       setReconnecting(false);
       setError(message);
+      window.dispatchEvent(
+        new CustomEvent('admin-system-stress', { detail: { level: 'critical' } })
+      );
     } else {
       setReconnecting(true);
     }
@@ -247,9 +250,10 @@ const AdminDashboard = ({ getIdToken }) => {
     return () => window.removeEventListener('admin-refresh', handleHeaderRefresh);
   }, [load]);
 
-  const online = status?.status === 'online';
+  const online = !error && !reconnecting && status?.status === 'online';
   const mem = status?.system?.memory;
   const disk = status?.system?.disk;
+  const diskIo = status?.system?.disk_io;
   const engine = status?.archival_engine;
 
   return (
@@ -263,7 +267,7 @@ const AdminDashboard = ({ getIdToken }) => {
           </div>
         )}
 
-        {status && (
+        {(status || error || reconnecting) && (
           <>
             {/* Tab 1: System Overview */}
             {activeTab === 'overview' && (
@@ -276,9 +280,11 @@ const AdminDashboard = ({ getIdToken }) => {
                       <AlertTriangle size={15} className="text-red-500 shrink-0" />
                     )}
                     <span className="font-semibold text-primary">
-                      {online ? 'Online' : String(status.status || 'Unknown')}
+                      {online ? 'Online' : reconnecting ? 'Reconnecting…' : 'Offline / Unreachable'}
                     </span>
-                    <span className="text-secondary">· up {formatUptime(status.uptime_seconds)}</span>
+                    {online && status?.uptime_seconds != null && (
+                      <span className="text-secondary">· up {formatUptime(status.uptime_seconds)}</span>
+                    )}
                   </div>
                 </div>
 
@@ -305,7 +311,11 @@ const AdminDashboard = ({ getIdToken }) => {
                     icon={Activity}
                     label="I/O Wait"
                     percent={status.system?.iowait_percent}
-                    detail="CPU waiting on disk I/O"
+                    detail={
+                      diskIo
+                        ? `${diskIo.read_mbs?.toFixed(1) || '0.0'} MB/s r · ${diskIo.write_mbs?.toFixed(1) || '0.0'} MB/s w`
+                        : 'CPU waiting on disk I/O'
+                    }
                   />
                 </div>
 
