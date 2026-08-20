@@ -282,7 +282,7 @@ const AdminDashboard = ({ getIdToken }) => {
                   </div>
                 </div>
 
-                <div className="grid gap-4 sm:grid-cols-3">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <Meter
                     icon={Cpu}
                     label="CPU"
@@ -300,6 +300,12 @@ const AdminDashboard = ({ getIdToken }) => {
                     label="Disk"
                     percent={disk?.percent}
                     detail={disk ? `${disk.used_gb?.toFixed(1)} of ${disk.total_gb?.toFixed(1)} GB` : '—'}
+                  />
+                  <Meter
+                    icon={Activity}
+                    label="I/O Wait"
+                    percent={status.system?.iowait_percent}
+                    detail="CPU waiting on disk I/O"
                   />
                 </div>
 

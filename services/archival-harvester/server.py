@@ -120,11 +120,18 @@ def get_admin_status():
   except Exception as e:
     meili_stats = {"error": str(e)}
 
+  iowait_percent = 0.0
+  try:
+    iowait_percent = round(psutil.cpu_times_percent(interval=None).iowait, 1)
+  except (AttributeError, ValueError):
+    iowait_percent = 0.0
+
   return {
     "status": "online",
     "uptime_seconds": round(time.time() - START_TIME, 2),
     "system": {
       "cpu_percent": psutil.cpu_percent(interval=None),
+      "iowait_percent": iowait_percent,
       "memory": {
         "total_mb": round(mem.total / (1024 * 1024), 2),
         "used_mb": round(mem.used / (1024 * 1024), 2),
