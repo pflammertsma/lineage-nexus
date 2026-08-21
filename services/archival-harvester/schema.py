@@ -220,13 +220,17 @@ def transform(row, archive, kind, prefixes, institution_default=""):
 def rebuild_search_fields(doc):
     """Derives everything searchable or filterable from doc['persons']."""
     names, phon, surnames_p, given_p, roles = [], [], [], [], []
+    person_names, person_phonetics = [], []
     per_role_given, per_role_surname, per_role_birth = {}, {}, {}
 
     for p in doc["persons"]:
         role = p["role"]
         roles.append(role)
         names.append(p["n"])
-        phon.extend(phonetic_all(p["n"]))
+        p_phon = phonetic_all(p["n"])
+        phon.extend(p_phon)
+        person_names.append(p["n"])
+        person_phonetics.append(" ".join(p_phon))
 
         gk = phonetic_all(p["g"]) + phonetic_all(p["p"])
         sk = phonetic_all(p["s"])
@@ -242,6 +246,8 @@ def rebuild_search_fields(doc):
         if year:
             per_role_birth.setdefault(role, []).append(year)
 
+    doc["person_names"] = person_names
+    doc["person_phonetics"] = person_phonetics
     doc["names"] = " ".join(names)
     doc["names_p"] = " ".join(dict.fromkeys(phon))
     doc["roles"] = sorted(set(roles))
@@ -270,5 +276,5 @@ def filterable_attributes():
 
 
 def searchable_attributes():
-    """Ordered: a name match must outrank a place match on the same term."""
-    return ["names", "names_p", "event_place", "event_type", "institution"]
+    """Ordered: per-person name matches outrank multi-person cross-matches, which outrank place matches."""
+    return ["person_names", "person_phonetics", "names", "names_p", "event_place", "event_type", "institution"]

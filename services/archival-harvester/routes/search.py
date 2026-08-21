@@ -208,6 +208,22 @@ def _search_with_variants(index, query, params, fuzzy):
     hit["_match"] = "phonetic"
     hits.append(hit)
 
+  # Rank merged hits by term coverage so a 3/3 token match (Klazina Cornelia Spruijt)
+  # outranks a partial 2/3 token match (Clasina Margaretha Oppelaar), while exact
+  # spellings maintain a tie-breaker preference on equal token coverage.
+  q_p_tokens = set(phonetic_all(query)) if query else set()
+
+  def _hit_score(hit):
+    match_type = hit.get("_match", "exact")
+    doc_p = set(hit.get("names_p", []))
+    if not doc_p and hit.get("names"):
+      doc_p = set(phonetic_all(hit.get("names")))
+    overlap = len(q_p_tokens.intersection(doc_p)) if q_p_tokens else 0
+    exact_bonus = 0.5 if match_type == "exact" else 0.0
+    return (overlap + exact_bonus)
+
+  hits.sort(key=_hit_score, reverse=True)
+
   return {
     "hits": hits,
     "estimatedTotalHits": max(exact.get("estimatedTotalHits", 0),
