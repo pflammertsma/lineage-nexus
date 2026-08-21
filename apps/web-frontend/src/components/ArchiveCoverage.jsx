@@ -57,9 +57,16 @@ const DonutChart = ({ data = [], totalValue = 0, title = '' }) => {
   const CY = 100;
 
   const getSectorPath = (startAngle, endAngle) => {
-    // Full circle special case
+    // Full circle special case: two 180-degree arcs for perfect rendering
     if (endAngle - startAngle >= 2 * Math.PI - 0.0001) {
-      return `M ${CX},${CY - R_OUT} A ${R_OUT},${R_OUT} 0 1,1 ${CX - 0.01},${CY - R_OUT} Z M ${CX},${CY - R_IN} A ${R_IN},${R_IN} 0 1,0 ${CX - 0.01},${CY - R_IN} Z`;
+      return (
+        `M ${CX},${CY - R_OUT} ` +
+        `A ${R_OUT},${R_OUT} 0 1,1 ${CX},${CY + R_OUT} ` +
+        `A ${R_OUT},${R_OUT} 0 1,1 ${CX},${CY - R_OUT} ` +
+        `M ${CX},${CY - R_IN} ` +
+        `A ${R_IN},${R_IN} 0 1,0 ${CX},${CY + R_IN} ` +
+        `A ${R_IN},${R_IN} 0 1,0 ${CX},${CY - R_IN} Z`
+      );
     }
 
     const x1_out = CX + R_OUT * Math.sin(startAngle);
