@@ -45,6 +45,12 @@ def _document_rate(window_seconds: int = 600) -> Optional[float]:
 
 def _seconds_since_progress() -> Optional[int]:
   """How long nothing has moved across metrics signals."""
+  from routes.harvest import _current_ingest
+  ingest_info = _current_ingest() or {}
+  log_age = ingest_info.get("log_age_seconds")
+  if ingest_info.get("is_active") and log_age is not None and log_age < 120:
+    return 0
+
   if len(_metrics) < 2:
     return None
 

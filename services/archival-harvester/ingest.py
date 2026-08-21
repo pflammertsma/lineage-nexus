@@ -442,11 +442,18 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
     logger.info("  %s.%s: %d person roles in this schema", archive, kind, len(prefixes))
 
     row_count = 0
+    last_log_t = time.time()
 
     def counted(source):
-        nonlocal row_count
+        nonlocal row_count, last_log_t
         for item in source:
             row_count += 1
+            now = time.time()
+            if row_count % 5000 == 0 or (now - last_log_t) >= 0.5:
+                rate = row_count / max(1e-6, now - started)
+                logger.info("  %s.%s: %d rows parsed, %d records generated (%.0f rows/s)",
+                            archive, kind, row_count, count, rate)
+                last_log_t = now
             yield item
 
     for doc in merged_documents(counted(rows), archive, kind, prefixes):

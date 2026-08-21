@@ -27,6 +27,9 @@ _INGEST_STREAMING = re.compile(r"streaming ([a-z0-9_]+)\.([a-z0-9_]+)")
 _INGEST_SUBMITTED = re.compile(
   r"([a-z0-9_]+)\.([a-z0-9_]+): ([\d,]+) submitted \(([\d.]+) rec/s\)"
 )
+_INGEST_PROGRESS = re.compile(
+  r"([a-z0-9_]+)\.([a-z0-9_]+): ([\d,]+) rows parsed, ([\d,]+) records generated \(([\d.]+) rows/s\)"
+)
 _INGEST_FINISHED = re.compile(
   r"([a-z0-9_]+)\.([a-z0-9_]+): ([\d,]+) records from ([\d,]+) rows"
 )
@@ -178,11 +181,11 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
       archive, kind = match.group(1), match.group(2)
       submitted, rate = None, None
       is_active = True
-    match = _INGEST_SUBMITTED.search(line)
+    match = _INGEST_SUBMITTED.search(line) or _INGEST_PROGRESS.search(line)
     if match:
       archive, kind = match.group(1), match.group(2)
-      submitted = int(match.group(3).replace(",", ""))
-      rate = float(match.group(4))
+      submitted = int(match.group(3 if match.re == _INGEST_SUBMITTED else 4).replace(",", ""))
+      rate = float(match.group(4 if match.re == _INGEST_SUBMITTED else 5))
       is_active = True
     if "waiting for queue" in line:
       waiting = True

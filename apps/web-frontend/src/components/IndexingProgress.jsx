@@ -289,8 +289,8 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
         </div>
       )}
 
-      {/* Stage 1: Active Harvester Streaming / Engine Indexing Banner */}
-      {job && busy && job.is_active !== false && job.archive && (
+      {/* Stage 1: Active / Last Harvester Streaming & Indexing Banner */}
+      {job && job.archive && (
         <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -298,14 +298,21 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
                 {getArchiveName(job.archive)}
               </span>
               <span className="text-xs text-secondary/70">
-                · {job.phase === 'indexing_in_engine'
-                    ? 'Payloads submitted — engine building search index'
-                    : `Harvesting ${job.kind ? getKindLabel(job.kind) : 'stream'}`}
+                · {job.is_active === false
+                    ? 'Harvest stream completed'
+                    : (job.phase === 'indexing_in_engine'
+                        ? 'Payloads submitted — engine building search index'
+                        : `Harvesting ${job.kind ? getKindLabel(job.kind) : 'stream'}`)}
               </span>
             </div>
-            {(job.rows_per_second > 0 || job.speed_mbs > 0) && (
-              <span className="text-xs font-medium text-accent">
-                {job.rows_per_second ? `${Math.round(job.rows_per_second).toLocaleString()} docs/s` : `${job.speed_mbs.toFixed(1)} MB/s`}
+            {job.is_active !== false && (
+              <span className="text-xs font-medium text-accent flex items-center gap-1.5">
+                <Loader2 size={12} className="animate-spin shrink-0 text-accent" />
+                <span className={job.rows_per_second > 0 || job.speed_mbs > 0 ? 'font-mono' : ''}>
+                  {job.rows_per_second > 0
+                    ? `${Math.round(job.rows_per_second).toLocaleString()} docs/s`
+                    : (job.speed_mbs > 0 ? `${job.speed_mbs.toFixed(1)} MB/s` : 'Buffering stream...')}
+                </span>
               </span>
             )}
           </div>
@@ -322,11 +329,12 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
               }}
             />
           </div>
-          <div className="flex items-center justify-between text-xs text-secondary flex-wrap gap-2">
+          <div className="flex items-center justify-between text-xs text-secondary flex-wrap gap-2 mb-1">
             <span>
               {job.files_total != null && job.files_total > 0 && (
                 <span className="font-semibold text-primary mr-1.5">
-                  File {Math.min(job.files_total, (job.files_completed || 0) + (job.phase === 'indexing_in_engine' ? 0 : 1))} of {job.files_total} ·
+                  File {Math.min(job.files_total, (job.files_completed || 0) + (job.phase === 'indexing_in_engine' ? 0 : 1))} of {job.files_total}
+                  {job.kind ? ` (${job.archive}.${job.kind}.csv.gz)` : ''} ·
                 </span>
               )}
               {job.submitted != null
@@ -337,6 +345,15 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
               <span>ETA ~{formatDuration(job.eta_seconds)}</span>
             )}
           </div>
+
+          {pending > 0 && (
+            <div className="mt-2 pt-2 border-t border-border/40 text-[11px] text-amber-400 flex items-center gap-1.5 font-medium">
+              <Loader2 size={12} className="animate-spin shrink-0" />
+              <span>
+                {pending} payload task{pending === 1 ? '' : 's'} queued in Meilisearch · Awaiting engine batch transaction commit
+              </span>
+            </div>
+          )}
         </div>
       )}
 
