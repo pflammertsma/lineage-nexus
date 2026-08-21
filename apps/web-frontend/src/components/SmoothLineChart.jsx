@@ -89,6 +89,7 @@ const DEFAULT_RANGES = [
   { minutes: 60, label: '1h' },
   { minutes: 360, label: '6h' },
   { minutes: 1440, label: '24h' },
+  { minutes: 43200, label: '30d' },
 ];
 
 /**
@@ -120,8 +121,9 @@ const SmoothLineChart = ({
   const chart = useMemo(() => {
     if (!points || points.length < 2 || !series.length) return null;
 
-    const t0 = points[0].t;
     const t1 = points[points.length - 1].t;
+    const reqSpan = rangeMinutes ? rangeMinutes * 60 : 0;
+    const t0 = reqSpan ? Math.min(points[0].t, t1 - reqSpan) : points[0].t;
     const span = Math.max(1, t1 - t0);
 
     const x = (t) => ((t - t0) / span) * W;
@@ -175,7 +177,7 @@ const SmoothLineChart = ({
         };
       });
 
-      return { points: stackedPoints, processedSeries, x, minV, maxV };
+      return { points: stackedPoints, processedSeries, x, minV, maxV, t0, t1 };
     }
 
     // Standard unstacked line chart mode
@@ -223,8 +225,8 @@ const SmoothLineChart = ({
       };
     });
 
-    return { points, processedSeries, x, minV, maxV };
-  }, [points, series, stacked, autoScaleY, maxY, height]);
+    return { points, processedSeries, x, minV, maxV, t0, t1 };
+  }, [points, series, stacked, autoScaleY, maxY, height, rangeMinutes]);
 
   if (!chart) {
     return (
@@ -240,15 +242,25 @@ const SmoothLineChart = ({
     );
   }
 
-  const { processedSeries, x } = chart;
+  const { processedSeries, x, t0, t1 } = chart;
   const hovered = hoverIndex === null ? null : points[hoverIndex];
 
   const pick = (clientX, element) => {
+    if (!chart || !points.length) return;
     const box = element.getBoundingClientRect();
-    const ratio = (clientX - box.left) / box.width;
-    setHoverIndex(
-      Math.max(0, Math.min(points.length - 1, Math.round(ratio * (points.length - 1))))
-    );
+    const ratio = Math.max(0, Math.min(1, (clientX - box.left) / box.width));
+    const targetT = t0 + ratio * (t1 - t0);
+
+    let bestIdx = 0;
+    let minDiff = Infinity;
+    for (let i = 0; i < points.length; i++) {
+      const diff = Math.abs(points[i].t - targetT);
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestIdx = i;
+      }
+    }
+    setHoverIndex(bestIdx);
   };
 
   const stamp = (t) =>

@@ -10,7 +10,7 @@ from fastapi.responses import Response
 
 from config import meili_client, INDEX_NAME, MEILI_HOST, START_TIME, ARCHIVE_NAMES
 from auth import require_admin
-from metrics import _get_disk_io_rates, _metrics
+from metrics import _get_disk_io_rates, _metrics, _metrics_30d
 from telemetry import batch_telemetry, save_batch_telemetry, _meili_get, _elapsed_since, synthesize_past_batch_samples
 from eta_engine import EtaEngine
 
@@ -110,15 +110,18 @@ def admin_status():
 @router.get("/api/v1/admin/history", dependencies=[Depends(require_admin)])
 @router.get("/api/v1/admin/metrics-history", dependencies=[Depends(require_admin)])
 def admin_history(
-  minutes: Optional[int] = Query(None, ge=1, le=10080),
-  window_seconds: Optional[int] = Query(None, ge=60, le=86400)
+  minutes: Optional[int] = Query(None, ge=1),
+  window_seconds: Optional[int] = Query(None, ge=1)
 ):
-  """Returns past metrics history samples."""
-  sec = window_seconds if window_seconds is not None else (minutes * 60 if minutes is not None else 21600)
+  """Returns past metrics history samples across high-res (24h) and 30d low-res tiers."""
+  raw_sec = window_seconds if window_seconds is not None else (minutes * 60 if minutes is not None else 21600)
+  sec = min(30 * 86400, raw_sec)
   cutoff = time.time() - sec
 
+  source_buffer = _metrics_30d if sec > 86400 else _metrics
+
   points = []
-  for p in _metrics:
+  for p in source_buffer:
     if p.get("t", 0) >= cutoff:
       pt = dict(p)
       if "iowait" not in pt:
@@ -130,7 +133,6 @@ def admin_history(
       if "indexing" not in pt:
         pt["indexing"] = pt.get("is_indexing", False)
       points.append(pt)
-
   return {
     "status": "success",
     "minutes": minutes or (sec // 60),
