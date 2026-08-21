@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, ExternalLink, Loader2, ChevronRight, SlidersHorizontal, MapPin, Calendar, X, Filter } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
 
@@ -25,28 +26,42 @@ const KIND_LABELS = {
 const kindLabel = (kind) => KIND_LABELS[kind] || `Record type: ${kind}`;
 
 /**
- * Raw index search, for checking what is actually in there.
- *
+ * Direct search on the Meilisearch index.
  * No agent, no orchestration, no interpretation — the point is to see the index
  * as it is. Every hit shows which archive and record type it came from, because
  * the question this answers is usually "did that export ingest correctly", not
  * "who was this person".
  */
 const ArchiveQuery = ({ getIdToken }) => {
-  const [query, setQuery] = useState('');
-  const [archive, setArchive] = useState('all');
-  const [place, setPlace] = useState('');
-  const [kind, setKind] = useState('all');
-  const [yearMin, setYearMin] = useState('');
-  const [yearMax, setYearMax] = useState('');
-  const [father, setFather] = useState('');
-  const [mother, setMother] = useState('');
-  const [child, setChild] = useState('');
-  const [spouse, setSpouse] = useState('');
-  const [role, setRole] = useState('all');
-  const [fuzzy, setFuzzy] = useState(true);
-  const [namesOnly, setNamesOnly] = useState(true);
-  const [showFilters, setShowFilters] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [query, setQuery] = useState(() => searchParams.get('q') || '');
+  const [archive, setArchive] = useState(() => searchParams.get('archive') || 'all');
+  const [place, setPlace] = useState(() => searchParams.get('place') || '');
+  const [kind, setKind] = useState(() => searchParams.get('kind') || 'all');
+  const [yearMin, setYearMin] = useState(() => searchParams.get('year_min') || '');
+  const [yearMax, setYearMax] = useState(() => searchParams.get('year_max') || '');
+  const [father, setFather] = useState(() => searchParams.get('father') || '');
+  const [mother, setMother] = useState(() => searchParams.get('mother') || '');
+  const [child, setChild] = useState(() => searchParams.get('child') || '');
+  const [spouse, setSpouse] = useState(() => searchParams.get('spouse') || '');
+  const [role, setRole] = useState(() => searchParams.get('role') || 'all');
+  const [fuzzy, setFuzzy] = useState(() => searchParams.get('fuzzy') !== 'false');
+  const [namesOnly, setNamesOnly] = useState(() => searchParams.get('names_only') !== 'false');
+  const [showFilters, setShowFilters] = useState(() => {
+    return Boolean(
+      (searchParams.get('archive') && searchParams.get('archive') !== 'all') ||
+      searchParams.get('place') ||
+      (searchParams.get('kind') && searchParams.get('kind') !== 'all') ||
+      searchParams.get('year_min') ||
+      searchParams.get('year_max') ||
+      searchParams.get('father') ||
+      searchParams.get('mother') ||
+      searchParams.get('child') ||
+      searchParams.get('spouse') ||
+      (searchParams.get('role') && searchParams.get('role') !== 'all')
+    );
+  });
 
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
@@ -87,12 +102,33 @@ const ArchiveQuery = ({ getIdToken }) => {
     setRole('all');
     setFuzzy(true);
     setNamesOnly(true);
+    setSearchParams(query.trim() ? { q: query.trim() } : {}, { replace: true });
+  };
+
+  const updateUrlParams = (qVal, archiveVal, placeVal, kindVal, minVal, maxVal, fatherVal, motherVal, childVal, spouseVal, roleVal, fuzzyVal, namesOnlyVal) => {
+    const params = new URLSearchParams();
+    if (qVal) params.set('q', qVal);
+    if (archiveVal !== 'all') params.set('archive', archiveVal);
+    if (placeVal) params.set('place', placeVal);
+    if (kindVal !== 'all') params.set('kind', kindVal);
+    if (minVal) params.set('year_min', minVal);
+    if (maxVal) params.set('year_max', maxVal);
+    if (fatherVal) params.set('father', fatherVal);
+    if (motherVal) params.set('mother', motherVal);
+    if (childVal) params.set('child', childVal);
+    if (spouseVal) params.set('spouse', spouseVal);
+    if (roleVal !== 'all') params.set('role', roleVal);
+    if (!fuzzyVal) params.set('fuzzy', 'false');
+    if (!namesOnlyVal) params.set('names_only', 'false');
+    setSearchParams(params, { replace: true });
   };
 
   const run = async (e) => {
     if (e) e.preventDefault();
     const q = query.trim();
     if ((!q && activeFilterCount === 0) || loading) return;
+
+    updateUrlParams(q, archive, place.trim(), kind, yearMin.trim(), yearMax.trim(), father.trim(), mother.trim(), child.trim(), spouse.trim(), role, fuzzy, namesOnly);
 
     setLoading(true);
     setError(null);
@@ -135,6 +171,25 @@ const ArchiveQuery = ({ getIdToken }) => {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const hasUrlParams = Boolean(
+      searchParams.get('q') ||
+      (searchParams.get('archive') && searchParams.get('archive') !== 'all') ||
+      searchParams.get('place') ||
+      (searchParams.get('kind') && searchParams.get('kind') !== 'all') ||
+      searchParams.get('year_min') ||
+      searchParams.get('year_max') ||
+      searchParams.get('father') ||
+      searchParams.get('mother') ||
+      searchParams.get('child') ||
+      searchParams.get('spouse') ||
+      (searchParams.get('role') && searchParams.get('role') !== 'all')
+    );
+    if (hasUrlParams) {
+      run();
+    }
+  }, []);
 
   return (
     <div className="bg-card border border-border rounded-lg p-5">
@@ -360,7 +415,7 @@ const ArchiveQuery = ({ getIdToken }) => {
                     onChange={(e) => setFuzzy(e.target.checked)}
                     className="rounded border-border text-accent focus:ring-accent"
                   />
-                  <span>Phonetic variants (Clasina/Klasina)</span>
+                  <span>Phonetic variants</span>
                 </label>
 
                 <label className="flex items-center gap-1.5 cursor-pointer">

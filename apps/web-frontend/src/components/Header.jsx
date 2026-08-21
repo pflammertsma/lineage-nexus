@@ -14,10 +14,10 @@ const THEME_LABEL = {
 };
 
 const ADMIN_TABS = [
-  { id: 'overview', label: 'System', icon: Activity },
-  { id: 'harvesting', label: 'Ingestion', icon: Layers },
-  { id: 'coverage', label: 'Corpus', icon: PieChart },
-  { id: 'query', label: 'Index', icon: Search },
+  { id: 'overview', path: '/admin', label: 'System', icon: Activity },
+  { id: 'harvesting', path: '/admin/ingestion', label: 'Ingestion', icon: Layers },
+  { id: 'coverage', path: '/admin/corpus', label: 'Corpus', icon: PieChart },
+  { id: 'query', path: '/admin/query', label: 'Index', icon: Search },
 ];
 
 const initialsFor = (name, email) => {
@@ -46,11 +46,18 @@ const Header = ({
   const dropdownRef = useRef(null);
   const adminMobileMenuRef = useRef(null);
   const location = useLocation();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
 
   const onLandingPage = location.pathname === '/';
-  const isAdminPage = location.pathname === '/admin';
-  const activeTabId = searchParams.get('tab') || 'overview';
+  const isAdminPage = location.pathname.startsWith('/admin');
+
+  const activeTabId = (() => {
+    const p = location.pathname;
+    if (p.startsWith('/admin/ingestion') || p.startsWith('/admin/harvesting')) return 'harvesting';
+    if (p.startsWith('/admin/corpus') || p.startsWith('/admin/coverage')) return 'coverage';
+    if (p.startsWith('/admin/query') || p.startsWith('/admin/index')) return 'query';
+    return searchParams.get('tab') || 'overview';
+  })();
   const activeTabObj = ADMIN_TABS.find((t) => t.id === activeTabId) || ADMIN_TABS[0];
   const ActiveTabIcon = activeTabObj.icon;
 
@@ -151,13 +158,10 @@ const Header = ({
                     const isHarvesting = tab.id === 'harvesting';
                     const isOverview = tab.id === 'overview';
                     return (
-                      <button
+                      <Link
                         key={tab.id}
-                        type="button"
-                        onClick={() => {
-                          setSearchParams({ tab: tab.id }, { replace: true });
-                          setAdminMobileMenuOpen(false);
-                        }}
+                        to={tab.path}
+                        onClick={() => setAdminMobileMenuOpen(false)}
                         className={`w-full flex items-center gap-3 px-3.5 py-2.5 text-sm font-medium transition-colors cursor-pointer ${
                           isActive
                             ? 'bg-accent/10 text-accent font-bold'
@@ -186,7 +190,7 @@ const Header = ({
                             <span>Active</span>
                           </span>
                         )}
-                      </button>
+                      </Link>
                     );
                   })}
                 </div>
@@ -204,10 +208,9 @@ const Header = ({
               const isHarvesting = tab.id === 'harvesting';
               const isOverview = tab.id === 'overview';
               return (
-                <button
+                <Link
                   key={tab.id}
-                  type="button"
-                  onClick={() => setSearchParams({ tab: tab.id }, { replace: true })}
+                  to={tab.path}
                   className={`admin-tab-btn ${isActive ? 'admin-tab-btn-active' : 'admin-tab-btn-inactive'}`}
                 >
                   <TabIcon size={16} />
@@ -224,7 +227,7 @@ const Header = ({
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
                     </span>
                   )}
-                </button>
+                </Link>
               );
             })}
           </nav>

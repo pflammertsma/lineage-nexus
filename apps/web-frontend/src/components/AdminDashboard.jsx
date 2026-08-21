@@ -59,10 +59,10 @@ const Meter = ({ icon: Icon, label, percent, detail }) => (
  * Operational view of the archival API.
  * Header navigation, titles, and actions are rendered inside Header.jsx.
  */
-const AdminDashboard = ({ getIdToken }) => {
-  // Tab selection is written by Header.jsx; this view only reads it.
+const AdminDashboard = ({ getIdToken, tab: tabProp }) => {
+  // Tab selection is determined by route path or searchParams fallback.
   const [searchParams] = useSearchParams();
-  const activeTab = searchParams.get('tab') || 'overview';
+  const activeTab = tabProp || searchParams.get('tab') || 'overview';
 
 
   const [status, setStatus] = useState(null);

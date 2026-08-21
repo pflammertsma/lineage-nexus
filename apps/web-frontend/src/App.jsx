@@ -573,8 +573,30 @@ function App() {
           !auth.ready ? <AuthPending /> :
           !isLoggedIn ? <Navigate to="/" replace /> :
           !auth.isAdmin ? <Navigate to="/chat" replace /> :
-          <AdminDashboard getIdToken={auth.getIdToken} />
+          <AdminDashboard getIdToken={auth.getIdToken} tab="overview" />
         } />
+        <Route path="/admin/overview" element={<Navigate to="/admin" replace />} />
+        <Route path="/admin/ingestion" element={
+          !auth.ready ? <AuthPending /> :
+          !isLoggedIn ? <Navigate to="/" replace /> :
+          !auth.isAdmin ? <Navigate to="/chat" replace /> :
+          <AdminDashboard getIdToken={auth.getIdToken} tab="harvesting" />
+        } />
+        <Route path="/admin/harvesting" element={<Navigate to="/admin/ingestion" replace />} />
+        <Route path="/admin/corpus" element={
+          !auth.ready ? <AuthPending /> :
+          !isLoggedIn ? <Navigate to="/" replace /> :
+          !auth.isAdmin ? <Navigate to="/chat" replace /> :
+          <AdminDashboard getIdToken={auth.getIdToken} tab="coverage" />
+        } />
+        <Route path="/admin/coverage" element={<Navigate to="/admin/corpus" replace />} />
+        <Route path="/admin/query" element={
+          !auth.ready ? <AuthPending /> :
+          !isLoggedIn ? <Navigate to="/" replace /> :
+          !auth.isAdmin ? <Navigate to="/chat" replace /> :
+          <AdminDashboard getIdToken={auth.getIdToken} tab="query" />
+        } />
+        <Route path="/admin/index" element={<Navigate to="/admin/query" replace />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
 
