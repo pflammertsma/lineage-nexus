@@ -301,8 +301,8 @@ const SmoothLineChart = ({
                 onClick={() => onRangeChange?.(r.minutes)}
                 aria-pressed={rangeMinutes === r.minutes}
                 className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${rangeMinutes === r.minutes
-                    ? 'bg-accent text-on-accent'
-                    : 'text-secondary hover:text-primary'
+                  ? 'bg-accent text-on-accent'
+                  : 'text-secondary hover:text-primary'
                   }`}
               >
                 {r.label}
@@ -327,8 +327,8 @@ const SmoothLineChart = ({
           <defs>
             {processedSeries.map((s) => (
               <linearGradient key={s.field} id={`g-${s.field}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={s.colour} stopOpacity={stacked ? '0.45' : '0.25'} />
-                <stop offset="100%" stopColor={s.colour} stopOpacity={stacked ? '0.25' : '0.01'} />
+                <stop offset="0%" stopColor={s.colour} stopOpacity={stacked ? '0.85' : '0.4'} />
+                <stop offset="100%" stopColor={s.colour} stopOpacity={stacked ? '0.65' : '0.00'} />
               </linearGradient>
             ))}
           </defs>
