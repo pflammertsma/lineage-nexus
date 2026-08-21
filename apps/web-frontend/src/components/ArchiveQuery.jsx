@@ -34,6 +34,122 @@ const kindLabel = (kind) => KIND_LABELS[kind] || `Record type: ${kind}`;
  */
 const INLINE_RE = /\b(place|loc|location|date|year|type|kind|archive|father|mother|child|spouse|role):([^\s]+)/i;
 
+const TUSSENVOEGSELS = new Set([
+  'van', 'de', 'der', 'den', 'ter', 'te', 'het', 'op', 'aan', 'uit', 'in',
+  "'t", 't', 'du', 'la', 'le', 'von', 'vd', 'd', 'z'
+]);
+
+const ROLE_PATTERNS = {
+  father: /vader|father/i,
+  mother: /moeder|mother/i,
+  spouse: /bruid|bruidegom|echtgenoot|echtgenote|partner|spouse/i,
+  child: /kind|dopeling|overledene|geregistreerde|child/i,
+  witness: /getuige|witness/i,
+};
+
+function isRoleMatch(personRole, targetRole) {
+  if (!personRole || !targetRole) return false;
+  const pattern = ROLE_PATTERNS[targetRole];
+  return pattern ? pattern.test(personRole) : false;
+}
+
+/**
+ * Phonetic key generator for client-side search term highlighting.
+ */
+function toPhoneticKey(str) {
+  if (!str) return '';
+  let s = str.toLowerCase().normalize('NFKD').replace(/[^a-z]/g, '');
+  s = s.replace(/(en|e)$/, '');
+  s = s.replace(/ph/g, 'f').replace(/th/g, 't').replace(/gh/g, 'g');
+  s = s.replace(/ck/g, 'k').replace(/sch/g, 'sk').replace(/ch/g, 'g');
+  s = s.replace(/c(?=[eiyj])/g, 's').replace(/c/g, 'k').replace(/q/g, 'k').replace(/x/g, 'ks');
+  s = s.replace(/w/g, 'v').replace(/v/g, 'f');
+  s = s.replace(/ij/g, 'i').replace(/y/g, 'i').replace(/ie/g, 'i');
+  s = s.replace(/ae/g, 'a').replace(/aa/g, 'a').replace(/ee/g, 'e');
+  s = s.replace(/oo/g, 'o').replace(/uu/g, 'u').replace(/oe/g, 'u');
+  s = s.replace(/z/g, 's');
+  s = s.replace(/j$/, 'i');
+  s = s.replace(/(.)\1+/g, '$1');
+  return s;
+}
+
+/**
+ * Highlights individual words in a person's name that match search query terms.
+ */
+function renderHighlightedName(name, personRole, globalTokens = [], roleScopedTokens = []) {
+  if (!name) {
+    return { rendered: name, hasMatch: false };
+  }
+
+  // Combine globalTokens + roleScopedTokens that match personRole
+  const applicableTokens = [...globalTokens];
+  if (personRole && roleScopedTokens && roleScopedTokens.length > 0) {
+    roleScopedTokens.forEach(({ role, tokens }) => {
+      if (isRoleMatch(personRole, role)) {
+        applicableTokens.push(...tokens);
+      }
+    });
+  }
+
+  if (applicableTokens.length === 0) {
+    return { rendered: name, hasMatch: false };
+  }
+
+  const parts = name.split(/(\s+|-)/);
+  let hasAnyMatch = false;
+
+  const rendered = parts.map((part, idx) => {
+    const rawClean = part.toLowerCase().replace(/['`"]/g, '').trim();
+    // Ignore tussenvoegsels (van, 't, de, etc.) and tiny tokens
+    if (!rawClean || TUSSENVOEGSELS.has(rawClean) || TUSSENVOEGSELS.has(part.toLowerCase().trim()) || rawClean.length < 2) {
+      return part;
+    }
+
+    const partClean = part.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const partPhonetic = toPhoneticKey(part);
+
+    const isMatch = applicableTokens.some((tok) => {
+      const tokClean = tok.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (!tokClean || TUSSENVOEGSELS.has(tokClean) || tokClean.length < 2) return false;
+
+      // 1. Literal exact token match (e.g. Spruijt == Spruijt)
+      if (partClean === tokClean) return true;
+
+      // 2. Exact phonetic match (e.g. Klazina == Clasina, Spruijt == Spruit)
+      const tokPhonetic = toPhoneticKey(tokClean);
+      if (partPhonetic && tokPhonetic && partPhonetic === tokPhonetic) {
+        return true;
+      }
+
+      // 3. Patronymic suffix match ('s' suffix on root name, length >= 4)
+      if (tokClean.length >= 4 && partClean.length >= 4) {
+        if (partClean === tokClean + 's' || tokClean === partClean + 's') {
+          return true;
+        }
+      }
+
+      return false;
+    });
+
+    if (isMatch) {
+      hasAnyMatch = true;
+      return (
+        <mark
+          key={idx}
+          className="bg-amber-500/30 font-bold px-0.5 rounded"
+          style={{ backgroundColor: 'rgba(245, 158, 11, 0.28)', color: '#fef08a' }}
+        >
+          {part}
+        </mark>
+      );
+    }
+
+    return part;
+  });
+
+  return { rendered, hasMatch: hasAnyMatch };
+}
+
 const parseInlineTokens = (qStr) => {
   if (!qStr) return { cleanQ: '', tokens: {} };
   const tokens = {};
@@ -291,6 +407,34 @@ const ArchiveQuery = ({ getIdToken }) => {
       run();
     }
   }, []);
+
+  const { globalTokens, roleScopedTokens } = React.useMemo(() => {
+    const rawQ = query.trim();
+    const { cleanQ, tokens } = parseInlineTokens(rawQ);
+
+    const gTokens = cleanQ ? cleanQ.split(/\s+/).filter((t) => t.length >= 2) : [];
+    const rScoped = [];
+
+    if (tokens.relatives) {
+      tokens.relatives.forEach((r) => {
+        const tokList = r.name ? r.name.split(/\s+/).filter((t) => t.length >= 2) : [];
+        if (tokList.length > 0) {
+          rScoped.push({ role: r.role, tokens: tokList });
+        }
+      });
+    }
+
+    relatives.forEach((r) => {
+      if (r.name?.trim()) {
+        const tokList = r.name.trim().split(/\s+/).filter((t) => t.length >= 2);
+        if (tokList.length > 0) {
+          rScoped.push({ role: r.role, tokens: tokList });
+        }
+      }
+    });
+
+    return { globalTokens: gTokens, roleScopedTokens: rScoped };
+  }, [query, relatives]);
 
   return (
     <div className="bg-card border border-border rounded-lg p-5">
@@ -683,22 +827,26 @@ const ArchiveQuery = ({ getIdToken }) => {
                         <div className="flex flex-wrap gap-1.5 items-center">
                           {hit.persons.map((p, i) => {
                             const isPrincipal = ['Bruidegom', 'Bruid', 'Kind', 'Overledene', 'Geregistreerde'].includes(p.r);
+                            const { rendered, hasMatch } = renderHighlightedName(p.n, p.r, globalTokens, roleScopedTokens);
                             return (
                               <span
                                 key={i}
-                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] border font-medium ${isPrincipal
-                                    ? 'bg-accent/15 border-accent/40 text-accent'
-                                    : 'bg-muted/60 border-border/60 text-primary/80'
-                                  }`}
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] border font-medium transition-colors ${
+                                  hasMatch
+                                    ? 'bg-amber-500/20 border-amber-400/60 text-amber-100 shadow-xs ring-1 ring-amber-400/30'
+                                    : isPrincipal
+                                      ? 'bg-accent/15 border-accent/40 text-accent'
+                                      : 'bg-muted/60 border-border/60 text-primary/80'
+                                }`}
                               >
-                                <span>{p.n}</span>
+                                <span>{rendered}</span>
                                 {p.r && <span className="text-[10px] opacity-75 font-mono">({p.r})</span>}
                               </span>
                             );
                           })}
                         </div>
                       ) : (
-                        <span>{hit.names}</span>
+                        <span>{renderHighlightedName(hit.names, null, globalTokens, roleScopedTokens).rendered}</span>
                       )}
                     </button>
                     {hit.url && (
