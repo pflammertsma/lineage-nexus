@@ -144,16 +144,16 @@ const ArchiveQuery = ({ getIdToken }) => {
         <button
           type="button"
           onClick={() => setShowFilters(!showFilters)}
-          className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs transition-colors cursor-pointer ${
+          className={`h-7 inline-flex items-center gap-1.5 px-2.5 rounded-md border text-xs leading-none transition-colors cursor-pointer shrink-0 ${
             showFilters || activeFilterCount > 0
               ? 'bg-accent/10 border-accent/40 text-accent font-semibold'
               : 'bg-surface border-border text-secondary hover:text-primary'
           }`}
         >
-          <SlidersHorizontal size={13} />
-          <span>Filters</span>
+          <SlidersHorizontal size={13} className="shrink-0" />
+          <span className="leading-none">Filters</span>
           {activeFilterCount > 0 && (
-            <span className="w-4 h-4 rounded-full bg-accent text-on-accent text-[10px] font-bold flex items-center justify-center ml-0.5">
+            <span className="w-3.5 h-3.5 rounded-full bg-accent text-on-accent text-[9px] font-bold inline-flex items-center justify-center shrink-0 ml-0.5 leading-none pt-[1px]">
               {activeFilterCount}
             </span>
           )}
