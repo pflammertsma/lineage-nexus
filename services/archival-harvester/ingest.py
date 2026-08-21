@@ -42,6 +42,9 @@ from typing import Any, Dict, Iterator, List, Optional
 
 import meilisearch
 
+import schema
+from schema import transform, role_prefixes
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("ingest")
 
@@ -102,131 +105,14 @@ QUEUE_POLL_SECONDS = 5
 # at which the run should say so rather than block for ever.
 QUEUE_STALL_SECONDS = int(os.environ.get("INGEST_STALL_SECONDS", "900"))
 
-# Role prefixes are derived from each file's own header rather than hardcoded.
-#
-# The export is not one schema: birth records carry PR_/PR_FTHR_/PR_MTHR_ with
-# 180 columns, while marriage records use GROOM_/BRIDE_ (plus their parents) with
-# 231. A fixed list silently dropped every marriage record — 111,302 of them in a
-# single archive — because none of the expected prefixes matched. Reading the
-# header adapts to variants nobody has looked at yet.
-_NAME_SUFFIXES = ("_NAME_GN", "_NAME_SURN", "_NAME_PATR", "_NAME_SPRE", "_NAME")
-
-# Only used when a row has no explicit *_RELATIONTYPE.
-_ROLE_FALLBACK = {
-    "PR": "Hoofdpersoon",
-    "PR_FTHR": "Vader",
-    "PR_MTHR": "Moeder",
-    "GROOM": "Bruidegom",
-    "BRIDE": "Bruid",
-    "OTHER": "Overig",
-}
-
-
-def role_prefixes(fieldnames: List[str]) -> List[str]:
-    """Every prefix in this file that names a person, longest first."""
-    prefixes = set()
-    for column in fieldnames or []:
-        for suffix in _NAME_SUFFIXES:
-            if column.endswith(suffix):
-                prefix = column[: -len(suffix)]
-                if prefix:
-                    prefixes.add(prefix)
-                break
-    # Longest first so PR_FTHR is matched before PR would swallow it.
-    return sorted(prefixes, key=lambda p: (-len(p), p))
-
-
-def _default_role(prefix: str) -> str:
-    if prefix in _ROLE_FALLBACK:
-        return _ROLE_FALLBACK[prefix]
-    if prefix.startswith("WITNESS"):
-        return "Getuige"
-    if prefix.endswith("_FTHR"):
-        return "Vader"
-    if prefix.endswith("_MTHR"):
-        return "Moeder"
-    return prefix.replace("_", " ").title()
-
-
+# Row -> document now lives in schema.py, which also owns the role map, the
+# phonetic keys and the derived birth years. Kept here: the two helpers the
+# merge loop still needs.
 _GUID_BRACES = re.compile(r"[{}]")
-_TAGS = re.compile(r"<[^>]+>")
 
 
 def _clean(value: Optional[str]) -> str:
     return (value or "").strip()
-
-
-def _person_name(row: Dict[str, str], prefix: str) -> str:
-    """Assembles a display name in Dutch order: given, patronym, prefix, surname."""
-    parts = [
-        _clean(row.get(f"{prefix}_NAME_GN")),
-        _clean(row.get(f"{prefix}_NAME_PATR")),
-        _clean(row.get(f"{prefix}_NAME_SPRE")),
-        _clean(row.get(f"{prefix}_NAME_SURN")),
-    ]
-    name = " ".join(p for p in parts if p)
-    # Some archives fill only the combined field.
-    return name or _clean(row.get(f"{prefix}_NAME"))
-
-
-def transform(row: Dict[str, str], archive: str, kind: str,
-              prefixes: List[str]) -> Optional[Dict[str, Any]]:
-    """
-    One CSV row becomes one search document, or None if it carries no name.
-
-    A record with no person in it cannot be found by name and is only weight in
-    the index, so it is dropped rather than stored.
-    """
-    guid = _GUID_BRACES.sub("", _clean(row.get("SOURCE_RECORD_GUID")))
-    if not guid:
-        return None
-
-    persons: List[Dict[str, str]] = []
-    names: List[str] = []
-    for prefix in prefixes:
-        name = _person_name(row, prefix)
-        if not name:
-            continue
-        role = _clean(row.get(f"{prefix}_RELATIONTYPE")) or _default_role(prefix)
-        # Short keys: this repeats tens of millions of times, and the long form
-        # would cost more than the values themselves.
-        persons.append({"n": name, "r": role})
-        names.append(name)
-
-    if not names:
-        return None
-
-    year_raw = _clean(row.get("EVENT_YEAR")) or _clean(row.get("SOURCE_DATE_YEAR"))
-    try:
-        year = int(year_raw) if year_raw.isdigit() else 0
-    except ValueError:
-        year = 0
-
-    day = _clean(row.get("EVENT_DAY"))
-    month = _clean(row.get("EVENT_MONTH"))
-
-    return {
-        # Meilisearch primary keys allow only [A-Za-z0-9_-].
-        "id": f"{archive}_{guid}".replace("-", "_"),
-        "archive": archive,
-        "kind": kind,
-        "event_type": _clean(row.get("EVENT_TYPE")) or _clean(row.get("SOURCE_TYPE")),
-        "event_year": year,
-        "event_date": "-".join(p for p in (year_raw, month, day) if p),
-        "event_place": _clean(row.get("EVENT_PLACE")) or _clean(row.get("SOURCE_PLACE")),
-        # One blob of every name in the record: the field people actually search,
-        # and cheaper for Meilisearch than searching an array of objects.
-        "names": " ".join(names),
-        "persons": persons,
-        "institution": _clean(row.get("SOURCEREFERENCE_INSTITUTIONNAME")),
-        # When Open Archieven last changed this record. Our index is a snapshot of
-        # an export, so this is what tells you whether a local hit might be stale
-        # relative to their live data.
-        "last_changed": _clean(row.get("SOURCE_LASTCHANGEDATE")),
-        # Enough to reconstruct the permalink and fetch full detail on demand.
-        "guid": guid,
-        "url": f"https://www.openarchieven.nl/{archive}:{guid}",
-    }
 
 
 def download_export(url: str, destination: str) -> int:
@@ -322,6 +208,27 @@ def pending_tasks() -> Optional[int]:
         return None
 
 
+def _failed_task_count(since: Optional[str] = None) -> int:
+    """
+    How many indexing tasks the engine rejected, optionally only since a time.
+
+    Scoped by default to this run: a count of every failure ever recorded stays
+    non-zero for good once anything has failed, and a check that always fires is
+    a check nobody reads.
+    """
+    url = f"{MEILI_HOST}/tasks?statuses=failed&limit=0"
+    if since:
+        url += f"&afterEnqueuedAt={since}"
+    request = urllib.request.Request(
+        url, headers={"Authorization": f"Bearer {MEILI_MASTER_KEY}"}
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=15) as response:
+            return json.loads(response.read().decode("utf-8")).get("total", 0)
+    except Exception:
+        return 0
+
+
 def await_queue(threshold: int = MAX_PENDING_TASKS) -> None:
     """
     Blocks until the queue is shallow enough to accept more work.
@@ -377,14 +284,25 @@ def configure_index(client) -> Any:
     hours of work triggered by an edit that looks like a config tweak. Make such
     a change deliberately, and expect the rebuild.
     """
+    # The primary key must be stated, not inferred. Meilisearch refuses to guess
+    # when more than one field ends in "id", and this schema has both `id` and
+    # `guid` — so on a fresh index every document submission fails with
+    # `index_primary_key_multiple_candidates_found`. The old index predated the
+    # check and carried a primary key already, which is why it only appeared
+    # after the index was rebuilt from empty.
+    try:
+        client.create_index(INDEX_NAME, {"primaryKey": "id"})
+    except Exception:
+        pass  # Already exists, which is the normal case.
+
     index = client.index(INDEX_NAME)
     index.update_settings({
-        "searchableAttributes": ["names", "event_place", "event_type", "institution"],
-        "filterableAttributes": ["archive", "kind", "event_type", "event_year", "event_place"],
+        "searchableAttributes": schema.searchable_attributes(),
+        "filterableAttributes": schema.filterable_attributes(),
         "sortableAttributes": ["event_year"],
         "rankingRules": ["words", "typo", "proximity", "attribute", "sort", "exactness"],
-        # Dutch patronymics and archaic spellings vary a lot, so typo tolerance
-        # earns its keep here, but not on short strings where it adds noise.
+        # Phonetic keys already fold the systematic spelling variation, so typo
+        # tolerance only has to cover genuine slips.
         "typoTolerance": {
             "enabled": True,
             "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9},
@@ -436,26 +354,30 @@ def merged_documents(rows: Iterator[Dict[str, str]], archive: str, kind: str,
 
         if current is None:
             current = doc
-            seen = {(p["n"], p["r"]) for p in doc["persons"]}
+            seen = {(p["n"], p["role"]) for p in doc["persons"]}
             continue
 
-        # Same record, more people. Deduplicated because a person can repeat
-        # across rows in more than one role.
+        # Same record, more people. Deduplicated on name-and-role, since one
+        # person can legitimately appear twice in different roles.
         for person in doc["persons"]:
-            key = (person["n"], person["r"])
+            key = (person["n"], person["role"])
             if key in seen or len(current["persons"]) >= MAX_PERSONS_PER_RECORD:
                 continue
             seen.add(key)
             current["persons"].append(person)
-            current["names"] = f"{current['names']} {person['n']}"
 
-        # Later rows sometimes carry event detail the first row left blank.
         for field in ("event_type", "event_date", "event_place", "institution",
                       "last_changed"):
             if not current.get(field) and doc.get(field):
                 current[field] = doc[field]
         if not current.get("event_year") and doc.get("event_year"):
             current["event_year"] = doc["event_year"]
+
+        # Every phonetic key, role field and derived birth year is a function of
+        # `persons`, so rebuild them once the merge is done rather than patching
+        # incrementally — that is exactly how the old `names` blob drifted out of
+        # step with the persons it was meant to summarise.
+        schema.rebuild_search_fields(current)
 
     if current is not None:
         yield current
@@ -574,6 +496,7 @@ def main() -> int:
     except OSError as exc:
         logger.warning("could not write run plan: %s", exc)
 
+    run_started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     total = 0
     failures: List[str] = []
     for archive in args.archives:
@@ -605,6 +528,15 @@ def main() -> int:
         logger.error("done with FAILURES: %d file(s) did not complete: %s",
                      len(failures), ", ".join(failures))
     logger.info("done: %d documents submitted", total)
+
+    # Submitting is not indexing. Every task of the first arg run failed on a
+    # primary-key error while the run still logged "110971 documents submitted"
+    # and exited 0 — the same shape of silent success as the skipped files.
+    await_queue(threshold=0)
+    rejected = _failed_task_count(since=run_started)
+    if rejected:
+        logger.error("%d indexing task(s) FAILED - see /tasks?statuses=failed", rejected)
+        return 1
     logger.info("Meilisearch indexes asynchronously; check the admin dashboard for progress.")
     return 1 if failures else 0
 

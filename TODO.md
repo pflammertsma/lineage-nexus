@@ -522,13 +522,108 @@ Two things the test settled about "or similar":
   finds it. So the API needs both: filters for structure, `q` for fuzziness on
   one chosen field.
 
-- [ ] **Given-name variants remain unsolved.** `Sytse` does not find `Sietse` —
+- [x] **Phonetic key built and validated** (`phonetics.py`, `test_phonetics.py`).
+  Rejected Soundex and Metaphone (English pronunciation) and Beider-Morse (tuned
+  for Ashkenazi surnames across languages) in favour of rules derived from the
+  corpus itself. Measured over 80,000 rows each of `frl.dtb_d` and `frl.bsg`:
+
+  | key | spellings collapsed |
+  |---|---|
+  | `anti` | Antje 1509, Antie 1041, Antjen 51, Antien 36, Antye 24, Anttie 22 |
+  | `trinti` | Trijntje 900, Tryntie 510, Tryntje 486, Trijntie 368, Trintie 83 |
+  | `piter` | Pieter 812, Pyter 293, Pytter 221, Pijtter 192, Pijter 172 |
+  | `klas` | Klaas 458, Claas 374, Claes 331, Klaes 48 |
+
+  **An exact search for "Antje" reaches 56% of that name's pre-1811 records;
+  "Trijntje" 37%; "Klaas" 38%.** That is the recall this closes.
+
+  Reduction in distinct spellings: **51.5% pre-1811, 30.2% post-1811** — the gap
+  is itself evidence the rules track real orthographic drift rather than
+  over-merging. Inspected the largest groups by record count: every one reads as
+  a single name. Tests cover 11 families and 8 pairs that must *not* merge
+  (Antje/Aaltje, Vries/Visser, Dijkstra/Dijksma, Sietse/Sipke).
+
+  Rule order is load-bearing: the trailing schwa is stripped *before* vowel
+  folding, because -je/-ie/-e/-en is one ending written four ways.
+- [ ] **Vernacular/Latin name pairs still need a curated table.** Jan/Johannes,
+  Klaas/Nicolaas, Pieter/Petrus share no orthography, so no phonetic rule can
+  merge them without also merging genuinely different names. Keep the table
+  separate from the key so its false positives stay auditable.
+- [ ] ~~Given-name variants remain unsolved.~~ `Sytse` does not find `Sietse` —
   neither typo tolerance nor the normalisation above bridges it, because the
   difference is `ie`↔`y` inside the stem. Dutch given names vary far more than
   surnames (Sietse/Sytse/Sydse, Jan/Johannes/Joannes). This needs a phonetic key
   (Dutch-tuned Soundex/Metaphone) as an extra indexed field, or a curated
   variant dictionary. Worth deciding on before the re-ingest, since it is
   another derived field.
+
+### A2e. Schema implemented and proven on a test archive
+
+- [x] **Old index destroyed** — 26 GB, 15.4M documents, deliberately.
+- [x] **`phonetics.py`, `schema.py` written and tested** (32 schema tests, 11
+  phonetic families, 8 must-not-merge pairs). `ingest.py` and `config.py` both
+  take their settings from `schema.py`, so the gateway and the harvester can no
+  longer disagree about which fields exist — the failure that made names
+  unsearchable in the first place.
+- [x] **Test archive `arg`** (Streekarchief Rijnlands Midden): 10 MB compressed,
+  **all eight record types**, spans the 1811 boundary. 110,971 documents in ~30s.
+- [x] **Search verified against real records** — see
+  [`docs/search_test_records.md`](docs/search_test_records.md):
+
+  | check | result |
+  |---|---|
+  | "Hogervecht" literal vs phonetic | **60 -> 207 hits** |
+  | children of Kors Hogervegt, any spelling | 18 |
+  | "Antonia Plaisier, father Cornelis, married before 1880" | **exactly 1** |
+  | same query with Cornelis in the wrong role | **0** |
+  | derived birth-year filter on `by_bride` | works |
+
+  All in 0 ms. The negative control is the one that matters: it proves role
+  binding is real rather than incidental.
+
+- [x] **Two bugs the rebuild exposed:**
+  - **Primary key must be explicit.** Meilisearch refuses to infer one when two
+    fields end in `id` (`id` and `guid`), so on a fresh index *every* submission
+    failed. The old index predated the check and already had a key, which is why
+    it only appeared once the index was rebuilt from empty.
+  - **The harvester reported success while every task failed** — "110,971
+    documents submitted", exit 0, empty index. It now waits for the queue and
+    checks for rejected tasks *enqueued during this run*, and exits non-zero.
+
+- [ ] **`arg` contains every record twice**, under a lowercase-hex and an
+  uppercase-hex GUID: 20,278 duplicates in 110,971. Decide whether to dedupe at
+  ingest before harvesting more archives.
+
+### A2d. Role structure across all record types
+
+Surveyed 8,000 rows of each `frl` export. The exports come in **two structural
+shapes**, and the schema has to handle both:
+
+**Wide** — fixed named column slots, one row per record, role given by position:
+
+| kind | slots and fill rate |
+|---|---|
+| `dtb_d` baptism | PR (Dopeling) 99.1%, PR_FTHR 97.1%, PR_MTHR 60.0%, WITNESS_1 4.9% |
+| `dtb_t` church marriage | GROOM 100%, BRIDE 99.9% — **parents absent (0.0%)**, unlike civil |
+| `dtb_b` burial | PR (Overledene) 69.5%, PR_FTHR 2.4%, OTHER 3.2%; SPOUSE/PREV_HUSB unused in frl |
+| `bsh` civil marriage | GROOM, BRIDE + all four parents |
+| `bsg` / `bso` | PR, PR_FTHR, PR_MTHR |
+
+**Tall** — 44 columns, one person per row, many rows per record, role given by
+`RELATIONTYPE`:
+
+| kind | roles observed |
+|---|---|
+| `bev` population | Geregistreerde 7811, other:Vermeld 110, Vader 41, Moeder 38 |
+| `not` notarial | Vermeld 2829, Verkoper 1249, Koper 1212, Schuldenaar 580, Schuldeiser 532, Huurder 279, Verhuurder 160, Debiteur 74 |
+
+Design consequence: **one field per role**, scalar where the role is singular
+(groom, bride, father) and an array where it repeats (witnesses, notarial
+parties). Filters bind correctly either way, because binding only has to be
+exact *between* roles — Meilisearch matching any element of `role_verkoper`
+against any element of `role_koper` is still a correct seller/buyer pairing.
+
+Notarial deeds become queryable this way: "Verkoper named X to Koper named Y".
 
 ### A3. Deploy reliability
 
