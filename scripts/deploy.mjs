@@ -272,7 +272,21 @@ function deployArchival(config) {
   }
 }
 
-const TARGETS = { api: deployApi, web: deployWeb, rules: deployRules, archival: deployArchival };
+function deployMeili(config) {
+  const problem = archivalConfigProblem(config);
+  if (problem) {
+    fail(`Cannot deploy Meilisearch: ${problem}.`);
+  }
+
+  step('Deploying self-hosted Meilisearch database container');
+  const target = `${config.ociUser}@${config.ociHost}`;
+
+  step(`Syncing deploy_meili.sh to ${target}:/opt/archival-harvester/`);
+  run('scp', ['-i', config.ociKey, 'services/archival-harvester/deploy_meili.sh', `${target}:/opt/archival-harvester/deploy_meili.sh`]);
+  run('ssh', ['-i', config.ociKey, target, `bash /opt/archival-harvester/deploy_meili.sh '${config.meiliMasterKey}'`]);
+}
+
+const TARGETS = { api: deployApi, web: deployWeb, rules: deployRules, archival: deployArchival, meili: deployMeili };
 
 const target = process.argv[2];
 if (!target || (!TARGETS[target] && target !== 'all')) {
@@ -281,7 +295,7 @@ if (!target || (!TARGETS[target] && target !== 'all')) {
 }
 
 const config = loadConfig();
-if (target !== 'archival') {
+if (target !== 'archival' && target !== 'meili') {
   preflight(config);
 }
 
