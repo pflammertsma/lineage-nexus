@@ -19,8 +19,21 @@ METRICS_30D_INTERVAL_SECONDS = 900  # 15 minutes
 METRICS_30D_CAPACITY = (30 * 24 * 60 * 60) // METRICS_30D_INTERVAL_SECONDS  # 2,880 samples
 METRICS_30D_STATE_PATH = os.environ.get("METRICS_30D_STATE_PATH", "/state/metrics_30d.jsonl")
 
+# All-time tier: one row per day, and only when the corpus actually changed.
+#
+# Growth is the thing this tier exists to show, and on a quiet day there is
+# nothing to show — writing a row anyway would store thousands of identical
+# points to draw a flat line that two points already describe. A decade of
+# active days is a few thousand rows, so this never needs truncating.
+#
+# Note that a rebuild shows up as a drop to zero. That is real history, not a
+# glitch: the index has been deleted and rebuilt several times.
+METRICS_DAILY_STATE_PATH = os.environ.get("METRICS_DAILY_STATE_PATH", "/state/metrics_daily.jsonl")
+METRICS_DAILY_CAPACITY = 20 * 366  # twenty years of changed days
+
 _metrics: Deque[Dict[str, Any]] = deque(maxlen=METRICS_CAPACITY)
 _metrics_30d: Deque[Dict[str, Any]] = deque(maxlen=METRICS_30D_CAPACITY)
+_metrics_daily: Deque[Dict[str, Any]] = deque(maxlen=METRICS_DAILY_CAPACITY)  # filled below
 
 _prev_disk_io = None
 _prev_disk_io_t = None
@@ -91,6 +104,25 @@ def load_metrics_history() -> Deque[Dict[str, Any]]:
   return buf
 
 
+def load_metrics_daily_history() -> Deque[Dict[str, Any]]:
+  """Restores the all-time daily series. Never filtered by age."""
+  out: Deque[Dict[str, Any]] = deque(maxlen=METRICS_DAILY_CAPACITY)
+  if os.path.exists(METRICS_DAILY_STATE_PATH):
+    try:
+      with open(METRICS_DAILY_STATE_PATH, "r", encoding="utf-8") as f:
+        for line in f:
+          line = line.strip()
+          if not line:
+            continue
+          try:
+            out.append(json.loads(line))
+          except ValueError:
+            continue
+    except OSError:
+      pass
+  return out
+
+
 def load_metrics_30d_history() -> Deque[Dict[str, Any]]:
   buf: Deque[Dict[str, Any]] = deque(maxlen=METRICS_30D_CAPACITY)
   if not os.path.exists(METRICS_30D_STATE_PATH):
@@ -114,6 +146,7 @@ def load_metrics_30d_history() -> Deque[Dict[str, Any]]:
 
 _metrics = load_metrics_history()
 _metrics_30d = load_metrics_30d_history()
+_metrics_daily = load_metrics_daily_history()
 
 # Seed 30-day buffer from 24-hour high-res metrics if 30-day buffer is currently empty
 if not _metrics_30d and _metrics:
@@ -124,6 +157,36 @@ if not _metrics_30d and _metrics:
       _metrics_30d.append(pt)
       last_ts = t
   compact_30d_metrics_file()
+
+
+def _record_daily_if_changed(point: Dict[str, Any]) -> bool:
+  """
+  Appends one all-time row, but only when the corpus moved.
+
+  Returns True if a row was written. An unchanged day is not recorded: a flat
+  stretch is already described by the two points that bracket it, and the
+  endpoint appends the live sample so the series still reaches the present.
+  """
+  docs = point.get("docs")
+  if docs is None:
+    return False
+  today = time.strftime("%Y-%m-%d", time.gmtime(point.get("t", time.time())))
+  if _metrics_daily:
+    last = _metrics_daily[-1]
+    if last.get("docs") == docs and last.get("day") == today:
+      return False
+    if last.get("docs") == docs:
+      return False        # a new day, but nothing changed
+  row = dict(point)
+  row["day"] = today
+  _metrics_daily.append(row)
+  try:
+    os.makedirs(os.path.dirname(METRICS_DAILY_STATE_PATH), exist_ok=True)
+    with open(METRICS_DAILY_STATE_PATH, "a", encoding="utf-8") as f:
+      f.write(json.dumps(row) + chr(10))
+  except OSError:
+    pass
+  return True
 
 
 async def start_metrics_sampler():
@@ -202,6 +265,10 @@ async def start_metrics_sampler():
           f.write(json.dumps(point) + "\n")
       except OSError:
         pass
+
+      # All-time tier. Checked on the same cadence as the 30-day tier; the
+      # function itself decides whether the day is worth recording.
+      _record_daily_if_changed(point)
 
       # Record 30-day low-resolution sample every 15 minutes (900 seconds)
       if int(now) - last_30d_sample_t >= METRICS_30D_INTERVAL_SECONDS:

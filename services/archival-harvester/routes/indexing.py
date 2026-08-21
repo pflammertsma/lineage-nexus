@@ -22,7 +22,7 @@ logger = logging.getLogger("indexing")
 #   2  adds schema_version, event, archive, kind, index_documents,
 #      and a per-batch completion row carrying the engine duration
 TELEMETRY_SCHEMA_VERSION = 2
-from metrics import _get_disk_io_rates, _metrics, _metrics_30d
+from metrics import _get_disk_io_rates, _metrics, _metrics_30d, _metrics_daily
 from telemetry import batch_telemetry, save_batch_telemetry, _meili_get, _elapsed_since, synthesize_past_batch_samples
 from eta_engine import calculate_virtual_progress, compute_phase_weighted_eta
 from eta_engine import EtaEngine
@@ -129,36 +129,107 @@ def admin_status():
   }
 
 
+# A chart draws about this many points; more is payload nobody sees.
+MAX_HISTORY_POINTS = 360
+
+_RATE_FIELDS = ("cpu", "iowait", "mem", "disk")
+
+
+def _downsample_points(points, target):
+  """
+  Buckets points by time, averaging rates and taking the last document count.
+
+  Averaging `docs` would understate a monotonically growing series inside every
+  bucket, which is exactly the line the corpus chart is drawing.
+  """
+  if len(points) <= target:
+    return points
+  size = len(points) / target
+  out = []
+  for i in range(target):
+    lo = int(i * size)
+    hi = max(int((i + 1) * size), lo + 1)
+    chunk = points[lo:hi]
+    if not chunk:
+      continue
+    merged = dict(chunk[-1])
+    for field in _RATE_FIELDS:
+      vals = [c[field] for c in chunk if isinstance(c.get(field), (int, float))]
+      if vals:
+        merged[field] = round(sum(vals) / len(vals), 2)
+    out.append(merged)
+  return out
+
+
 @router.get("/api/v1/admin/history", dependencies=[Depends(require_admin)])
 @router.get("/api/v1/admin/metrics-history", dependencies=[Depends(require_admin)])
 def admin_history(
   minutes: Optional[int] = Query(None, ge=1),
   window_seconds: Optional[int] = Query(None, ge=1)
 ):
-  """Returns past metrics history samples across high-res (24h) and 30d low-res tiers."""
-  raw_sec = window_seconds if window_seconds is not None else (minutes * 60 if minutes is not None else 21600)
-  sec = min(30 * 86400, raw_sec)
-  cutoff = time.time() - sec
+  """
+  Metrics history over three tiers, downsampled to a size a phone can render.
 
-  source_buffer = _metrics_30d if sec > 86400 else _metrics
+  Tier is chosen by how far back the caller asks:
+
+      <= 24h    15-second samples
+      <= 30d    15-minute samples
+      >  30d    one row per day on which the corpus changed
+
+  The result is then bucketed to at most MAX_POINTS. A 6-hour window off the
+  15-second tier is 1,440 raw samples for a chart that draws 360 — four times
+  the payload for detail no screen resolves, which is felt on a phone and not on
+  a desktop.
+
+  Rates are averaged within a bucket; the document count takes the last value,
+  because averaging a monotonically growing series would understate it.
+  """
+  raw_sec = window_seconds if window_seconds is not None else (minutes * 60 if minutes is not None else 21600)
+
+  if raw_sec <= 86400:
+    source, tier = _metrics, "15s"
+  elif raw_sec <= 30 * 86400:
+    source, tier = _metrics_30d, "15m"
+  else:
+    source, tier = _metrics_daily, "1d"
+
+  # The all-time tier is never trimmed by age; the others are.
+  cutoff = 0 if tier == "1d" else time.time() - raw_sec
 
   points = []
-  for p in source_buffer:
-    if p.get("t", 0) >= cutoff:
-      pt = dict(p)
-      if "iowait" not in pt:
-        pt["iowait"] = pt.get("io", {}).get("iowait", 0.0)
-      if "mem" not in pt:
-        pt["mem"] = 16.8
-      if "disk" not in pt:
-        pt["disk"] = 17.1
-      if "indexing" not in pt:
-        pt["indexing"] = pt.get("is_indexing", False)
-      points.append(pt)
+  for p in source:
+    if p.get("t", 0) < cutoff:
+      continue
+    pt = dict(p)
+    if "iowait" not in pt:
+      pt["iowait"] = pt.get("io", {}).get("iowait", 0.0)
+    if "mem" not in pt:
+      pt["mem"] = 16.8
+    if "disk" not in pt:
+      pt["disk"] = 17.1
+    if "indexing" not in pt:
+      pt["indexing"] = pt.get("is_indexing", False)
+    points.append(pt)
+
+  raw_count = len(points)
+  points = _downsample_points(points, MAX_HISTORY_POINTS)
+
+  # A day on which nothing changed is not stored, so the daily series can end
+  # well before now. Anchoring it to the live sample keeps the line reaching the
+  # present instead of implying the corpus stopped existing.
+  if points and _metrics:
+    latest = _metrics[-1]
+    if latest.get("t", 0) > points[-1].get("t", 0):
+      tail = dict(latest)
+      tail.setdefault("iowait", tail.get("io", {}).get("iowait", 0.0))
+      points.append(tail)
+
   return {
     "status": "success",
-    "minutes": minutes or (sec // 60),
-    "window_seconds": sec,
+    "minutes": minutes or (raw_sec // 60),
+    "window_seconds": raw_sec,
+    "resolution": tier,
+    "raw_count": raw_count,
     "count": len(points),
     "points": points,
   }

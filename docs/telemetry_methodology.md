@@ -63,6 +63,37 @@ Meilisearch's own `duration` alongside `documents`, `status`, `started_at` and
 
 ---
 
+## Metrics storage tiers
+
+Separate from batch telemetry, the sampler keeps three tiers of system and
+corpus metrics:
+
+| tier | resolution | retention | file |
+|---|---|---|---|
+| high | 15 s | 24 h | `metrics.jsonl` |
+| medium | 15 min | 30 d | `metrics_30d.jsonl` |
+| **all-time** | **1 day** | **unbounded** | `metrics_daily.jsonl` |
+
+The all-time tier records a day **only when the corpus changed**. A flat stretch
+is already described by the two points that bracket it, so an idle week costs
+nothing; eleven days of which three saw change is three rows. A decade of active
+days is a few thousand rows.
+
+Two consequences worth knowing:
+
+- **A rebuild appears as a drop to zero.** That is real history — the index has
+  been deleted and rebuilt several times — not a rendering fault.
+- **The series can end before now**, since a quiet day writes nothing. The
+  history endpoint appends the live sample as a final point so the line still
+  reaches the present.
+
+`/api/v1/admin/history` picks the tier from the requested window and buckets the
+result to at most 360 points. Rates are averaged within a bucket; the document
+count takes the **last** value, because averaging a monotonically growing series
+understates it inside every bucket.
+
+---
+
 ## Captures we hold
 
 | capture | version | span | batches | notes |

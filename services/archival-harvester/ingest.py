@@ -156,19 +156,36 @@ def download_export(url: str, destination: str) -> int:
     return written
 
 
-def rows_from_file(path: str) -> Iterator[Any]:
+def rows_from_file(path: str, progress: Optional[Dict[str, Any]] = None) -> Iterator[Any]:
     """
     Yields the header, then each row, from a local gzipped pipe-delimited export.
 
-    Same contract as stream_rows, but reading a local file — so a long pause for
-    backpressure cannot break anything.
+    When `progress` is given it is updated in place with `bytes` and
+    `total_bytes`, tracking position in the **compressed** file. Row counts
+    cannot give a percentage — the total is unknown until the file has been
+    read — but the file is staged to disk before parsing, so its size is known
+    exactly and byte position is a real fraction of the work.
+
+    This slightly overstates progress, because the reader buffers ahead of the
+    row being yielded. On a file of any size that is a fraction of a percent.
     """
-    with gzip.open(path, "rb") as gz:
-        text = io.TextIOWrapper(gz, encoding="utf-8", errors="replace", newline="")
-        reader = csv.DictReader(text, delimiter="|", quoting=csv.QUOTE_NONE)
-        yield reader.fieldnames or []
-        for row in reader:
-            yield row
+    total = os.path.getsize(path)
+    if progress is not None:
+        progress["total_bytes"] = total
+        progress["bytes"] = 0
+
+    raw = open(path, "rb")
+    try:
+        with gzip.GzipFile(fileobj=raw) as gz:
+            text = io.TextIOWrapper(gz, encoding="utf-8", errors="replace", newline="")
+            reader = csv.DictReader(text, delimiter="|", quoting=csv.QUOTE_NONE)
+            yield reader.fieldnames or []
+            for row in reader:
+                if progress is not None:
+                    progress["bytes"] = raw.tell()
+                yield row
+    finally:
+        raw.close()
 
 
 def stream_rows(url: str) -> Iterator[Dict[str, str]]:
@@ -447,7 +464,8 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
                    batch: List[Dict[str, Any]]) -> int:
     count = 0
     batch_bytes = 0
-    rows = rows_from_file(staged)
+    file_progress: Dict[str, Any] = {}
+    rows = rows_from_file(staged, file_progress)
     prefixes = role_prefixes(next(rows))
     logger.info("  %s.%s: %d person roles in this schema", archive, kind, len(prefixes))
 
@@ -461,7 +479,11 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
             now = time.time()
             if row_count % 5000 == 0 or (now - last_log_t) >= 0.5:
                 rate = row_count / max(1e-6, now - started)
-                logger.info("  %s.%s: %d rows parsed, %d records generated (%.0f rows/s)",
+                done = file_progress.get("bytes") or 0
+                size = file_progress.get("total_bytes") or 0
+                pct = (100.0 * done / size) if size else 0.0
+                logger.info(
+                    "  %s.%s: %d rows parsed, %d records generated (%.0f rows/s, %.1f%%)",
                             archive, kind, row_count, count, rate)
                 last_log_t = now
             yield item

@@ -35,6 +35,22 @@ export function getArchiveColor(index) {
  * Timeline chart tracking historical record growth over time.
  * Supports Total Corpus, Stacked Archives, Stacked Record Types, and Single Archive/Kind drilldown modes.
  */
+// Growth ranges, deliberately different from the system chart's.
+//
+// An hour of corpus growth is a flat line: the count moves by a few thousand
+// against a total in the millions, so the shortest useful window is six hours.
+// The system chart keeps its 1h option, because that is the resolution that
+// exposed a 98 MB/s I/O stall — the two charts answer different questions and
+// should not share a selector.
+//
+// ALL is ten years, which the API reads as "use the daily tier".
+const GROWTH_RANGES = [
+  { minutes: 360, label: '6h' },
+  { minutes: 1440, label: '24h' },
+  { minutes: 43200, label: '30d' },
+  { minutes: 5256000, label: 'All' },
+];
+
 const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRangeChange }) => {
   const [selectedFilter, setSelectedFilter] = useState(() => {
     try {
@@ -235,6 +251,7 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
       height={height}
       rangeMinutes={rangeMinutes}
       onRangeChange={onRangeChange}
+      ranges={GROWTH_RANGES}
       controls={controls}
       summaryValue={summaryValue}
       emptyMessage="Collecting growth history samples…"

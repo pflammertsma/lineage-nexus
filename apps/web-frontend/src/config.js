@@ -17,6 +17,9 @@ export const SYNC_CONSENT_STORAGE = 'lineage_sync_consent';
 export const ADMIN_HARVEST_STATUS_FILTER_STORAGE = 'lineage_admin_harvest_status_filter';
 export const ADMIN_CHART_ARCHIVE_FILTER_STORAGE = 'lineage_admin_chart_archive_filter';
 export const ADMIN_CHART_RANGE_STORAGE = 'lineage_admin_chart_range';
+// The growth chart keeps its own window: its ranges start at 6h and reach
+// 'All', while the system chart starts at 1h and stops at 24h.
+export const ADMIN_GROWTH_RANGE_STORAGE = 'lineage_admin_growth_range';
 
 // Firebase web config. These values are not secrets — they identify the project to the
 // client, and access is governed by the Firestore security rules in firestore.rules.

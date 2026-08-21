@@ -5,7 +5,7 @@ import {
   Database, AlertTriangle, CheckCircle2,
   Layers, Search, PieChart,
 } from 'lucide-react';
-import { ADMIN_API_BASE_URL, setArchiveNames, setKindLabels, ADMIN_CHART_RANGE_STORAGE } from '../config';
+import { ADMIN_API_BASE_URL, setArchiveNames, setKindLabels, ADMIN_CHART_RANGE_STORAGE, ADMIN_GROWTH_RANGE_STORAGE } from '../config';
 import MetricChart from './MetricChart';
 import CorpusGrowthChart from './CorpusGrowthChart';
 import ArchiveQuery from './ArchiveQuery';
@@ -82,6 +82,29 @@ const AdminDashboard = ({ getIdToken, tab: tabProp }) => {
     setRangeMinutesState(mins);
     try {
       localStorage.setItem(ADMIN_CHART_RANGE_STORAGE, String(mins));
+    } catch {
+      // Ignore storage error
+    }
+  }, []);
+
+  // The growth chart has its own window, because its range set no longer
+  // overlaps the system chart's: growth starts at 6h and reaches "All", system
+  // starts at 1h and stops at 24h. Sharing one value would leave whichever
+  // chart lacked that option with no button selected.
+  const [growthHistory, setGrowthHistory] = useState([]);
+  const [growthRangeMinutes, setGrowthRangeMinutesState] = useState(() => {
+    try {
+      const stored = localStorage.getItem(ADMIN_GROWTH_RANGE_STORAGE);
+      return stored ? Number(stored) : 1440;
+    } catch {
+      return 1440;
+    }
+  });
+
+  const setGrowthRangeMinutes = useCallback((mins) => {
+    setGrowthRangeMinutesState(mins);
+    try {
+      localStorage.setItem(ADMIN_GROWTH_RANGE_STORAGE, String(mins));
     } catch {
       // Ignore storage error
     }
@@ -170,6 +193,21 @@ const AdminDashboard = ({ getIdToken, tab: tabProp }) => {
         // Non-critical
       }
 
+      // The growth window is usually much longer, and the server picks a
+      // coarser tier for it, so this is a separate and much smaller response.
+      try {
+        const growthRes = await fetch(
+          `${ADMIN_API_BASE_URL}/api/v1/admin/history?minutes=${growthRangeMinutes}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (growthRes.ok) {
+          const body = await growthRes.json();
+          if (body.status === 'success') setGrowthHistory(body.points || []);
+        }
+      } catch {
+        // Non-critical
+      }
+
       // Compute 3-minute moving average over recent history samples (~12 x 15s points) to prevent spurious dots
       const recentSamples = points.slice(-12);
       let cpuAvg = nextStatus?.system?.cpu_percent ?? 0;
@@ -245,7 +283,7 @@ const AdminDashboard = ({ getIdToken, tab: tabProp }) => {
     } finally {
       setLoading(false);
     }
-  }, [getIdToken, rangeMinutes, noteFailure]);
+  }, [getIdToken, rangeMinutes, growthRangeMinutes, noteFailure]);
 
   useEffect(() => {
     load();
@@ -387,9 +425,9 @@ const AdminDashboard = ({ getIdToken, tab: tabProp }) => {
             {activeTab === 'coverage' && (
               <div className="space-y-8">
                 <CorpusGrowthChart
-                  points={history}
-                  rangeMinutes={rangeMinutes}
-                  onRangeChange={setRangeMinutes}
+                  points={growthHistory}
+                  rangeMinutes={growthRangeMinutes}
+                  onRangeChange={setGrowthRangeMinutes}
                 />
                 <ArchiveCoverage coverage={coverage} />
               </div>
