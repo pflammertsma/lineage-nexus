@@ -1,29 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, ExternalLink, Loader2, ChevronRight, SlidersHorizontal, MapPin, X, HelpCircle, UserPlus, Plus } from 'lucide-react';
-import { ADMIN_API_BASE_URL } from '../config';
+import { ADMIN_API_BASE_URL, getKindLabel } from '../config';
 
-/**
- * What each record-type code means. Verified against the live index by reading
- * the EVENT_TYPE of real documents rather than inferred from the abbreviations —
- * `dtb_b`/`dtb_d` are easy to transpose (Begraven vs Doop) and getting them
- * backwards would mislabel every burial as a baptism.
- *
- * BS = Burgerlijke Stand, civil registration from 1811.
- * DTB = Doop-, Trouw- en Begraafboeken, the church registers that precede it.
- */
-const KIND_LABELS = {
-  bsg: 'Burgerlijke Stand — Geboorte (civil birth register, 1811 onwards)',
-  bsh: 'Burgerlijke Stand — Huwelijk (civil marriage register, 1811 onwards)',
-  bso: 'Burgerlijke Stand — Overlijden (civil death register, 1811 onwards)',
-  bev: 'Bevolkingsregister (population register — households and residents)',
-  dtb_d: 'DTB — Doop (church baptism register, generally pre-1811)',
-  dtb_t: 'DTB — Trouwen (church marriage register, generally pre-1811)',
-  dtb_b: 'DTB — Begraven (church burial register, generally pre-1811)',
-  not: 'Notarieel (notarial deeds — wills, estates, contracts)',
-};
-
-const kindLabel = (kind) => KIND_LABELS[kind] || `Record type: ${kind}`;
+const kindLabel = (kind) => getKindLabel(kind);
 
 /**
  * Direct search on the Meilisearch index.

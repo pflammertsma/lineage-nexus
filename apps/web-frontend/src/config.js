@@ -61,6 +61,24 @@ export function setArchiveNames(names) {
   }
 }
 
+// Institutional Register Kinds Single Source of Truth
+export const REGISTER_KIND_LABELS = {
+  bsg: 'Birth Certificates (bsg)',
+  bsh: 'Marriage Certificates (bsh)',
+  bso: 'Death Certificates (bso)',
+  bev: 'Population Register (bev)',
+  dtb_d: 'Baptism Register (dtb_d)',
+  dtb_t: 'Church Marriages (dtb_t)',
+  dtb_b: 'Burial Register (dtb_b)',
+  not: 'Notarial Deeds (not)',
+};
+
+export function getKindLabel(kind) {
+  if (!kind) return '';
+  const key = String(kind).toLowerCase();
+  return REGISTER_KIND_LABELS[key] || `register: ${kind}`;
+}
+
 export function getArchiveName(code) {
   if (!code) return 'Unknown Archive';
   const key = String(code).toLowerCase();

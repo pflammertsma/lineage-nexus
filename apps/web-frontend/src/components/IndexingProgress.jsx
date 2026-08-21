@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Layers, Loader2, AlertTriangle, CheckCircle2, XCircle, Trash2, History } from 'lucide-react';
-import { getArchiveName, ADMIN_API_BASE_URL } from '../config';
+import { getArchiveName, getKindLabel, ADMIN_API_BASE_URL } from '../config';
 import { formatDuration, formatAgo } from '../utils/formatters';
 import IndexingHistory from './IndexingHistory';
 
@@ -114,14 +114,16 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
     );
   }
 
-  const batch = indexing.current_batch;
+  const rawBatch = indexing.current_batch;
   const queue = indexing.queue || {};
   const pending = queue.total_pending || 0;
-  const busy = indexing.is_indexing || pending > 0;
+  const job = indexing.current_ingest;
+  const busy = Boolean(indexing.is_indexing);
+  const batch = rawBatch || (busy ? indexing.recent_batches?.[0] : null);
   const stalled = indexing.stalled_seconds;
 
   const stallLevel =
-    busy && Number.isFinite(stalled)
+    busy && Number.isFinite(stalled) && stalled > 0
       ? stalled >= STALL_ALERT_SECONDS
         ? 'alert'
         : stalled >= STALL_WARN_SECONDS
@@ -129,7 +131,6 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
           : null
       : null;
 
-  const job = indexing.current_ingest;
   const lastIndexTime = indexing.recent_batches?.[0]?.finished_at || indexing.recent_batches?.[0]?.started_at;
 
   return (
@@ -297,12 +298,14 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
                 {getArchiveName(job.archive)}
               </span>
               <span className="text-xs text-secondary/70">
-                · {job.phase === 'indexing_in_engine' ? 'Payloads submitted — engine building search index' : `Harvesting stream (${job.phase || 'downloading'})`}
+                · {job.phase === 'indexing_in_engine'
+                    ? 'Payloads submitted — engine building search index'
+                    : `Harvesting ${job.kind ? getKindLabel(job.kind) : 'stream'}`}
               </span>
             </div>
-            {job.speed_mbs > 0 && (
+            {(job.rows_per_second > 0 || job.speed_mbs > 0) && (
               <span className="text-xs font-medium text-accent">
-                {job.speed_mbs.toFixed(1)} MB/s ({job.documents_per_second?.toLocaleString() || 0} docs/s)
+                {job.rows_per_second ? `${Math.round(job.rows_per_second).toLocaleString()} docs/s` : `${job.speed_mbs.toFixed(1)} MB/s`}
               </span>
             )}
           </div>
@@ -310,14 +313,25 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
           <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden mb-2">
             <div
               className={`h-full transition-all duration-300 rounded-full ${job.phase === 'indexing_in_engine' ? 'bg-amber-500 animate-pulse' : 'bg-accent'}`}
-              style={{ width: `${Math.min(100, Math.max(0, job.percent || (job.phase === 'indexing_in_engine' ? 100 : 0)))}%` }}
+              style={{
+                width: `${
+                  job.files_total > 0
+                    ? Math.min(100, Math.max(5, (((job.files_completed || 0) + (job.phase === 'indexing_in_engine' ? 1 : 0.5)) / job.files_total) * 100))
+                    : (job.phase === 'indexing_in_engine' ? 100 : 5)
+                }%`
+              }}
             />
           </div>
           <div className="flex items-center justify-between text-xs text-secondary flex-wrap gap-2">
             <span>
-              {job.phase === 'indexing_in_engine'
-                ? `Ingestion payloads submitted · Waiting for Meilisearch index build`
-                : `${job.downloaded_mb?.toFixed(1) || 0} MB of ${job.total_mb?.toFixed(1) || '?'} MB ${job.documents ? ` · ${job.documents.toLocaleString()} docs extracted` : ''}`}
+              {job.files_total != null && job.files_total > 0 && (
+                <span className="font-semibold text-primary mr-1.5">
+                  File {Math.min(job.files_total, (job.files_completed || 0) + (job.phase === 'indexing_in_engine' ? 0 : 1))} of {job.files_total} ·
+                </span>
+              )}
+              {job.submitted != null
+                ? `${job.submitted.toLocaleString()} records extracted & submitted`
+                : (job.phase === 'indexing_in_engine' ? 'Ingestion payloads submitted · Waiting for Meilisearch index build' : 'Streaming harvest files...')}
             </span>
             {job.eta_seconds != null && (
               <span>ETA ~{formatDuration(job.eta_seconds)}</span>
@@ -327,7 +341,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
       )}
 
       {/* Stage 2: Active Meilisearch Engine Indexing Progress */}
-      {batch && busy && (
+      {batch && (rawBatch || busy) && (
         <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
             <div className="flex items-center gap-2 flex-wrap">

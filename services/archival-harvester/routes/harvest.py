@@ -75,7 +75,7 @@ def _harvest_queue_worker():
     log_path = os.path.join(log_dir, "ingest.log")
 
     try:
-      with open(log_path, "a", encoding="utf-8") as log_file:
+      with open(log_path, "w", encoding="utf-8") as log_file:
         _active_ingest_process = subprocess.Popen(
           cmd, stdout=log_file, stderr=subprocess.STDOUT, cwd=service_root
         )
@@ -119,9 +119,12 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
   completed = 0
   is_active = False
 
+  total_submitted = 0
   for line in lines:
-    if _INGEST_FINISHED.search(line):
+    match = _INGEST_FINISHED.search(line)
+    if match:
       completed += 1
+      total_submitted += int(match.group(3).replace(",", ""))
 
   for line in tail:
     match = _INGEST_STREAMING.search(line)
@@ -161,11 +164,13 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
   has_active_archive = bool(_current_harvest_archive)
   phase = "streaming" if is_active else ("indexing_in_engine" if has_active_archive else "idle")
 
+  final_submitted = (total_submitted + (submitted or 0)) if is_active else (total_submitted if total_submitted > 0 else submitted)
+
   return {
     "archive": active_archive,
     "kind": kind,
     "files_total": planned_cnt,
-    "submitted": submitted,
+    "submitted": final_submitted,
     "rows_per_second": rate if is_active else None,
     "waiting_for_queue": waiting if is_active else False,
     "files_completed": completed,

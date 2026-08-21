@@ -453,10 +453,14 @@ def admin_indexing():
     current_arch = _current_harvest_archive
     pending_archs = list(_harvest_queue_list)
 
+  ingest_status = _current_ingest() or {}
+  is_active_ingest = ingest_status.get("is_active", False)
+  is_actually_busy = bool((enqueued + processing) > 0 or current_arch or pending_archs or is_active_ingest)
+
   return {
     "status": "success",
     "documents": documents,
-    "is_indexing": is_indexing or bool(current_arch or pending_archs),
+    "is_indexing": is_actually_busy,
     "archive_names": ARCHIVE_NAMES,
     "queue": {
       "enqueued": enqueued,
@@ -470,13 +474,13 @@ def admin_indexing():
       "pending_count": len(pending_archs),
     },
     "current_batch": current,
-    "current_ingest": _current_ingest(),
+    "current_ingest": ingest_status,
     "recent_batches": recent,
-    "documents_per_second": round(rate, 1) if rate is not None else None,
-    "stalled_seconds": _seconds_since_progress(),
+    "documents_per_second": round(rate, 1) if (rate is not None and is_actually_busy) else None,
+    "stalled_seconds": _seconds_since_progress() if is_actually_busy else None,
     "pending_documents": pending_documents,
-    "eta_seconds": eta_seconds,
-    "naive_eta_seconds": naive_eta_seconds,
+    "eta_seconds": eta_seconds if is_actually_busy else None,
+    "naive_eta_seconds": naive_eta_seconds if is_actually_busy else None,
   }
 
 
