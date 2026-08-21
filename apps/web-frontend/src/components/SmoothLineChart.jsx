@@ -241,10 +241,38 @@ const SmoothLineChart = ({
   if (!chart) {
     return (
       <div className="bg-card border border-border rounded-lg p-5">
-        <div className="flex items-center gap-2 mb-3">
-          {Icon && <Icon size={14} className="text-secondary shrink-0" />}
-          <p className="text-[10px] font-bold uppercase tracking-widest text-secondary">{title}</p>
+        <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-2">
+              {Icon && <Icon size={14} className="text-secondary shrink-0" />}
+              <span className="text-[10px] font-bold uppercase tracking-widest text-secondary">
+                {title}
+              </span>
+            </div>
+            {controls}
+          </div>
+
+          <div className="flex items-center gap-4">
+            {summaryValue}
+            <div className="flex rounded-md border border-border overflow-hidden">
+              {ranges.map((r) => (
+                <button
+                  key={r.minutes}
+                  type="button"
+                  onClick={() => onRangeChange?.(r.minutes)}
+                  aria-pressed={rangeMinutes === r.minutes}
+                  className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${rangeMinutes === r.minutes
+                    ? 'bg-accent text-on-accent'
+                    : 'text-secondary hover:text-primary'
+                    }`}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+
         <div className="flex items-center justify-center text-xs text-secondary" style={{ height }}>
           {emptyMessage}
         </div>

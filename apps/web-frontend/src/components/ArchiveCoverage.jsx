@@ -127,9 +127,8 @@ const ArchiveCoverage = ({ coverage }) => {
               onClick={() => setShowGlossary((open) => !open)}
               aria-expanded={showGlossary}
               aria-label="Explain the archive and record type codes"
-              className={`transition-colors cursor-pointer ${
-                showGlossary ? 'text-accent' : 'text-secondary/60 hover:text-accent'
-              }`}
+              className={`transition-colors cursor-pointer ${showGlossary ? 'text-accent' : 'text-secondary/60 hover:text-accent'
+                }`}
             >
               <HelpCircle size={13} />
             </button>
@@ -144,6 +143,56 @@ const ArchiveCoverage = ({ coverage }) => {
             <Glossary archives={archives} onClose={() => setShowGlossary(false)} />
           </div>
         )}
+      </div>
+
+      {/* Grid Section 2: By Record Type Breakdown */}
+      <div className="bg-card border border-border rounded-lg p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <PieChart size={14} className="text-secondary shrink-0" />
+          <p className="text-[10px] font-bold uppercase tracking-widest text-secondary">
+            Records by Type
+          </p>
+        </div>
+
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-12 items-start">
+          {/* Left: Progress List */}
+          <div className="lg:col-span-7">
+            <ul className="space-y-2">
+              {kinds.map((row, idx) => {
+                const color = KIND_COLORS[row.kind] || getArchiveColor(idx + 5);
+                return (
+                  <li key={row.kind} className="text-xs">
+                    <div className="flex justify-between gap-2 mb-1">
+                      <span
+                        className="text-primary font-medium cursor-help flex items-center gap-1.5 truncate"
+                        title={KIND_LABELS[row.kind] || row.kind}
+                      >
+                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
+                        <span className="font-mono text-[10px] text-accent font-bold shrink-0">{row.kind}</span>
+                        <span className="text-secondary truncate">{KIND_SHORT[row.kind] || row.kind}</span>
+                      </span>
+                      <span className="text-secondary font-mono tabular-nums shrink-0">{row.records.toLocaleString()}</span>
+                    </div>
+                    <div aria-hidden="true" className="h-1.5 rounded-full bg-muted overflow-hidden">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${(row.records / topKind) * 100}%`,
+                          background: color,
+                        }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          {/* Right: Pie Chart */}
+          <div className="lg:col-span-5 w-full flex justify-center">
+            <DonutChart data={kindPieData} totalValue={total} title="Record Types" />
+          </div>
+        </div>
       </div>
 
       {/* Grid Section 1: By Archive Breakdown */}
@@ -189,56 +238,6 @@ const ArchiveCoverage = ({ coverage }) => {
           {/* Right: Pie Chart */}
           <div className="lg:col-span-5 w-full flex justify-center">
             <DonutChart data={archivePieData} totalValue={total} title="Archives" />
-          </div>
-        </div>
-      </div>
-
-      {/* Grid Section 2: By Record Type Breakdown */}
-      <div className="bg-card border border-border rounded-lg p-5">
-        <div className="flex items-center gap-2 mb-4">
-          <PieChart size={14} className="text-secondary shrink-0" />
-          <p className="text-[10px] font-bold uppercase tracking-widest text-secondary">
-            Records by Record Type
-          </p>
-        </div>
-
-        <div className="grid gap-6 grid-cols-1 lg:grid-cols-12 items-start">
-          {/* Left: Progress List */}
-          <div className="lg:col-span-7">
-            <ul className="space-y-2">
-              {kinds.map((row, idx) => {
-                const color = KIND_COLORS[row.kind] || getArchiveColor(idx + 5);
-                return (
-                  <li key={row.kind} className="text-xs">
-                    <div className="flex justify-between gap-2 mb-1">
-                      <span
-                        className="text-primary font-medium cursor-help flex items-center gap-1.5 truncate"
-                        title={KIND_LABELS[row.kind] || row.kind}
-                      >
-                        <span className="w-2 h-2 rounded-full shrink-0" style={{ background: color }} />
-                        <span className="font-mono text-[10px] text-accent font-bold shrink-0">{row.kind}</span>
-                        <span className="text-secondary truncate">{KIND_SHORT[row.kind] || row.kind}</span>
-                      </span>
-                      <span className="text-secondary font-mono tabular-nums shrink-0">{row.records.toLocaleString()}</span>
-                    </div>
-                    <div aria-hidden="true" className="h-1.5 rounded-full bg-muted overflow-hidden">
-                      <div
-                        className="h-full rounded-full transition-all duration-300"
-                        style={{
-                          width: `${(row.records / topKind) * 100}%`,
-                          background: color,
-                        }}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-
-          {/* Right: Pie Chart */}
-          <div className="lg:col-span-5 w-full flex justify-center">
-            <DonutChart data={kindPieData} totalValue={total} title="Record Types" />
           </div>
         </div>
       </div>

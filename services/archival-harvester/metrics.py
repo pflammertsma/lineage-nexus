@@ -170,9 +170,12 @@ async def start_metrics_sampler():
         iowait_pct = 0.0
 
       archive_dist = {}
+      kind_dist = {}
       try:
-        facets = meili_client.index(INDEX_NAME).search("", {"limit": 0, "facets": ["archive"]})
-        archive_dist = facets.get("facetDistribution", {}).get("archive", {}) or {}
+        facets = meili_client.index(INDEX_NAME).search("", {"limit": 0, "facets": ["archive", "kind"]})
+        facet_dist = facets.get("facetDistribution", {}) or {}
+        archive_dist = facet_dist.get("archive", {}) or {}
+        kind_dist = facet_dist.get("kind", {}) or {}
       except Exception:
         pass
 
@@ -184,6 +187,7 @@ async def start_metrics_sampler():
         "disk": round(disk.percent, 1),
         "docs": docs_cnt,
         "archives": archive_dist,
+        "kinds": kind_dist,
         "indexing": is_idx,
         "is_indexing": is_idx,
         "enqueued": enqueued,

@@ -1,14 +1,28 @@
 import React, { useMemo, useState } from 'react';
 import { Database, Filter } from 'lucide-react';
-import { getArchiveName, ADMIN_CHART_ARCHIVE_FILTER_STORAGE } from '../config';
+import { getArchiveName, getKindLabel, ADMIN_CHART_ARCHIVE_FILTER_STORAGE } from '../config';
 import SmoothLineChart from './SmoothLineChart';
+
+const KIND_SHORT = {
+  bsg: 'Births', bsh: 'Marriages', bso: 'Deaths', bev: 'Population',
+  dtb_d: 'Baptisms', dtb_t: 'Marriages (church)', dtb_b: 'Burials', not: 'Notarial',
+};
+
+const KIND_COLORS = {
+  bev: '#10B981',   // Population - Emerald
+  bsg: '#3B82F6',   // Births - Blue
+  bso: '#6366F1',   // Deaths - Indigo
+  not: '#F97316',   // Notarial - Orange
+  dtb_d: '#06B6D4', // Baptisms - Cyan
+  bsh: '#EC4899',   // Marriages - Pink
+  dtb_t: '#F59E0B', // Church Marriages - Amber
+  dtb_b: '#8B5CF6', // Burials - Purple
+};
 
 /**
  * Generates an infinitely distinct, visually harmonious HSL color for any archive index
  * using the Golden Ratio (Golden Angle = 137.508°).
  */
-// Pure helper shared with other components, co-located with the chart that
-// defines its behaviour. The rule below only governs hot-reload granularity.
 // eslint-disable-next-line react-refresh/only-export-components
 export function getArchiveColor(index) {
   const hue = (index * 137.508) % 360;
@@ -19,10 +33,10 @@ export function getArchiveColor(index) {
 
 /**
  * Timeline chart tracking historical record growth over time.
- * Supports Total Corpus, Stacked Area Breakdown, and Single Archive drilldown modes.
+ * Supports Total Corpus, Stacked Archives, Stacked Record Types, and Single Archive/Kind drilldown modes.
  */
 const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRangeChange }) => {
-  const [selectedArchive, setSelectedArchive] = useState(() => {
+  const [selectedFilter, setSelectedFilter] = useState(() => {
     try {
       return localStorage.getItem(ADMIN_CHART_ARCHIVE_FILTER_STORAGE) || 'all';
     } catch {
@@ -30,8 +44,8 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
     }
   });
 
-  const handleArchiveChange = (val) => {
-    setSelectedArchive(val);
+  const handleFilterChange = (val) => {
+    setSelectedFilter(val);
     try {
       localStorage.setItem(ADMIN_CHART_ARCHIVE_FILTER_STORAGE, val);
     } catch {
@@ -39,52 +53,76 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
     }
   };
 
-  // Extract all distinct archive codes seen in metrics
-  // Filter points for breakdown mode to only include timestamps where archive sampling was active
-  const validPoints = useMemo(() => {
-    if (selectedArchive === 'all') return points;
-    return points.filter((p) => p.archives && typeof p.archives === 'object' && Object.keys(p.archives).length > 0);
-  }, [points, selectedArchive]);
+  const isStackedArchives = selectedFilter === 'stacked' || selectedFilter === 'stacked-archives';
+  const isStackedKinds = selectedFilter === 'stacked-kinds';
+  const isStacked = isStackedArchives || isStackedKinds;
 
-  // Extract all distinct archive codes seen in metrics
+  // Extract all distinct archive and kind codes seen in metrics
+  const validPoints = useMemo(() => {
+    if (selectedFilter === 'all') return points;
+    return points.filter((p) => (p.archives && typeof p.archives === 'object' && Object.keys(p.archives).length > 0) || (p.kinds && typeof p.kinds === 'object' && Object.keys(p.kinds).length > 0));
+  }, [points, selectedFilter]);
+
   const availableArchives = useMemo(() => {
     const set = new Set();
-    validPoints.forEach((p) => {
+    points.forEach((p) => {
       if (p.archives && typeof p.archives === 'object') {
         Object.keys(p.archives).forEach((k) => set.add(k));
       }
     });
 
-    // Sort by latest document count descending so largest archive sits at bottom of stack
-    const latestArchives = validPoints[validPoints.length - 1]?.archives || {};
+    const latestArchives = points[points.length - 1]?.archives || {};
     return Array.from(set).sort((a, b) => (latestArchives[b] || 0) - (latestArchives[a] || 0));
-  }, [validPoints]);
+  }, [points]);
 
-  const isStacked = selectedArchive === 'stacked';
+  const availableKinds = useMemo(() => {
+    const set = new Set();
+    points.forEach((p) => {
+      if (p.kinds && typeof p.kinds === 'object') {
+        Object.keys(p.kinds).forEach((k) => set.add(k));
+      }
+    });
 
-  // Transform raw points to include archive values directly on point keys
+    const latestKinds = points[points.length - 1]?.kinds || {};
+    return Array.from(set).sort((a, b) => (latestKinds[b] || 0) - (latestKinds[a] || 0));
+  }, [points]);
+
+  // Transform raw points to include values directly on point keys
   const transformedPoints = useMemo(() => {
     return validPoints.map((p) => {
       const archivesObj = p.archives || {};
+      const kindsObj = p.kinds || {};
       let value = null;
-      if (selectedArchive === 'all') {
+
+      if (selectedFilter === 'all') {
         value = typeof p.docs === 'number' ? p.docs : null;
-      } else if (selectedArchive !== 'stacked') {
-        value = typeof archivesObj[selectedArchive] === 'number' ? archivesObj[selectedArchive] : 0;
+      } else if (selectedFilter.startsWith('arch_')) {
+        const archCode = selectedFilter.replace('arch_', '');
+        value = typeof archivesObj[archCode] === 'number' ? archivesObj[archCode] : 0;
+      } else if (selectedFilter.startsWith('kind_')) {
+        const kindCode = selectedFilter.replace('kind_', '');
+        value = typeof kindsObj[kindCode] === 'number' ? kindsObj[kindCode] : 0;
+      } else if (selectedFilter === 'stacked' || selectedFilter === 'stacked-archives') {
+        value = typeof p.docs === 'number' ? p.docs : null;
+      } else if (selectedFilter === 'stacked-kinds') {
+        value = typeof p.docs === 'number' ? p.docs : null;
       }
 
       const row = { ...p, value };
       availableArchives.forEach((code) => {
-        row[code] = typeof archivesObj[code] === 'number' ? archivesObj[code] : 0;
+        row[`arch_${code}`] = typeof archivesObj[code] === 'number' ? archivesObj[code] : 0;
+      });
+      availableKinds.forEach((code) => {
+        row[`kind_${code}`] = typeof kindsObj[code] === 'number' ? kindsObj[code] : 0;
       });
       return row;
     });
-  }, [validPoints, selectedArchive, availableArchives]);
+  }, [validPoints, selectedFilter, availableArchives, availableKinds]);
 
   const series = useMemo(() => {
-    if (isStacked) {
+    if (isStackedArchives) {
       return availableArchives.map((code, idx) => ({
-        field: code,
+        field: `arch_${code}`,
         label: getArchiveName(code),
         colour: getArchiveColor(idx),
         formatter: (val, hoveredPoint) => {
@@ -96,15 +134,37 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
       }));
     }
 
+    if (isStackedKinds) {
+      return availableKinds.map((code, idx) => ({
+        field: `kind_${code}`,
+        label: KIND_SHORT[code] || getKindLabel(code) || code.toUpperCase(),
+        colour: KIND_COLORS[code] || getArchiveColor(idx + 5),
+        formatter: (val, hoveredPoint) => {
+          const count = typeof val === 'number' ? val : 0;
+          const total = hoveredPoint?.docs || 1;
+          const pct = ((count / total) * 100).toFixed(1);
+          return `${Math.round(count).toLocaleString()} (${pct}%)`;
+        },
+      }));
+    }
+
+    let singleLabel = 'Total Corpus';
+    if (selectedFilter.startsWith('arch_')) {
+      singleLabel = getArchiveName(selectedFilter.replace('arch_', ''));
+    } else if (selectedFilter.startsWith('kind_')) {
+      const kCode = selectedFilter.replace('kind_', '');
+      singleLabel = KIND_SHORT[kCode] || getKindLabel(kCode) || kCode.toUpperCase();
+    }
+
     return [
       {
         field: 'value',
-        label: selectedArchive === 'all' ? 'Total Corpus' : getArchiveName(selectedArchive),
+        label: singleLabel,
         colour: 'var(--color-accent)',
         formatter: (v) => (Number.isFinite(v) ? `${Math.round(v).toLocaleString()} docs` : '—'),
       },
     ];
-  }, [selectedArchive, isStacked, availableArchives]);
+  }, [selectedFilter, isStackedArchives, isStackedKinds, availableArchives, availableKinds]);
 
   // Compute summary growth stats
   const { lastVal, growth } = useMemo(() => {
@@ -118,21 +178,37 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
     <div className="flex items-center gap-1.5 bg-surface border border-border rounded-md px-2.5 py-1 text-xs">
       <Filter size={12} className="text-secondary shrink-0" />
       <select
-        value={selectedArchive}
-        onChange={(e) => handleArchiveChange(e.target.value)}
+        value={selectedFilter}
+        onChange={(e) => handleFilterChange(e.target.value)}
         className="bg-transparent text-xs text-primary font-medium focus:outline-none cursor-pointer"
       >
         <option value="all" className="bg-card text-primary font-medium py-1">
-          All Archives (Total)
+          All Corpus (Total)
         </option>
-        <option value="stacked" className="bg-card text-primary font-medium py-1">
+        <option value="stacked-kinds" className="bg-card text-primary font-medium py-1">
+          Stacked Record Types (Breakdown)
+        </option>
+        <option value="stacked-archives" className="bg-card text-primary font-medium py-1">
           Stacked Archives (Breakdown)
         </option>
-        {availableArchives.map((code) => (
-          <option key={code} value={code} className="bg-card text-primary font-medium py-1">
-            {getArchiveName(code)} ({code.toUpperCase()})
-          </option>
-        ))}
+        {availableArchives.length > 0 && (
+          <optgroup label="Single Archive" className="bg-card text-secondary font-bold not-italic">
+            {availableArchives.map((code) => (
+              <option key={`arch_${code}`} value={`arch_${code}`} className="bg-card text-primary font-medium py-1">
+                {getArchiveName(code)} ({code.toUpperCase()})
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {availableKinds.length > 0 && (
+          <optgroup label="Single Record Type" className="bg-card text-secondary font-bold not-italic">
+            {availableKinds.map((code) => (
+              <option key={`kind_${code}`} value={`kind_${code}`} className="bg-card text-primary font-medium py-1">
+                {KIND_SHORT[code] || code} ({code})
+              </option>
+            ))}
+          </optgroup>
+        )}
       </select>
     </div>
   );

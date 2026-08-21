@@ -88,6 +88,15 @@
     @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-secondary/10 text-secondary;
   }
 
+  /* Native Select Dropdown Styling */
+  select optgroup {
+    @apply bg-card text-secondary font-bold not-italic py-1;
+  }
+
+  select option {
+    @apply bg-card text-primary font-medium py-1;
+  }
+
   /* Filter Pills & Buttons */
   .admin-pill-filter {
     @apply px-2.5 py-1 rounded text-[11px] font-medium capitalize transition-colors cursor-pointer;
