@@ -157,11 +157,12 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
   if planned_cnt and completed >= planned_cnt:
     is_active = False
 
-  if any("Ingest complete" in l or "Harvest complete" in l or "Finished" in l for l in tail):
-    is_active = False
+  active_archive = _current_harvest_archive or archive
+  has_active_archive = bool(_current_harvest_archive)
+  phase = "streaming" if is_active else ("indexing_in_engine" if has_active_archive else "idle")
 
   return {
-    "archive": archive or _current_harvest_archive,
+    "archive": active_archive,
     "kind": kind,
     "files_total": planned_cnt,
     "submitted": submitted,
@@ -169,7 +170,8 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
     "waiting_for_queue": waiting if is_active else False,
     "files_completed": completed,
     "log_age_seconds": int(age),
-    "is_active": is_active,
+    "is_active": is_active or has_active_archive,
+    "phase": phase,
   }
 
 

@@ -4,31 +4,10 @@ import { getArchiveName, ADMIN_API_BASE_URL } from '../config';
 import { formatDuration, formatAgo } from '../utils/formatters';
 import IndexingHistory from './IndexingHistory';
 
-/**
- * How long everything must be frozen before it is worth mentioning.
- *
- * "Frozen" means all three signals at once: no documents indexed, no tasks
- * completed, *and* no movement in the engine's own batch progress. Watching
- * documents alone cried stall over healthy work — a re-ingest updates records in
- * place, so the count legitimately sits still for hours while a batch grinds
- * through its steps at 98 MB/s.
- *
- * Still not proof of a fault: a large merge is quiet under all three. The
- * threshold sits above a healthy batch so a warning means "longer than the ones
- * before it", not "still working".
- */
 const STALL_WARN_SECONDS = 300;
 const STALL_ALERT_SECONDS = 900;
 
-/**
- * How the harvest is actually going.
- *
- * The count on the coverage panel is what is *searchable*; documents accepted by
- * the engine but not yet merged are invisible there, and the gap between the two
- * can be hours wide. Without this panel a stalled harvest and a finished one look
- * exactly the same from the dashboard.
- */
-const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) => {
+export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) => {
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelFeedback, setCancelFeedback] = useState(null);
@@ -141,8 +120,6 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
   const busy = indexing.is_indexing || pending > 0;
   const stalled = indexing.stalled_seconds;
 
-  // Only meaningful while something is in flight — a count that has not changed
-  // because the queue is empty is not a stall, it is an idle index.
   const stallLevel =
     busy && Number.isFinite(stalled)
       ? stalled >= STALL_ALERT_SECONDS
@@ -311,8 +288,8 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
         </div>
       )}
 
-      {/* Stage 1: Active Harvester Streaming Banner */}
-      {job && busy && job.is_active !== false && (
+      {/* Stage 1: Active Harvester Streaming / Engine Indexing Banner */}
+      {job && busy && job.is_active !== false && job.archive && (
         <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -320,7 +297,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
                 {getArchiveName(job.archive)}
               </span>
               <span className="text-xs text-secondary/70">
-                · XML harvest stream ({job.phase || 'downloading'})
+                · {job.phase === 'indexing_in_engine' ? 'Payloads submitted — engine building search index' : `Harvesting stream (${job.phase || 'downloading'})`}
               </span>
             </div>
             {job.speed_mbs > 0 && (
@@ -332,14 +309,15 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
 
           <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden mb-2">
             <div
-              className="bg-accent h-full transition-all duration-300 rounded-full"
-              style={{ width: `${Math.min(100, Math.max(0, job.percent || 0))}%` }}
+              className={`h-full transition-all duration-300 rounded-full ${job.phase === 'indexing_in_engine' ? 'bg-amber-500 animate-pulse' : 'bg-accent'}`}
+              style={{ width: `${Math.min(100, Math.max(0, job.percent || (job.phase === 'indexing_in_engine' ? 100 : 0)))}%` }}
             />
           </div>
           <div className="flex items-center justify-between text-xs text-secondary flex-wrap gap-2">
             <span>
-              {job.downloaded_mb?.toFixed(1) || 0} MB of {job.total_mb?.toFixed(1) || '?'} MB
-              {job.documents ? ` · ${job.documents.toLocaleString()} docs extracted` : ''}
+              {job.phase === 'indexing_in_engine'
+                ? `Ingestion payloads submitted · Waiting for Meilisearch index build`
+                : `${job.downloaded_mb?.toFixed(1) || 0} MB of ${job.total_mb?.toFixed(1) || '?'} MB ${job.documents ? ` · ${job.documents.toLocaleString()} docs extracted` : ''}`}
             </span>
             {job.eta_seconds != null && (
               <span>ETA ~{formatDuration(job.eta_seconds)}</span>
@@ -347,7 +325,6 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
           </div>
         </div>
       )}
-
 
       {/* Stage 2: Active Meilisearch Engine Indexing Progress */}
       {batch && busy && (
@@ -443,6 +420,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
           </div>
         </div>
       )}
+
       {stallLevel && (
         <div
           className={`flex items-start gap-2.5 rounded-lg p-3 mb-4 border ${stallLevel === 'alert'
