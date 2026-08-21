@@ -93,13 +93,18 @@ def run_contract_tests():
   if res.status_code != 200:
     failures.append(f"GET /api/v1/admin/query with relational filters failed: status {res.status_code}")
 
+  # 11. Inline Query Syntax with Multi-Archive and Year Range Operators
+  res = client.get("/api/v1/admin/query?q=Spruijt+archive:arg,ade+year:1840..1860+father:Jacob+mother:Jacoba", headers=ADMIN_HEADERS)
+  if res.status_code != 200:
+    failures.append(f"GET /api/v1/admin/query with inline syntax failed: status {res.status_code}")
+
   if failures:
     print("❌ PRE-FLIGHT CONTRACT TESTS FAILED:")
     for f in failures:
       print(f"  - {f}")
     sys.exit(1)
 
-  print("✓ All 10 core API route contracts verified successfully!")
+  print("✓ All 11 core API route contracts verified successfully!")
 
 
 if __name__ == "__main__":

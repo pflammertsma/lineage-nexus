@@ -14,11 +14,14 @@ from auth import require_admin
 
 router = APIRouter()
 
-_INLINE_FILTER_RE = re.compile(r'\b(place|loc|location|year|type|kind|archive):([^\s]+)', re.IGNORECASE)
+_INLINE_FILTER_RE = re.compile(
+    r'\b(place|loc|location|date|year|type|kind|archive|father|mother|child|spouse|role):([^\s]+)',
+    re.IGNORECASE
+)
 
 
 def _parse_inline_query_filters(q_str: str) -> Tuple[str, Dict[str, Any]]:
-  """Extracts inline filters like place:Leeuwarden year:1840..1860 type:birth from query string."""
+  """Extracts inline filters like place:Leeuwarden date:1848-10-02..1852-05-10 type:birth archive:arg father:Jacob mother:Jacoba from query string."""
   if not q_str:
     return "", {}
   extracted: Dict[str, Any] = {}
@@ -47,16 +50,62 @@ def _parse_inline_query_filters(q_str: str) -> Tuple[str, Dict[str, Any]]:
           extracted["kind"] = ["not"]
         else:
           extracted["kind"] = [val]
-      elif key == "year":
-        if ".." in val:
+      elif key in ("date", "year"):
+        if val.startswith(">="):
+          v = val[2:]
+          if "-" in v:
+            extracted["date_min"] = v
+            year_part = v.split("-")[0]
+            if year_part.isdigit():
+              extracted["year_min"] = int(year_part)
+          elif v.isdigit():
+            extracted["year_min"] = int(v)
+        elif val.startswith("<="):
+          v = val[2:]
+          if "-" in v:
+            extracted["date_max"] = v
+            year_part = v.split("-")[0]
+            if year_part.isdigit():
+              extracted["year_max"] = int(year_part)
+          elif v.isdigit():
+            extracted["year_max"] = int(v)
+        elif ".." in val:
           parts = val.split("..")
-          if parts[0].isdigit():
-            extracted["year_min"] = int(parts[0])
-          if len(parts) > 1 and parts[1].isdigit():
-            extracted["year_max"] = int(parts[1])
+          start_v = parts[0]
+          end_v = parts[1] if len(parts) > 1 else ""
+          if start_v:
+            if "-" in start_v:
+              extracted["date_min"] = start_v
+              if start_v.split("-")[0].isdigit():
+                extracted["year_min"] = int(start_v.split("-")[0])
+            elif start_v.isdigit():
+              extracted["year_min"] = int(start_v)
+          if end_v:
+            if "-" in end_v:
+              extracted["date_max"] = end_v
+              if end_v.split("-")[0].isdigit():
+                extracted["year_max"] = int(end_v.split("-")[0])
+            elif end_v.isdigit():
+              extracted["year_max"] = int(end_v)
+        elif "-" in val:
+          extracted["date_exact"] = val
+          year_part = val.split("-")[0]
+          if year_part.isdigit():
+            extracted["year_min"] = int(year_part)
+            extracted["year_max"] = int(year_part)
         elif val.isdigit():
           extracted["year_min"] = int(val)
           extracted["year_max"] = int(val)
+      elif key == "father":
+        extracted["father"] = val.replace("_", " ")
+      elif key == "mother":
+        extracted["mother"] = val.replace("_", " ")
+      elif key == "child":
+        extracted["child"] = val.replace("_", " ")
+      elif key == "spouse":
+        extracted["spouse"] = val.replace("_", " ")
+      elif key == "role":
+        extracted["role"] = val.lower()
     else:
       clean_parts.append(token)
 
@@ -211,10 +260,28 @@ def admin_query(
   target_event_type = event_type or inline_filters.get("event_type")
   target_year_min = year_min if year_min is not None else inline_filters.get("year_min")
   target_year_max = year_max if year_max is not None else inline_filters.get("year_max")
+  target_date_exact = inline_filters.get("date_exact")
+  target_date_min = inline_filters.get("date_min")
+  target_date_max = inline_filters.get("date_max")
+  target_father = father or inline_filters.get("father")
+  target_mother = mother or inline_filters.get("mother")
+  target_child = child or inline_filters.get("child")
+  target_spouse = spouse or inline_filters.get("spouse")
+  target_role = role or inline_filters.get("role")
+
+  # Append relative names to text search query for backward compatibility with un-reindexed documents
+  rel_names = [n for n in (target_father, target_mother, target_child, target_spouse) if n]
+  if rel_names:
+    extra_q = " ".join(rel_names)
+    target_q = f"{target_q} {extra_q}".strip() if target_q else extra_q
 
   filters = []
   if target_archive:
-    filters.append(f"archive = '{target_archive}'")
+    if "," in target_archive:
+      arc_or = " OR ".join(f"archive = '{a.strip()}'" for a in target_archive.split(","))
+      filters.append(f"({arc_or})")
+    else:
+      filters.append(f"archive = '{target_archive}'")
 
   if target_kind:
     if isinstance(target_kind, list):
@@ -229,43 +296,51 @@ def admin_query(
     escaped_place = target_place.replace("'", "\\'")
     filters.append(f"event_place = '{escaped_place}'")
 
-  if target_year_min is not None:
+  if target_date_exact:
+    filters.append(f"event_date = '{target_date_exact}'")
+  else:
+    if target_date_min:
+      filters.append(f"event_date >= '{target_date_min}'")
+    if target_date_max:
+      filters.append(f"event_date <= '{target_date_max}'")
+
+  if target_year_min is not None and not target_date_min and not target_date_exact:
     filters.append(f"event_year >= {target_year_min}")
 
-  if target_year_max is not None:
+  if target_year_max is not None and not target_date_max and not target_date_exact:
     filters.append(f"event_year <= {target_year_max}")
 
-  if father:
-    f_p = phonetic(father)
+  if target_father:
+    f_p = phonetic(target_father)
     if f_p:
-      filters.append(f"(s_father = '{f_p}' OR s_groom_father = '{f_p}' OR s_bride_father = '{f_p}' OR g_father = '{f_p}' OR g_groom_father = '{f_p}' OR g_bride_father = '{f_p}')")
+      filters.append(f"(s_father = '{f_p}' OR s_groom_father = '{f_p}' OR s_bride_father = '{f_p}' OR g_father = '{f_p}' OR g_groom_father = '{f_p}' OR g_bride_father = '{f_p}' OR roles = 'father' OR roles = 'groom_father' OR roles = 'bride_father')")
 
-  if mother:
-    m_p = phonetic(mother)
+  if target_mother:
+    m_p = phonetic(target_mother)
     if m_p:
-      filters.append(f"(s_mother = '{m_p}' OR s_groom_mother = '{m_p}' OR s_bride_mother = '{m_p}' OR g_mother = '{m_p}' OR g_groom_mother = '{m_p}' OR g_bride_mother = '{m_p}')")
+      filters.append(f"(s_mother = '{m_p}' OR s_groom_mother = '{m_p}' OR s_bride_mother = '{m_p}' OR g_mother = '{m_p}' OR g_groom_mother = '{m_p}' OR g_bride_mother = '{m_p}' OR roles = 'mother' OR roles = 'groom_mother' OR roles = 'bride_mother')")
 
-  if child:
-    c_p = phonetic(child)
+  if target_child:
+    c_p = phonetic(target_child)
     if c_p:
-      filters.append(f"(s_child = '{c_p}' OR s_deceased = '{c_p}' OR g_child = '{c_p}' OR g_deceased = '{c_p}')")
+      filters.append(f"(s_child = '{c_p}' OR s_deceased = '{c_p}' OR g_child = '{c_p}' OR g_deceased = '{c_p}' OR roles = 'child' OR roles = 'registered' OR roles = 'deceased')")
 
-  if spouse:
-    sp_p = phonetic(spouse)
+  if target_spouse:
+    sp_p = phonetic(target_spouse)
     if sp_p:
-      filters.append(f"(s_partner = '{sp_p}' OR s_groom = '{sp_p}' OR s_bride = '{sp_p}' OR g_partner = '{sp_p}' OR g_groom = '{sp_p}' OR g_bride = '{sp_p}')")
+      filters.append(f"(s_partner = '{sp_p}' OR s_groom = '{sp_p}' OR s_bride = '{sp_p}' OR g_partner = '{sp_p}' OR g_groom = '{sp_p}' OR g_bride = '{sp_p}' OR roles = 'partner' OR roles = 'groom' OR roles = 'bride')")
 
-  if role:
-    if role == "mother":
+  if target_role:
+    if target_role == "mother":
       filters.append("(roles = 'mother' OR roles = 'groom_mother' OR roles = 'bride_mother')")
-    elif role == "father":
+    elif target_role == "father":
       filters.append("(roles = 'father' OR roles = 'groom_father' OR roles = 'bride_father')")
-    elif role in ("spouse", "partner"):
+    elif target_role in ("spouse", "partner"):
       filters.append("(roles = 'partner' OR roles = 'groom' OR roles = 'bride')")
-    elif role == "child":
+    elif target_role == "child":
       filters.append("(roles = 'child' OR roles = 'registered')")
     else:
-      filters.append(f"roles = '{role}'")
+      filters.append(f"roles = '{target_role}'")
 
   params: Dict[str, Any] = {"limit": limit}
   if filters:

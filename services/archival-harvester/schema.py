@@ -261,7 +261,7 @@ def rebuild_search_fields(doc):
 
 def filterable_attributes():
     """Every field the API may filter on."""
-    fields = ["archive", "kind", "event_type", "event_year", "event_place",
+    fields = ["archive", "kind", "event_type", "event_year", "event_date", "event_place",
               "roles", "given_p", "surnames_p"]
     fields += ["g_" + r for r in ROLES]
     fields += ["s_" + r for r in ROLES]

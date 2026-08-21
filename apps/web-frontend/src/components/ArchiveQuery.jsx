@@ -32,6 +32,75 @@ const kindLabel = (kind) => KIND_LABELS[kind] || `Record type: ${kind}`;
  * the question this answers is usually "did that export ingest correctly", not
  * "who was this person".
  */
+const INLINE_RE = /\b(place|loc|location|date|year|type|kind|archive|father|mother|child|spouse|role):([^\s]+)/i;
+
+const parseInlineTokens = (qStr) => {
+  if (!qStr) return { cleanQ: '', tokens: {} };
+  const tokens = {};
+  const cleanParts = [];
+
+  for (const part of qStr.split(/\s+/)) {
+    const match = part.match(INLINE_RE);
+    if (match) {
+      const key = match[1].toLowerCase();
+      const val = match[2].trim();
+      if (['place', 'loc', 'location'].includes(key)) tokens.place = val.replace(/_/g, ' ');
+      else if (key === 'archive') tokens.archive = val;
+      else if (['type', 'kind'].includes(key)) tokens.kind = val;
+      else if (key === 'father') tokens.father = val.replace(/_/g, ' ');
+      else if (key === 'mother') tokens.mother = val.replace(/_/g, ' ');
+      else if (key === 'child') tokens.child = val.replace(/_/g, ' ');
+      else if (key === 'spouse') tokens.spouse = val.replace(/_/g, ' ');
+      else if (key === 'role') tokens.role = val.toLowerCase();
+      else if (['date', 'year'].includes(key)) {
+        if (val.startsWith('>=')) tokens.yearMin = val.slice(2);
+        else if (val.startsWith('<=')) tokens.yearMax = val.slice(2);
+        else if (val.includes('..')) {
+          const [min, max] = val.split('..');
+          if (min) tokens.yearMin = min;
+          if (max) tokens.yearMax = max;
+        } else {
+          tokens.yearMin = val;
+          tokens.yearMax = val;
+        }
+      }
+    } else {
+      cleanParts.push(part);
+    }
+  }
+  return { cleanQ: cleanParts.join(' '), tokens };
+};
+
+const buildFullQueryString = (baseQ, { archive, place, kind, yearMin, yearMax, father, mother, child, spouse, role }) => {
+  const parts = [];
+  const clean = baseQ ? parseInlineTokens(baseQ).cleanQ.trim() : '';
+  if (clean) parts.push(clean);
+
+  if (archive && archive !== 'all') parts.push(`archive:${archive}`);
+  if (kind && kind !== 'all') {
+    const kShort = kind === 'bsg,dtb_d' ? 'birth' : kind === 'bsh,dtb_t' ? 'marriage' : kind === 'bso,dtb_b' ? 'death' : kind;
+    parts.push(`type:${kShort}`);
+  }
+  if (place && place.trim()) parts.push(`place:${place.trim().replace(/\s+/g, '_')}`);
+  if (yearMin.trim() || yearMax.trim()) {
+    if (yearMin.trim() && yearMax.trim()) {
+      if (yearMin.trim() === yearMax.trim()) parts.push(`date:${yearMin.trim()}`);
+      else parts.push(`date:${yearMin.trim()}..${yearMax.trim()}`);
+    } else if (yearMin.trim()) {
+      parts.push(`date:>=${yearMin.trim()}`);
+    } else if (yearMax.trim()) {
+      parts.push(`date:<=${yearMax.trim()}`);
+    }
+  }
+  if (father && father.trim()) parts.push(`father:${father.trim().replace(/\s+/g, '_')}`);
+  if (mother && mother.trim()) parts.push(`mother:${mother.trim().replace(/\s+/g, '_')}`);
+  if (child && child.trim()) parts.push(`child:${child.trim().replace(/\s+/g, '_')}`);
+  if (spouse && spouse.trim()) parts.push(`spouse:${spouse.trim().replace(/\s+/g, '_')}`);
+  if (role && role !== 'all') parts.push(`role:${role}`);
+
+  return parts.join(' ');
+};
+
 const ArchiveQuery = ({ getIdToken }) => {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -102,33 +171,55 @@ const ArchiveQuery = ({ getIdToken }) => {
     setRole('all');
     setFuzzy(true);
     setNamesOnly(true);
-    setSearchParams(query.trim() ? { q: query.trim() } : {}, { replace: true });
+    const clean = parseInlineTokens(query).cleanQ;
+    setQuery(clean);
+    setSearchParams(clean ? { q: clean } : {}, { replace: true });
   };
 
-  const updateUrlParams = (qVal, archiveVal, placeVal, kindVal, minVal, maxVal, fatherVal, motherVal, childVal, spouseVal, roleVal, fuzzyVal, namesOnlyVal) => {
+  const updateUrlParams = (fullQ) => {
     const params = new URLSearchParams();
-    if (qVal) params.set('q', qVal);
-    if (archiveVal !== 'all') params.set('archive', archiveVal);
-    if (placeVal) params.set('place', placeVal);
-    if (kindVal !== 'all') params.set('kind', kindVal);
-    if (minVal) params.set('year_min', minVal);
-    if (maxVal) params.set('year_max', maxVal);
-    if (fatherVal) params.set('father', fatherVal);
-    if (motherVal) params.set('mother', motherVal);
-    if (childVal) params.set('child', childVal);
-    if (spouseVal) params.set('spouse', spouseVal);
-    if (roleVal !== 'all') params.set('role', roleVal);
-    if (!fuzzyVal) params.set('fuzzy', 'false');
-    if (!namesOnlyVal) params.set('names_only', 'false');
+    if (fullQ) params.set('q', fullQ);
+    if (!fuzzy) params.set('fuzzy', 'false');
+    if (!namesOnly) params.set('names_only', 'false');
     setSearchParams(params, { replace: true });
   };
 
   const run = async (e) => {
     if (e) e.preventDefault();
-    const q = query.trim();
-    if ((!q && activeFilterCount === 0) || loading) return;
+    const rawQ = query.trim();
 
-    updateUrlParams(q, archive, place.trim(), kind, yearMin.trim(), yearMax.trim(), father.trim(), mother.trim(), child.trim(), spouse.trim(), role, fuzzy, namesOnly);
+    const { cleanQ, tokens } = parseInlineTokens(rawQ);
+    const effArchive = tokens.archive || archive;
+    const effPlace = tokens.place || place.trim();
+    const effKind = tokens.kind || kind;
+    const effYearMin = tokens.yearMin || yearMin.trim();
+    const effYearMax = tokens.yearMax || yearMax.trim();
+    const effFather = tokens.father || father.trim();
+    const effMother = tokens.mother || mother.trim();
+    const effChild = tokens.child || child.trim();
+    const effSpouse = tokens.spouse || spouse.trim();
+    const effRole = tokens.role || role;
+
+    // Build unified full query string showing exact search syntax
+    const fullQuery = buildFullQueryString(cleanQ, {
+      archive: effArchive,
+      place: effPlace,
+      kind: effKind,
+      yearMin: effYearMin,
+      yearMax: effYearMax,
+      father: effFather,
+      mother: effMother,
+      child: effChild,
+      spouse: effSpouse,
+      role: effRole,
+    });
+
+    if (fullQuery !== query) {
+      setQuery(fullQuery);
+    }
+    updateUrlParams(fullQuery);
+
+    if (!fullQuery || loading) return;
 
     setLoading(true);
     setError(null);
@@ -139,17 +230,7 @@ const ArchiveQuery = ({ getIdToken }) => {
         return;
       }
 
-      let url = `${ADMIN_API_BASE_URL}/api/v1/admin/query?q=${encodeURIComponent(q)}&limit=25`;
-      if (archive !== 'all') url += `&archive=${encodeURIComponent(archive)}`;
-      if (place.trim()) url += `&place=${encodeURIComponent(place.trim())}`;
-      if (kind !== 'all') url += `&kind=${encodeURIComponent(kind)}`;
-      if (yearMin.trim() && !isNaN(parseInt(yearMin))) url += `&year_min=${parseInt(yearMin)}`;
-      if (yearMax.trim() && !isNaN(parseInt(yearMax))) url += `&year_max=${parseInt(yearMax)}`;
-      if (father.trim()) url += `&father=${encodeURIComponent(father.trim())}`;
-      if (mother.trim()) url += `&mother=${encodeURIComponent(mother.trim())}`;
-      if (child.trim()) url += `&child=${encodeURIComponent(child.trim())}`;
-      if (spouse.trim()) url += `&spouse=${encodeURIComponent(spouse.trim())}`;
-      if (role !== 'all') url += `&role=${encodeURIComponent(role)}`;
+      let url = `${ADMIN_API_BASE_URL}/api/v1/admin/query?q=${encodeURIComponent(fullQuery)}&limit=25`;
       if (!fuzzy) url += `&fuzzy=false`;
       if (!namesOnly) url += `&names_only=false`;
 
@@ -207,11 +288,10 @@ const ArchiveQuery = ({ getIdToken }) => {
         <button
           type="button"
           onClick={() => setShowFilters(!showFilters)}
-          className={`h-7 inline-flex items-center gap-1.5 px-2.5 rounded-md border text-xs leading-none transition-colors cursor-pointer shrink-0 ${
-            showFilters || activeFilterCount > 0
+          className={`h-7 inline-flex items-center gap-1.5 px-2.5 rounded-md border text-xs leading-none transition-colors cursor-pointer shrink-0 ${showFilters || activeFilterCount > 0
               ? 'bg-accent/10 border-accent/40 text-accent font-semibold'
               : 'bg-surface border-border text-secondary hover:text-primary'
-          }`}
+            }`}
         >
           <SlidersHorizontal size={13} className="shrink-0" />
           <span className="leading-none">Filters</span>
@@ -306,25 +386,25 @@ const ArchiveQuery = ({ getIdToken }) => {
                 </div>
               </div>
 
-              {/* Year Range Filter */}
+              {/* Date / Year Range Filter */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
-                  Event Year Range
+                  Date / Year Range
                 </label>
                 <div className="flex items-center gap-1.5">
                   <input
-                    type="number"
+                    type="text"
                     value={yearMin}
                     onChange={(e) => setYearMin(e.target.value)}
-                    placeholder="Min (1840)"
+                    placeholder="YYYY-MM-DD"
                     className="w-1/2 bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs font-mono"
                   />
                   <span className="text-secondary text-xs">–</span>
                   <input
-                    type="number"
+                    type="text"
                     value={yearMax}
                     onChange={(e) => setYearMax(e.target.value)}
-                    placeholder="Max (1860)"
+                    placeholder="YYYY-MM-DD"
                     className="w-1/2 bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs font-mono"
                   />
                 </div>
@@ -562,9 +642,8 @@ const ArchiveQuery = ({ getIdToken }) => {
                     >
                       <ChevronRight
                         size={13}
-                        className={`mt-1 shrink-0 transition-transform ${
-                          expanded.has(hit.id) ? 'rotate-90' : ''
-                        }`}
+                        className={`mt-1 shrink-0 transition-transform ${expanded.has(hit.id) ? 'rotate-90' : ''
+                          }`}
                       />
                       {hit.persons?.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5 items-center">
@@ -573,11 +652,10 @@ const ArchiveQuery = ({ getIdToken }) => {
                             return (
                               <span
                                 key={i}
-                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] border font-medium ${
-                                  isPrincipal
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] border font-medium ${isPrincipal
                                     ? 'bg-accent/15 border-accent/40 text-accent'
                                     : 'bg-muted/60 border-border/60 text-primary/80'
-                                }`}
+                                  }`}
                               >
                                 <span>{p.n}</span>
                                 {p.r && <span className="text-[10px] opacity-75 font-mono">({p.r})</span>}
@@ -636,7 +714,7 @@ const ArchiveQuery = ({ getIdToken }) => {
 
                   {expanded.has(hit.id) && (
                     <pre className="mb-2 p-2.5 rounded bg-muted/60 border border-border/60 text-[10px] leading-relaxed font-mono text-secondary overflow-x-auto max-h-72 overflow-y-auto">
-{JSON.stringify(hit.raw ?? hit, null, 2)}
+                      {JSON.stringify(hit.raw ?? hit, null, 2)}
                     </pre>
                   )}
                 </li>
