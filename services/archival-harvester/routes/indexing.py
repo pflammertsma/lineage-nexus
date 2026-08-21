@@ -289,10 +289,21 @@ def _format_step_label(step_val: Any, index: int) -> str:
   return f"Phase {index + 1}"
 
 
+def _get_task_archive_map() -> Dict[str, str]:
+  mapping_path = os.path.join(INGEST_LOG_DIR, "task_archives.json")
+  if os.path.exists(mapping_path):
+    try:
+      with open(mapping_path, "r", encoding="utf-8") as f:
+        return json.load(f) or {}
+    except Exception:
+      pass
+  return {}
+
+
 @router.get("/api/v1/admin/indexing", dependencies=[Depends(require_admin)])
 def admin_indexing():
   """Queue depth, active batch, and throughput metrics."""
-  from routes.harvest import _current_ingest
+  from routes.harvest import _current_ingest, _current_harvest_archive
   try:
     stats = meili_client.index(INDEX_NAME).get_stats()
     documents = getattr(stats, "number_of_documents", 0) if not isinstance(stats, dict) else stats.get("numberOfDocuments", 0)
@@ -307,16 +318,33 @@ def admin_indexing():
   current = None
   recent: List[Dict[str, Any]] = []
   try:
-    batches = _meili_get("/batches?limit=8").get("results", []) or []
+    task_map = _get_task_archive_map()
+    batch_map: Dict[int, str] = {}
+    try:
+      tasks_res = _meili_get("/tasks?limit=100").get("results", []) or []
+      for t in tasks_res:
+        t_uid = str(t.get("uid"))
+        b_uid = t.get("batchUid")
+        arch = task_map.get(t_uid)
+        if arch and b_uid is not None:
+          batch_map[b_uid] = arch
+    except Exception:
+      pass
+
+    batches = _meili_get("/batches?limit=12").get("results", []) or []
     for batch in batches:
       batch_stats = batch.get("stats", {}) or {}
       finished = batch.get("finishedAt")
+      b_uid = batch.get("uid")
+      arch_code = batch_map.get(b_uid) or _current_harvest_archive
+
       if finished is None and current is None:
         progress = batch.get("progress") or {}
         started = batch.get("startedAt")
         steps_raw = progress.get("steps") or []
         current = {
-          "uid": batch.get("uid"),
+          "uid": b_uid,
+          "archive": arch_code,
           "tasks": batch_stats.get("totalNbTasks"),
           "documents": (batch.get("details") or {}).get("receivedDocuments"),
           "percentage": progress.get("percentage"),
@@ -333,11 +361,12 @@ def admin_indexing():
             for i, s in enumerate(steps_raw)
           ],
         }
-      elif finished is not None and len(recent) < 8:
+      elif finished is not None and len(recent) < 12:
         details = batch.get("details") or {}
         err = batch.get("error") or {}
         recent.append({
-          "uid": batch.get("uid"),
+          "uid": b_uid,
+          "archive": arch_code,
           "status": batch.get("status"),
           "error_code": err.get("code"),
           "error_message": err.get("message"),

@@ -330,10 +330,15 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
       {batch && busy && (
         <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-sm text-primary">
                 Batch {batch.uid}
               </span>
+              {batch.archive && (
+                <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-500/10 border border-amber-500/20 text-amber-500">
+                  {getArchiveName(batch.archive)}
+                </span>
+              )}
             </div>
             <span className="text-xs text-secondary">
               {batch.tasks?.toLocaleString()} tasks · {batch.documents?.toLocaleString()} docs · {formatDuration(batch.elapsed_seconds)}

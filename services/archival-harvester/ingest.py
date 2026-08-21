@@ -407,6 +407,32 @@ def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None) -> 
             pass
 
 
+def _record_task_archive(task_res: Any, archive_code: str):
+    if not task_res:
+        return
+    task_uid = getattr(task_res, "task_uid", None) or getattr(task_res, "uid", None)
+    if isinstance(task_res, dict):
+        task_uid = task_res.get("taskUid") or task_res.get("uid")
+    if not task_uid:
+        return
+    try:
+        log_dir = os.environ.get("INGEST_LOG_DIR", "/logs")
+        os.makedirs(log_dir, exist_ok=True)
+        mapping_path = os.path.join(log_dir, "task_archives.json")
+        data = {}
+        if os.path.exists(mapping_path):
+            try:
+                with open(mapping_path, "r", encoding="utf-8") as f:
+                    data = json.load(f) or {}
+            except Exception:
+                data = {}
+        data[str(task_uid)] = archive_code
+        with open(mapping_path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+    except Exception as exc:
+        logger.warning("could not record task archive mapping: %s", exc)
+
+
 def _ingest_staged(index, staged: str, archive: str, kind: str,
                    limit: Optional[int], started: float,
                    batch: List[Dict[str, Any]]) -> int:
@@ -415,8 +441,6 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
     prefixes = role_prefixes(next(rows))
     logger.info("  %s.%s: %d person roles in this schema", archive, kind, len(prefixes))
 
-    # Rows are counted as they stream past, so the summary can report how many
-    # collapsed into a shared record rather than implying one row per document.
     row_count = 0
 
     def counted(source):
@@ -430,18 +454,18 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
         count += 1
 
         if len(batch) >= BATCH_SIZE:
-            index.add_documents(batch)
+            task_res = index.add_documents(batch)
+            _record_task_archive(task_res, archive)
             batch = []
             logger.info("  %s.%s: %d submitted (%.0f rec/s)",
                         archive, kind, count, count / max(1e-6, time.time() - started))
-            # Backpressure: keep the queue shallow so the engine never groups
-            # more into one batch than it can hold in memory.
             await_queue()
         if limit and count >= limit:
             break
 
     if batch:
-        index.add_documents(batch)
+        task_res = index.add_documents(batch)
+        _record_task_archive(task_res, archive)
         await_queue()
 
     logger.info("  %s.%s: %d records from %d rows (%d merged or dropped), %.1fs",

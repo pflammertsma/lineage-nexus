@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
-import { History, X, AlertTriangle, CheckCircle2, Clock, Activity, ArrowRight } from 'lucide-react';
+import { History, X, AlertTriangle, CheckCircle2, Clock, Activity, ArrowRight, Archive } from 'lucide-react';
 import { stamp, formatDuration, parseIsoDuration } from '../utils/formatters';
+import { getArchiveName } from '../config';
 
 export const IndexingHistory = ({ isOpen, onClose, recentBatches = [], onOpenTelemetry }) => {
   // Prevent background page scrolling when modal is open
@@ -84,6 +85,13 @@ export const IndexingHistory = ({ isOpen, onClose, recentBatches = [], onOpenTel
                         )}
                         <span>Batch {b.uid}</span>
                       </div>
+
+                      {b.archive && (
+                        <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-accent/10 border border-accent/20 text-accent flex items-center gap-1">
+                          <Archive size={11} className="text-accent/70 shrink-0" />
+                          <span>{getArchiveName(b.archive)}</span>
+                        </span>
+                      )}
 
                       <span className="px-2 py-0.5 rounded text-[11px] font-medium bg-muted/80 border border-border/40 text-secondary">
                         {b.tasks?.toLocaleString()} task{b.tasks === 1 ? '' : 's'}
