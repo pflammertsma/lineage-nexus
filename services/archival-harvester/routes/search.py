@@ -3,6 +3,8 @@ Search and record lookup endpoints.
 """
 
 import time
+
+from phonetics import phonetic
 import re
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Query, HTTPException, Depends
@@ -119,6 +121,55 @@ def get_record(archive_code: str, identifier: str):
     raise HTTPException(status_code=404, detail=f"Record not found: {str(e)}")
 
 
+
+def _search_with_variants(index, query, params, fuzzy):
+  """
+  Runs the query as typed, then again phonetically, and merges.
+
+  The phonetic field stores keys, not names: `names_p` for the 1848 baptism of
+  Clasina Cornelia Spruijt holds "klasina kornelia spruit". Sending the raw
+  query at it therefore matched nothing at all — "cornelia" is not "kornelia" —
+  so the field sat unused until the query was keyed the same way the documents
+  were. Measured on that record: raw query 0 hits, keyed query 16.
+
+  Exact hits are kept ahead of phonetic ones. Spelling a name the way the clerk
+  spelled it is evidence, and a search that buries the record you typed exactly
+  underneath its variants is worse than one that never finds them.
+  """
+  exact = index.search(query, dict(params))
+  hits = list(exact.get("hits", []))
+  for hit in hits:
+    hit["_match"] = "exact"
+
+  if not fuzzy:
+    return exact
+
+  keyed = phonetic(query)
+  if not keyed or keyed == query.lower():
+    return exact
+
+  variant_params = dict(params)
+  # The keys live in their own attribute; searching anywhere else would compare
+  # a key against a name and find nothing.
+  variant_params["attributesToSearchOn"] = ["names_p"]
+  variants = index.search(keyed, variant_params)
+
+  seen = {h.get("id") for h in hits}
+  for hit in variants.get("hits", []):
+    if hit.get("id") in seen:
+      continue
+    hit["_match"] = "phonetic"
+    hits.append(hit)
+
+  return {
+    "hits": hits,
+    "estimatedTotalHits": max(exact.get("estimatedTotalHits", 0),
+                              variants.get("estimatedTotalHits", 0)),
+    "processingTimeMs": (exact.get("processingTimeMs", 0)
+                         + variants.get("processingTimeMs", 0)),
+  }
+
+
 @router.get("/api/v1/admin/query", dependencies=[Depends(require_admin)])
 def admin_query(
   q: str = Query(..., min_length=1, description="Free-text name or place"),
@@ -128,6 +179,12 @@ def admin_query(
   event_type: Optional[str] = Query(None, description="Restrict to event type"),
   year_min: Optional[int] = Query(None, description="Minimum event year"),
   year_max: Optional[int] = Query(None, description="Maximum event year"),
+  fuzzy: bool = Query(
+    True,
+    description="Also match names that sound the same but are spelled "
+                "differently — Clasina/Klasina/Klazina, Hogervegt/Hoogervegt. "
+                "Exact spellings are always ranked first.",
+  ),
   names_only: bool = Query(
     True,
     description="Search person names only. Off widens the search to place, "
@@ -191,7 +248,7 @@ def admin_query(
 
   started = time.time()
   try:
-    results = index.search(target_q, params)
+    results = _search_with_variants(index, target_q, params, fuzzy)
   except Exception as exc:
     return {"status": "error", "error_message": str(exc)}
 
@@ -199,6 +256,9 @@ def admin_query(
   for hit in results.get("hits", []):
     hits.append({
       "id": hit.get("id"),
+      # "exact" when the spelling as typed matched, "phonetic" when only the
+      # sound did. Lets the UI say why a differently-spelled record is here.
+      "match": hit.get("_match", "exact"),
       "names": hit.get("names", ""),
       "persons": hit.get("persons", []),
       "event_type": hit.get("event_type", ""),

@@ -324,22 +324,43 @@ const ArchiveQuery = ({ getIdToken }) => {
                       type="button"
                       onClick={() => toggle(hit.id)}
                       aria-expanded={expanded.has(hit.id)}
-                      className="flex items-start gap-1.5 text-left text-primary font-semibold break-words hover:text-accent transition-colors cursor-pointer"
+                      className="flex items-start gap-2 text-left text-primary font-semibold break-words hover:text-accent transition-colors cursor-pointer flex-1"
                     >
                       <ChevronRight
                         size={13}
-                        className={`mt-0.5 shrink-0 transition-transform ${
+                        className={`mt-1 shrink-0 transition-transform ${
                           expanded.has(hit.id) ? 'rotate-90' : ''
                         }`}
                       />
-                      {hit.names}
+                      {hit.persons?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1.5 items-center">
+                          {hit.persons.map((p, i) => {
+                            const isPrincipal = ['Bruidegom', 'Bruid', 'Kind', 'Overledene', 'Geregistreerde'].includes(p.r);
+                            return (
+                              <span
+                                key={i}
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] border font-medium ${
+                                  isPrincipal
+                                    ? 'bg-accent/15 border-accent/40 text-accent'
+                                    : 'bg-muted/60 border-border/60 text-primary/80'
+                                }`}
+                              >
+                                <span>{p.n}</span>
+                                {p.r && <span className="text-[10px] opacity-75 font-mono">({p.r})</span>}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <span>{hit.names}</span>
+                      )}
                     </button>
                     {hit.url && (
                       <a
                         href={hit.url}
                         target="_blank"
                         rel="noreferrer noopener"
-                        className="shrink-0 text-accent hover:underline inline-flex items-center gap-1"
+                        className="shrink-0 text-accent hover:underline inline-flex items-center gap-1 mt-0.5"
                         title="Open at Open Archieven"
                       >
                         <ExternalLink size={11} />
@@ -383,17 +404,6 @@ const ArchiveQuery = ({ getIdToken }) => {
                     <pre className="mb-2 p-2.5 rounded bg-muted/60 border border-border/60 text-[10px] leading-relaxed font-mono text-secondary overflow-x-auto max-h-72 overflow-y-auto">
 {JSON.stringify(hit.raw ?? hit, null, 2)}
                     </pre>
-                  )}
-
-                  {hit.persons?.length > 0 && (
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-secondary">
-                      {hit.persons.map((p, i) => (
-                        <span key={i}>
-                          <span className="text-primary/80">{p.n}</span>
-                          <span className="text-secondary/60"> · {p.r}</span>
-                        </span>
-                      ))}
-                    </div>
                   )}
                 </li>
               ))}
