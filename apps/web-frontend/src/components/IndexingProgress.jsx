@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Layers, Loader2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { Layers, Loader2, AlertTriangle, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
 import { getArchiveName, ADMIN_API_BASE_URL } from '../config';
 
 /**
@@ -60,6 +60,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
   const [cancelFeedback, setCancelFeedback] = useState(null);
   const [showFailedDetails, setShowFailedDetails] = useState(false);
   const [loadingFailedTasks, setLoadingFailedTasks] = useState(false);
+  const [clearingFailed, setClearingFailed] = useState(false);
   const [failedTasks, setFailedTasks] = useState(null);
 
   const fetchFailedTasks = async () => {
@@ -82,6 +83,32 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
     } finally {
       setLoadingFailedTasks(false);
       setShowFailedDetails(true);
+    }
+  };
+
+  const handleClearFailedTasks = async () => {
+    setClearingFailed(true);
+    try {
+      const token = getIdToken ? await getIdToken() : null;
+      const res = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/indexing/clear_failed_tasks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        setShowFailedDetails(false);
+        setFailedTasks([]);
+        onRefresh?.();
+      } else {
+        alert(data.error_message || 'Failed to clear failed task history.');
+      }
+    } catch (err) {
+      alert(String(err));
+    } finally {
+      setClearingFailed(false);
     }
   };
 
@@ -259,7 +286,19 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
             <div className="mt-2.5 p-3 rounded-lg bg-red-950/20 border border-red-500/30 space-y-2 text-xs animate-in fade-in duration-150">
               <div className="flex items-center justify-between font-semibold text-red-400 text-[11px] uppercase tracking-wider">
                 <span>Failed Indexing Tasks</span>
-                <span>Showing up to {failedTasks?.length || 0}</span>
+                <div className="flex items-center gap-3">
+                  <span>Showing up to {failedTasks?.length || 0}</span>
+                  <button
+                    type="button"
+                    onClick={handleClearFailedTasks}
+                    disabled={clearingFailed}
+                    className="px-2 py-0.5 rounded text-[10px] text-red-300 hover:text-red-100 bg-red-500/20 hover:bg-red-500/30 border border-red-500/40 transition-colors flex items-center gap-1 cursor-pointer font-medium"
+                    title="Clear all failed task records from Meilisearch history"
+                  >
+                    {clearingFailed ? <Loader2 size={10} className="animate-spin" /> : <Trash2 size={10} />}
+                    Clear History
+                  </button>
+                </div>
               </div>
               {failedTasks && failedTasks.length > 0 ? (
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
@@ -461,24 +500,30 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
           <p className="text-[10px] font-bold uppercase tracking-widest text-secondary/70 mb-2">
             Recently completed
           </p>
-          <ul className="space-y-1">
+          <ul className="space-y-1.5">
             {indexing.recent_batches.map((b) => {
               const seconds = parseIsoDuration(b.duration);
-              // Measured from the documents the engine reports, not inferred
-              // from task count times our ingest's batch size.
               const perSecond =
                 seconds && seconds > 0 && b.documents ? b.documents / seconds : null;
+              const isFailed = b.status === 'failed' || b.status === 'partiallyFailed' || !!b.error_code || !!b.error_message;
+
               return (
-                <li key={b.uid}>
+                <li key={b.uid} className="rounded-md border border-transparent hover:border-border/40 transition-colors p-1">
                   <button
                     type="button"
                     onClick={() => onOpenTelemetry?.(b.uid)}
-                    className="w-full flex justify-between gap-3 text-[11px] p-1.5 rounded-md hover:bg-accent/10 transition-colors cursor-pointer text-left group"
+                    className="w-full flex justify-between gap-3 text-[11px] p-1 rounded hover:bg-accent/10 transition-colors cursor-pointer text-left group items-center"
                     title={`Click to view telemetry & charts for Batch ${b.uid}`}
                   >
-                    <span className="text-secondary group-hover:text-primary font-medium transition-colors">
-                      Batch {b.uid}
-                      <span className="text-secondary/60"> · {b.tasks?.toLocaleString()} tasks</span>
+                    <span className="text-secondary group-hover:text-primary font-medium transition-colors flex items-center gap-2 flex-wrap">
+                      <span>Batch {b.uid}</span>
+                      <span className="text-secondary/60">· {b.tasks?.toLocaleString()} tasks</span>
+                      {isFailed && (
+                        <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 rounded flex items-center gap-1">
+                          <AlertTriangle size={9} />
+                          {b.status === 'partiallyFailed' ? 'Partially Failed' : 'Failed'}
+                        </span>
+                      )}
                     </span>
                     <span className="text-secondary/70 group-hover:text-accent shrink-0 tabular-nums font-mono transition-colors">
                       {stamp(b.started_at || b.finished_at)}
@@ -486,6 +531,12 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
                       {perSecond ? ` · ${Math.round(perSecond).toLocaleString()}/s` : ''}
                     </span>
                   </button>
+                  {isFailed && (b.error_message || b.error_code) && (
+                    <div className="mx-1.5 mb-1 mt-0.5 p-2 rounded bg-red-950/20 border border-red-500/20 text-[11px]">
+                      <span className="text-red-400 font-bold font-mono mr-2">{b.error_code || 'Error'}:</span>
+                      <span className="text-primary/90">{b.error_message || 'Batch encountered execution errors.'}</span>
+                    </div>
+                  )}
                 </li>
               );
             })}

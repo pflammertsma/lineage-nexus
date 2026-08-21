@@ -4,7 +4,7 @@ Search and record lookup endpoints.
 
 import time
 
-from phonetics import phonetic
+from phonetics import phonetic, phonetic_all
 import re
 from typing import Any, Dict, List, Optional, Tuple
 from fastapi import APIRouter, Query, HTTPException, Depends

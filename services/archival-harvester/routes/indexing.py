@@ -241,6 +241,30 @@ def admin_failed_tasks(limit: int = Query(20, ge=1, le=100)):
     return {"status": "error", "error_message": str(exc)}
 
 
+@router.post("/api/v1/admin/indexing/clear_failed_tasks", dependencies=[Depends(require_admin)])
+def admin_clear_failed_tasks():
+  """Deletes all failed task history records from Meilisearch task queue."""
+  try:
+    req = urllib.request.Request(
+      f"{MEILI_HOST}/tasks?statuses=failed",
+      data=b"",
+      headers={
+        "Authorization": f"Bearer {MEILI_MASTER_KEY}",
+        "Content-Type": "application/json",
+      },
+      method="DELETE",
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+      result = json.loads(resp.read().decode("utf-8"))
+      return {
+        "status": "success",
+        "message": "Cleared failed task history.",
+        "task": result,
+      }
+  except Exception as exc:
+    return {"status": "error", "error_message": f"Failed to clear failed tasks: {str(exc)}"}
+
+
 @router.get("/api/v1/admin/indexing", dependencies=[Depends(require_admin)])
 def admin_indexing():
   """Queue depth, active batch, and throughput metrics."""
@@ -282,10 +306,14 @@ def admin_indexing():
             for s in (progress.get("steps") or [])
           ],
         }
-      elif finished is not None and len(recent) < 5:
+      elif finished is not None and len(recent) < 8:
         details = batch.get("details") or {}
+        err = batch.get("error") or {}
         recent.append({
           "uid": batch.get("uid"),
+          "status": batch.get("status"),
+          "error_code": err.get("code"),
+          "error_message": err.get("message"),
           "tasks": batch_stats.get("totalNbTasks"),
           "duration": batch.get("duration"),
           "started_at": batch.get("startedAt"),
