@@ -849,6 +849,18 @@ const ArchiveQuery = ({ getIdToken }) => {
                         <span>{renderHighlightedName(hit.names, null, globalTokens, roleScopedTokens).rendered}</span>
                       )}
                     </button>
+                    {/* Why this record is here. Without it a differently-spelled
+                        hit looks like a mistake — "Clasina" for a search of
+                        "Klasina" reads as noise until you can see it was matched
+                        on sound rather than on spelling. */}
+                    {hit.match === 'phonetic' && (
+                      <span
+                        className="shrink-0 px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-[10px] text-amber-500 cursor-help mt-0.5"
+                        title="Spelled differently, sounds the same. Matched on the phonetic key rather than the letters you typed."
+                      >
+                        sounds alike
+                      </span>
+                    )}
                     {hit.url && (
                       <a
                         href={hit.url}

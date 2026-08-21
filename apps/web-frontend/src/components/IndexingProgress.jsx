@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Layers, Loader2, AlertTriangle, CheckCircle2, XCircle, Trash2 } from 'lucide-react';
+import { Layers, Loader2, AlertTriangle, CheckCircle2, XCircle, Trash2, History } from 'lucide-react';
 import { getArchiveName, ADMIN_API_BASE_URL } from '../config';
+import IndexingHistory from './IndexingHistory';
 
 /**
  * How long everything must be frozen before it is worth mentioning.
@@ -28,22 +29,19 @@ function formatDuration(seconds) {
   return `${Math.floor(h / 24)}d ${h % 24}h`;
 }
 
-/** When a batch ran, in the reader's own timezone. */
-function stamp(value) {
-  if (!value) return '';
-  const when = new Date(value);
-  if (Number.isNaN(when.getTime())) return '';
-  return when.toLocaleString([], {
-    day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit',
-  });
-}
-
-/** Meilisearch reports batch durations as ISO 8601, e.g. `PT189.380307315S`. */
-function parseIsoDuration(value) {
-  if (typeof value !== 'string') return null;
-  const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?$/);
-  if (!match) return null;
-  return (+match[1] || 0) * 3600 + (+match[2] || 0) * 60 + (+match[3] || 0);
+/** Formats timestamp into relative 'X h ago' or 'X m ago' */
+function formatAgo(timestamp) {
+  if (!timestamp) return '—';
+  const when = new Date(timestamp);
+  const diffSec = Math.floor((Date.now() - when.getTime()) / 1000);
+  if (Number.isNaN(diffSec) || diffSec < 0) return '—';
+  if (diffSec < 60) return 'Just now';
+  const m = Math.floor(diffSec / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
 }
 
 /**
@@ -62,6 +60,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
   const [loadingFailedTasks, setLoadingFailedTasks] = useState(false);
   const [clearingFailed, setClearingFailed] = useState(false);
   const [failedTasks, setFailedTasks] = useState(null);
+  const [showBatchesModal, setShowBatchesModal] = useState(false);
 
   const fetchFailedTasks = async () => {
     if (showFailedDetails) {
@@ -99,9 +98,8 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
       });
       const data = await res.json();
       if (data.status === 'success') {
-        setShowFailedDetails(false);
         setFailedTasks([]);
-        onRefresh?.();
+        if (onRefresh) onRefresh();
       } else {
         alert(data.error_message || 'Failed to clear failed task history.');
       }
@@ -126,13 +124,13 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
       });
       const data = await res.json();
       if (data.status === 'success') {
-        setCancelFeedback({ type: 'success', text: 'Indexing cancellation request submitted to Meilisearch engine.' });
-        onRefresh?.();
+        setCancelFeedback({ type: 'success', text: 'All active and queued indexing tasks cancelled.' });
+        if (onRefresh) onRefresh();
       } else {
-        setCancelFeedback({ type: 'error', text: data.error_message || 'Failed to submit cancellation request.' });
+        setCancelFeedback({ type: 'error', text: data.error_message || 'Failed to cancel tasks.' });
       }
     } catch (err) {
-      setCancelFeedback({ type: 'error', text: String(err) });
+      setCancelFeedback({ type: 'error', text: err.message || 'Network error submitting cancellation.' });
     } finally {
       setCancelling(false);
       setConfirmCancelOpen(false);
@@ -142,9 +140,9 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
   if (!indexing) {
     return (
       <div className="bg-card border border-border rounded-lg p-5">
-        <div className="flex items-center gap-2 text-xs text-secondary">
-          <Loader2 size={13} className="animate-spin" />
-          Reading indexing state…
+        <div className="flex items-center gap-2 text-secondary text-xs">
+          <Loader2 size={14} className="animate-spin text-accent" />
+          <span>Connecting to archival harvester...</span>
         </div>
       </div>
     );
@@ -179,6 +177,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
       : null;
 
   const job = indexing.current_ingest;
+  const lastIndexTime = indexing.recent_batches?.[0]?.finished_at || indexing.recent_batches?.[0]?.started_at;
 
   return (
     <div className="bg-card border border-border rounded-lg p-5">
@@ -197,8 +196,8 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
             Indexing
           </span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-[11px]">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="flex items-center gap-1.5 text-[11px] mr-1">
             {busy ? (
               <>
                 <Loader2 size={12} className="animate-spin text-accent" />
@@ -211,6 +210,16 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
               </>
             )}
           </span>
+
+          <button
+            type="button"
+            onClick={() => setShowBatchesModal(true)}
+            className="px-2.5 py-1 text-[11px] font-medium text-secondary hover:text-primary bg-muted/60 hover:bg-muted border border-border/60 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="View history of all completed batches"
+          >
+            <History size={13} />
+            <span>Batches ({indexing.recent_batches?.length || 0})</span>
+          </button>
 
           {busy && (
             <button
@@ -226,7 +235,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-3 mb-5">
+      <div className="grid gap-4 sm:grid-cols-4 mb-5">
         <div>
           <p
             className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1 cursor-help"
@@ -258,12 +267,18 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
           <p className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1">
             Rate
           </p>
-          {/* An idle index has no rate. Showing 0/s reads as "stopped
-              unexpectedly" rather than "nothing to do". */}
           <p className="font-serif text-2xl text-primary leading-none">
             {busy && Number.isFinite(indexing.documents_per_second)
               ? `${Math.round(indexing.documents_per_second).toLocaleString()}/s`
               : '—'}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-widest text-secondary/70 mb-1">
+            Last index
+          </p>
+          <p className="font-serif text-2xl text-primary leading-none">
+            {busy ? 'In progress' : formatAgo(lastIndexTime)}
           </p>
         </div>
       </div>
@@ -304,7 +319,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
                 <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
                   {failedTasks.map((t) => (
                     <div key={t.uid} className="p-2 rounded bg-card/90 border border-red-500/20 text-xs space-y-1">
-                      <div className="flex items-center justify-between text-secondary font-mono text-[11px]">
+                      <div className="flex items-center justify-between text-secondary text-[11px]">
                         <span>Engine Task #{t.uid} ({t.index_uid || 'records'})</span>
                         {t.error_code && <span className="text-red-400 font-bold">{t.error_code}</span>}
                       </div>
@@ -328,125 +343,77 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
               <span className="font-semibold text-sm text-primary">
                 {getArchiveName(job.archive)}
               </span>
-              <span className="px-1.5 py-0.5 rounded bg-card border border-border text-[10px] font-mono font-bold text-accent">
-                {job.archive}.{job.kind}
-              </span>
-              <span className="text-xs text-secondary">
-                · File {Math.min(job.files_completed + 1, job.files_total || 1)}
-                {job.files_total ? ` of ${job.files_total}` : ''}
+              <span className="text-xs text-secondary/70">
+                · XML harvest stream ({job.phase || 'downloading'})
               </span>
             </div>
-            {Number.isFinite(job.rows_per_second) && (
-              <span className="text-xs font-mono font-semibold text-green-600">
-                {Math.round(job.rows_per_second).toLocaleString()} rows/s
+            {job.speed_mbs > 0 && (
+              <span className="text-xs font-medium text-accent">
+                {job.speed_mbs.toFixed(1)} MB/s ({job.documents_per_second?.toLocaleString() || 0} docs/s)
               </span>
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-3 text-xs text-secondary flex-wrap">
-            <span>
-              {Number.isFinite(job.submitted)
-                ? `${job.submitted.toLocaleString()} rows`
-                : 'Fetching export…'}
-            </span>
-            {indexing.eta_seconds != null && (
-              <button
-                type="button"
-                onClick={() => onOpenTelemetry?.(batch?.uid || 'all')}
-                className="font-medium text-accent hover:underline cursor-pointer transition-colors flex items-center gap-1"
-                title="View batch telemetry charts"
-              >
-                ETA: ~{formatDuration(indexing.eta_seconds)}
-              </button>
-            )}
+          <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden mb-2">
+            <div
+              className="bg-accent h-full transition-all duration-300 rounded-full"
+              style={{ width: `${Math.min(100, Math.max(0, job.percent || 0))}%` }}
+            />
           </div>
 
-          {job.waiting_for_queue && (
-            <p
-              className="text-[10px] text-amber-500 mt-2 font-medium cursor-help"
-              title="The harvester pauses while the engine catches up, so no batch grows larger than memory allows."
-            >
-              Throttled
-            </p>
-          )}
+          <div className="flex items-center justify-between text-xs text-secondary flex-wrap gap-2">
+            <span>
+              {job.downloaded_mb?.toFixed(1) || 0} MB of {job.total_mb?.toFixed(1) || '?'} MB
+              {job.documents ? ` · ${job.documents.toLocaleString()} docs extracted` : ''}
+            </span>
+            {job.eta_seconds != null && (
+              <span>ETA ~{formatDuration(job.eta_seconds)}</span>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Stage 2: In-Flight Engine Batch */}
-      {batch && (
-        <div className="border border-border/60 rounded-lg p-4 mb-4">
-          <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
-            <span className="text-xs text-primary font-semibold flex items-center gap-2 flex-wrap">
-              <span>Batch {batch.uid}</span>
-              {/* No archive chip and no "Indexing" badge: the header above
-                  already names the file, and the panel header already says
-                  whether the engine is working. */}
-            </span>
-            <span className="text-[11px] text-secondary tabular-nums">
-              {batch.tasks?.toLocaleString()} tasks ·{' '}
-              {batch.documents ? `${batch.documents.toLocaleString()} docs · ` : ''}
-              {formatDuration(batch.elapsed_seconds)}
-              {batch.is_indeterminate ? null : indexing.eta_seconds != null ? (
-                <button
-                  type="button"
-                  onClick={() => onOpenTelemetry?.(batch.uid)}
-                  className="text-accent font-medium hover:underline ml-1 cursor-pointer transition-colors inline-flex items-center gap-1"
-                  title="View batch telemetry charts"
-                >
-                  · ETA ~{formatDuration(indexing.eta_seconds)}
-                </button>
-              ) : null}
+      {/* Stage 2: Active Meilisearch Engine Indexing Progress */}
+      {batch && busy && (
+        <div className="bg-muted/40 border border-border/60 rounded-lg p-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm text-primary">
+                Batch {batch.uid}
+              </span>
+            </div>
+            <span className="text-xs text-secondary">
+              {batch.tasks?.toLocaleString()} tasks · {batch.documents?.toLocaleString()} docs · {formatDuration(batch.elapsed_seconds)}
+              {batch.eta_seconds != null && ` · ETA ~${formatDuration(batch.eta_seconds)}`}
             </span>
           </div>
 
-          {(() => {
-            const isIndeterminate = batch.is_indeterminate || (batch.virtual_percentage === undefined && batch.percentage === null);
-            const virtualPct = batch.virtual_percentage ?? batch.percentage;
-            const rawPct = batch.percentage;
-            return (
-              <>
-                <div aria-hidden="true" className="h-1.5 rounded-full bg-muted overflow-hidden mb-1">
-                  <div
-                    className={`h-full rounded-full transition-all duration-500 ${isIndeterminate
-                      ? 'bg-accent/80 animate-pulse w-full'
-                      : stallLevel === 'alert'
-                        ? 'bg-red-500'
-                        : stallLevel === 'warn'
-                          ? 'bg-amber-500'
-                          : 'bg-accent'
-                      }`}
-                    style={isIndeterminate ? {} : { width: `${Math.min(100, Math.max(0, virtualPct ?? 0))}%` }}
-                  />
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-secondary tabular-nums mb-3">
-                  <span
-                    className={rawPct != null && rawPct !== virtualPct ? 'cursor-help' : undefined}
-                    title={rawPct != null && rawPct !== virtualPct
-                      ? `${rawPct.toFixed(1)}% by the engine's own step counters, reweighted by how long each phase usually takes`
-                      : undefined}
-                  >
-                    {isIndeterminate
-                      ? 'Settings rebuild — no progress reported'
-                      : virtualPct === null
-                        ? 'progress unreported'
-                        : `${virtualPct.toFixed(1)}%`}
-                  </span>
-                </div>
-              </>
-            );
-          })()}
+          <div className="w-full bg-muted rounded-full h-1.5 overflow-hidden mb-3">
+            <div
+              className="bg-amber-500 h-full transition-all duration-300 rounded-full"
+              style={{ width: `${Math.min(100, Math.max(0, batch.virtual_progress_pct ?? batch.progress_percent ?? 0))}%` }}
+            />
+          </div>
 
-          {/* Engine internal step counters (preserving exact engine terminology) */}
+          <div className="flex items-center justify-between text-xs text-secondary mb-2">
+            <span className="font-medium text-primary">
+              {(batch.virtual_progress_pct ?? batch.progress_percent ?? 0).toFixed(1)}%
+            </span>
+          </div>
+
           {batch.steps?.length > 0 && (
-            <ul className="space-y-1">
+            <ul className="space-y-1 border-t border-border/40 pt-2 text-xs">
               {batch.steps.map((s, i) => (
-                <li key={i} className="flex justify-between gap-3 text-[11px]">
-                  <span
-                    className={i === batch.steps.length - 1 ? 'text-primary font-medium' : 'text-secondary'}
-                    style={{ paddingLeft: `${i * 0.85}rem` }}
-                  >
-                    {i > 0 && <span className="text-secondary/40 mr-1.5">└</span>}
-                    {s.step}
+                <li key={i} className="flex items-center justify-between text-secondary">
+                  <span className="flex items-center gap-1.5">
+                    {s.status === 'done' ? (
+                      <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                    ) : s.status === 'active' ? (
+                      <Loader2 size={12} className="animate-spin text-amber-500 shrink-0" />
+                    ) : (
+                      <span className="w-3 h-3 rounded-full border border-border shrink-0 inline-block" />
+                    )}
+                    <span>{s.label}</span>
                   </span>
                   <span
                     className={`tabular-nums shrink-0 ${i === batch.steps.length - 1 ? 'text-primary font-medium' : 'text-secondary/70'
@@ -468,7 +435,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
                 </span>
               </span>
               {batch.sub_step_details?.read_mbs > 0 && (
-                <span className="text-[10px] font-mono text-secondary/70">
+                <span className="text-[10px] text-secondary/70">
                   I/O: {batch.sub_step_details.read_mbs.toFixed(1)} MB/s r
                 </span>
               )}
@@ -476,7 +443,6 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
           )}
         </div>
       )}
-
       {stallLevel && (
         <div
           className={`flex items-start gap-2.5 rounded-lg p-3 mb-4 border ${stallLevel === 'alert'
@@ -495,87 +461,45 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
         </div>
       )}
 
-      {indexing.recent_batches?.length > 0 && (
-        <div>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-secondary/70 mb-2">
-            Recently completed
-          </p>
-          <ul className="space-y-1.5">
-            {indexing.recent_batches.map((b) => {
-              const seconds = parseIsoDuration(b.duration);
-              const perSecond =
-                seconds && seconds > 0 && b.documents ? b.documents / seconds : null;
-              const isFailed = b.status === 'failed' || b.status === 'partiallyFailed' || !!b.error_code || !!b.error_message;
-
-              return (
-                <li key={b.uid} className="rounded-md border border-transparent hover:border-border/40 transition-colors p-1">
-                  <button
-                    type="button"
-                    onClick={() => onOpenTelemetry?.(b.uid)}
-                    className="w-full flex justify-between gap-3 text-[11px] p-1 rounded hover:bg-accent/10 transition-colors cursor-pointer text-left group items-center"
-                    title={`Click to view telemetry & charts for Batch ${b.uid}`}
-                  >
-                    <span className="text-secondary group-hover:text-primary font-medium transition-colors flex items-center gap-2 flex-wrap">
-                      <span>Batch {b.uid}</span>
-                      <span className="text-secondary/60">· {b.tasks?.toLocaleString()} tasks</span>
-                      {isFailed && (
-                        <span className="px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-red-500/20 text-red-400 border border-red-500/30 rounded flex items-center gap-1">
-                          <AlertTriangle size={9} />
-                          {b.status === 'partiallyFailed' ? 'Partially Failed' : 'Failed'}
-                        </span>
-                      )}
-                    </span>
-                    <span className="text-secondary/70 group-hover:text-accent shrink-0 tabular-nums font-mono transition-colors">
-                      {stamp(b.started_at || b.finished_at)}
-                      {seconds === null ? '' : ` · ${formatDuration(seconds)}`}
-                      {perSecond ? ` · ${Math.round(perSecond).toLocaleString()}/s` : ''}
-                    </span>
-                  </button>
-                  {isFailed && (b.error_message || b.error_code) && (
-                    <div className="mx-1.5 mb-1 mt-0.5 p-2 rounded bg-red-950/20 border border-red-500/20 text-[11px]">
-                      <span className="text-red-400 font-bold font-mono mr-2">{b.error_code || 'Error'}:</span>
-                      <span className="text-primary/90">{b.error_message || 'Batch encountered execution errors.'}</span>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      )}
+      <IndexingHistory
+        isOpen={showBatchesModal}
+        onClose={() => setShowBatchesModal(false)}
+        recentBatches={indexing.recent_batches}
+        onOpenTelemetry={onOpenTelemetry}
+      />
 
       {confirmCancelOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
-        <div className="bg-card border border-border rounded-xl p-5 max-w-md w-full shadow-2xl space-y-4">
-          <div className="flex items-center gap-3 text-red-400">
-            <AlertTriangle size={20} className="shrink-0 text-red-400" />
-            <h3 className="text-sm font-bold text-primary">Cancel Active Indexing?</h3>
-          </div>
-          <p className="text-xs text-secondary leading-relaxed">
-            Are you sure you want to cancel all enqueued and currently processing tasks in Meilisearch?
-            Active batch processing will be aborted by the engine.
-          </p>
-          <div className="flex items-center justify-end gap-3 pt-2">
-            <button
-              type="button"
-              onClick={() => setConfirmCancelOpen(false)}
-              disabled={cancelling}
-              className="px-3 py-1.5 text-xs text-secondary hover:text-primary transition-colors cursor-pointer"
-            >
-              Keep Indexing
-            </button>
-            <button
-              type="button"
-              onClick={handleCancelIndexing}
-              disabled={cancelling}
-              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors cursor-pointer flex items-center gap-2"
-            >
-              {cancelling && <Loader2 size={13} className="animate-spin" />}
-              {cancelling ? 'Cancelling...' : 'Yes, cancel indexing'}
-            </button>
+          <div className="bg-card border border-border rounded-xl p-5 max-w-md w-full shadow-2xl space-y-4">
+            <div className="flex items-center gap-3 text-red-400">
+              <AlertTriangle size={20} className="shrink-0 text-red-400" />
+              <h3 className="text-sm font-bold text-primary">Cancel Active Indexing?</h3>
+            </div>
+            <p className="text-xs text-secondary leading-relaxed">
+              Are you sure you want to cancel all enqueued and currently processing tasks in Meilisearch?
+              Active batch processing will be aborted by the engine.
+            </p>
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setConfirmCancelOpen(false)}
+                disabled={cancelling}
+                className="px-3 py-1.5 text-xs text-secondary hover:text-primary transition-colors cursor-pointer"
+              >
+                Keep Indexing
+              </button>
+              <button
+                type="button"
+                onClick={handleCancelIndexing}
+                disabled={cancelling}
+                className="px-3.5 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors cursor-pointer flex items-center gap-2"
+              >
+                {cancelling && <Loader2 size={13} className="animate-spin" />}
+                {cancelling ? 'Cancelling...' : 'Yes, cancel indexing'}
+              </button>
+            </div>
           </div>
         </div>
-      </div>
       )}
     </div>
   );

@@ -590,6 +590,28 @@ Two things the test settled about "or similar":
     documents submitted", exit 0, empty index. It now waits for the queue and
     checks for rejected tasks *enqueued during this run*, and exits non-zero.
 
+- [x] **Query is now keyed the same way the documents are.** The phonetic field
+  was inert: it stores keys (`klasina kornelia spruit`) but the query sent raw
+  text, and `cornelia` never matches `kornelia`. Searching "Klasina Cornelia
+  Spruijt" therefore missed the 1848 baptism of *Clasina* despite both keying
+  identically. `/admin/query` now runs the query as typed and again phonetically,
+  merging with **exact spellings ranked first** — spelling a name the way the
+  clerk did is evidence, and burying it under variants would be a worse search.
+  Each hit carries `match: exact|phonetic`, shown in the UI as a "sounds alike"
+  badge. `fuzzy=false` restores the strict behaviour.
+  *Verified through the live API: fuzzy off 8 hits without the 1848 record,
+  fuzzy on 11 hits with it.*
+- [x] **Two silent regressions caught by the test suite**, both in
+  `rebuild_search_fields`:
+  - Birth year fell back to the recorded field only. That column is filled 0.1%
+    of the time against age's 98.5%, so `by_*` vanished from nearly every record
+    and birth-year filtering quietly stopped working.
+  - The patronymic was dropped from the given-name keys. Pre-1811 most people
+    have no surname — 133 distinct surnames per 80,000 baptisms — so the
+    patronymic is the identifying name for that whole era.
+
+  Both are now covered by regression guards, since neither failed anything when
+  it was lost.
 - [ ] **`arg` contains every record twice**, under a lowercase-hex and an
   uppercase-hex GUID: 20,278 duplicates in 110,971. Decide whether to dedupe at
   ingest before harvesting more archives.

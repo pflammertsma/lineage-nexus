@@ -90,6 +90,14 @@ independently.
 
 ## 3. Klasina Cornelia Spruijt — given-name spelling drift
 
+**This is the record that exposed the query-side gap.** Searching
+"Klasina Cornelia Spruijt" missed the 1848 baptism of *Clasina*, even though the
+index keyed both to `klasina`. The documents were keyed; the query was not, so
+`names_p` — which stores `klasina kornelia spruit` — was being searched with raw
+text. `cornelia` is not `kornelia`, so that field matched nothing and sat unused.
+Measured on this exact record: raw query **0 hits**, keyed query **16**.
+
+
 | year | kind | name as written | parents |
 |---|---|---|---|
 | 1848 | `bsg` | **Clasina** Cornelia Spruijt | Jacob Spruijt & Jacoba van Zwieten |
@@ -124,5 +132,7 @@ Run against a fresh `arg` index. Filter values are phonetic keys, not raw names.
 | the reference query | see §2 | exactly 1 |
 | negative control | see §2 | **0** |
 | derived birth year | `kind='bsh' AND by_bride < 1830 AND by_bride > 1800` | non-empty |
+| fuzzy off | `q=Klasina Cornelia Spruijt&fuzzy=false` | 8 hits, **no 1848 Clasina** |
+| fuzzy on | `q=Klasina Cornelia Spruijt&fuzzy=true` | 11 hits, 1848 Clasina tagged `phonetic` |
 
 Every one of these returned in **0 ms** against 110,971 documents.
