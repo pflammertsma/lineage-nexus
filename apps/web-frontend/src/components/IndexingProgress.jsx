@@ -312,14 +312,12 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
             : 'border-amber-500/40 text-amber-500'
             }`}
         >
-          <AlertTriangle size={14} className="shrink-0 mt-0.5" />
+          <AlertTriangle size={16} />
           <p className="text-xs">
-            Nothing has moved in {formatDuration(stalled)} — no documents
-            indexed, no tasks completed, and no batch progress.
+            Stalled for {formatDuration(stalled)} without progress.
             {' '}
             <span className="text-secondary">
-              A large merge is quiet under all three, so this is only a problem
-              if it runs well past how long the batches below took.
+              Monitor system load; if the system I/O is idle the task may have crashed.
             </span>
           </p>
         </div>
@@ -328,7 +326,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
       {indexing.recent_batches?.length > 0 && (
         <div>
           <p className="text-[10px] font-bold uppercase tracking-widest text-secondary/70 mb-2">
-            Recently completed (Click batch to view telemetry)
+            Recently completed
           </p>
           <ul className="space-y-1">
             {indexing.recent_batches.map((b) => {
