@@ -58,6 +58,32 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
   const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelFeedback, setCancelFeedback] = useState(null);
+  const [showFailedDetails, setShowFailedDetails] = useState(false);
+  const [loadingFailedTasks, setLoadingFailedTasks] = useState(false);
+  const [failedTasks, setFailedTasks] = useState(null);
+
+  const fetchFailedTasks = async () => {
+    if (showFailedDetails) {
+      setShowFailedDetails(false);
+      return;
+    }
+    setLoadingFailedTasks(true);
+    try {
+      const token = getIdToken ? await getIdToken() : null;
+      const res = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/indexing/failed_tasks?limit=20`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        setFailedTasks(data.tasks || []);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingFailedTasks(false);
+      setShowFailedDetails(true);
+    }
+  };
 
   const handleCancelIndexing = async () => {
     setCancelling(true);
@@ -216,15 +242,47 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
       </div>
 
       {queue.failed > 0 && (
-        <p className="flex items-center gap-2 text-xs text-red-500 mb-4">
-          <AlertTriangle size={13} className="shrink-0" />
-          {queue.failed.toLocaleString()} task{queue.failed === 1 ? '' : 's'} failed — those
-          documents are not in the index.
-        </p>
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={fetchFailedTasks}
+            className="flex items-center gap-2 text-xs text-red-400 hover:text-red-300 transition-colors cursor-pointer font-medium"
+          >
+            <AlertTriangle size={13} className="shrink-0" />
+            <span>
+              {queue.failed.toLocaleString()} task{queue.failed === 1 ? '' : 's'} failed — click for details
+            </span>
+            {loadingFailedTasks && <Loader2 size={11} className="animate-spin ml-1" />}
+          </button>
+
+          {showFailedDetails && (
+            <div className="mt-2.5 p-3 rounded-lg bg-red-950/20 border border-red-500/30 space-y-2 text-xs animate-in fade-in duration-150">
+              <div className="flex items-center justify-between font-semibold text-red-400 text-[11px] uppercase tracking-wider">
+                <span>Failed Indexing Tasks</span>
+                <span>Showing up to {failedTasks?.length || 0}</span>
+              </div>
+              {failedTasks && failedTasks.length > 0 ? (
+                <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                  {failedTasks.map((t) => (
+                    <div key={t.uid} className="p-2 rounded bg-card/90 border border-red-500/20 text-xs space-y-1">
+                      <div className="flex items-center justify-between text-secondary font-mono text-[11px]">
+                        <span>Task #{t.uid} ({t.index_uid || 'records'})</span>
+                        {t.error_code && <span className="text-red-400 font-bold">{t.error_code}</span>}
+                      </div>
+                      <p className="text-primary text-xs leading-snug">{t.error_message || 'No detailed error message returned by engine.'}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-secondary text-xs italic">No detailed error records returned from engine queue.</p>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {/* Stage 1: Active Harvester Streaming Banner */}
-      {job && job.is_active !== false && (
+      {job && busy && job.is_active !== false && (
         <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
             <div className="flex items-center gap-2 flex-wrap">
@@ -235,7 +293,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
                 {job.archive}.{job.kind}
               </span>
               <span className="text-xs text-secondary">
-                · File {job.files_completed + 1}
+                · File {Math.min(job.files_completed + 1, job.files_total || 1)}
                 {job.files_total ? ` of ${job.files_total}` : ''}
               </span>
             </div>

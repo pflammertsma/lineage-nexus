@@ -85,9 +85,6 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
         archive, kind = match.group(1), match.group(2)
         break
 
-  if not archive:
-    return None
-
   planned = None
   try:
     with open(os.path.join(INGEST_LOG_DIR, "plan.json"), "r", encoding="utf-8") as handle:
@@ -95,13 +92,21 @@ def _current_ingest() -> Optional[Dict[str, Any]]:
   except (OSError, ValueError):
     planned = None
 
+  planned_cnt = len(planned) if isinstance(planned, list) else None
+  if planned_cnt and completed >= planned_cnt:
+    is_active = False
+
+  # Check if log indicates run completed
+  if any("Ingest complete" in l or "Harvest complete" in l or "Finished" in l for l in tail):
+    is_active = False
+
   return {
     "archive": archive,
     "kind": kind,
-    "files_total": len(planned) if isinstance(planned, list) else None,
+    "files_total": planned_cnt,
     "submitted": submitted,
-    "rows_per_second": rate,
-    "waiting_for_queue": waiting,
+    "rows_per_second": rate if is_active else None,
+    "waiting_for_queue": waiting if is_active else False,
     "files_completed": completed,
     "log_age_seconds": int(age),
     "is_active": is_active,

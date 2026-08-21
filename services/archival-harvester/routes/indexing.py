@@ -217,6 +217,30 @@ def admin_cancel_indexing():
     return {"status": "error", "error_message": f"Failed to cancel indexing tasks: {str(exc)}"}
 
 
+@router.get("/api/v1/admin/indexing/failed_tasks", dependencies=[Depends(require_admin)])
+def admin_failed_tasks(limit: int = Query(20, ge=1, le=100)):
+  """Details of failed indexing tasks from Meilisearch task queue."""
+  try:
+    data = _meili_get(f"/tasks?statuses=failed&limit={limit}")
+    results = data.get("results", [])
+    failed_items = []
+    for t in results:
+      err = t.get("error") or {}
+      failed_items.append({
+        "uid": t.get("uid"),
+        "index_uid": t.get("indexUid"),
+        "status": t.get("status"),
+        "error_code": err.get("code"),
+        "error_message": err.get("message"),
+        "error_link": err.get("link"),
+        "enqueued_at": t.get("enqueuedAt"),
+        "duration": t.get("duration"),
+      })
+    return {"status": "success", "count": len(failed_items), "tasks": failed_items}
+  except Exception as exc:
+    return {"status": "error", "error_message": str(exc)}
+
+
 @router.get("/api/v1/admin/indexing", dependencies=[Depends(require_admin)])
 def admin_indexing():
   """Queue depth, active batch, and throughput metrics."""
