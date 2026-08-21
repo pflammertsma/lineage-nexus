@@ -172,7 +172,7 @@ def _search_with_variants(index, query, params, fuzzy):
 
 @router.get("/api/v1/admin/query", dependencies=[Depends(require_admin)])
 def admin_query(
-  q: str = Query(..., min_length=1, description="Free-text name or place"),
+  q: Optional[str] = Query("", description="Free-text name or place"),
   archive: Optional[str] = Query(None, description="Restrict to one archive code"),
   kind: Optional[str] = Query(None, description="Restrict to record types (comma-separated or single)"),
   place: Optional[str] = Query(None, description="Restrict to event place / city"),
@@ -181,6 +181,8 @@ def admin_query(
   year_max: Optional[int] = Query(None, description="Maximum event year"),
   father: Optional[str] = Query(None, description="Restrict father name"),
   mother: Optional[str] = Query(None, description="Restrict mother name"),
+  child: Optional[str] = Query(None, description="Restrict child / deceased name"),
+  spouse: Optional[str] = Query(None, description="Restrict spouse / partner name"),
   role: Optional[str] = Query(None, description="Restrict to specific person role slug"),
   fuzzy: bool = Query(
     True,
@@ -199,8 +201,9 @@ def admin_query(
   """Raw index search with parametric and inline query syntax filtering."""
   index = meili_client.index(INDEX_NAME)
 
-  clean_q, inline_filters = _parse_inline_query_filters(q)
-  target_q = clean_q if clean_q else q
+  raw_q = q or ""
+  clean_q, inline_filters = _parse_inline_query_filters(raw_q)
+  target_q = clean_q if clean_q else raw_q
 
   target_archive = archive or inline_filters.get("archive")
   target_kind = kind.split(",") if kind else inline_filters.get("kind")
@@ -233,19 +236,36 @@ def admin_query(
     filters.append(f"event_year <= {target_year_max}")
 
   if father:
-    f_clean = father.replace("'", "\\'")
     f_p = phonetic(father)
     if f_p:
       filters.append(f"(s_father = '{f_p}' OR s_groom_father = '{f_p}' OR s_bride_father = '{f_p}' OR g_father = '{f_p}' OR g_groom_father = '{f_p}' OR g_bride_father = '{f_p}')")
 
   if mother:
-    m_clean = mother.replace("'", "\\'")
     m_p = phonetic(mother)
     if m_p:
       filters.append(f"(s_mother = '{m_p}' OR s_groom_mother = '{m_p}' OR s_bride_mother = '{m_p}' OR g_mother = '{m_p}' OR g_groom_mother = '{m_p}' OR g_bride_mother = '{m_p}')")
 
+  if child:
+    c_p = phonetic(child)
+    if c_p:
+      filters.append(f"(s_child = '{c_p}' OR s_deceased = '{c_p}' OR g_child = '{c_p}' OR g_deceased = '{c_p}')")
+
+  if spouse:
+    sp_p = phonetic(spouse)
+    if sp_p:
+      filters.append(f"(s_partner = '{sp_p}' OR s_groom = '{sp_p}' OR s_bride = '{sp_p}' OR g_partner = '{sp_p}' OR g_groom = '{sp_p}' OR g_bride = '{sp_p}')")
+
   if role:
-    filters.append(f"roles = '{role}'")
+    if role == "mother":
+      filters.append("(roles = 'mother' OR roles = 'groom_mother' OR roles = 'bride_mother')")
+    elif role == "father":
+      filters.append("(roles = 'father' OR roles = 'groom_father' OR roles = 'bride_father')")
+    elif role in ("spouse", "partner"):
+      filters.append("(roles = 'partner' OR roles = 'groom' OR roles = 'bride')")
+    elif role == "child":
+      filters.append("(roles = 'child' OR roles = 'registered')")
+    else:
+      filters.append(f"roles = '{role}'")
 
   params: Dict[str, Any] = {"limit": limit}
   if filters:

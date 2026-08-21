@@ -41,6 +41,8 @@ const ArchiveQuery = ({ getIdToken }) => {
   const [yearMax, setYearMax] = useState('');
   const [father, setFather] = useState('');
   const [mother, setMother] = useState('');
+  const [child, setChild] = useState('');
+  const [spouse, setSpouse] = useState('');
   const [role, setRole] = useState('all');
   const [fuzzy, setFuzzy] = useState(true);
   const [namesOnly, setNamesOnly] = useState(true);
@@ -66,6 +68,8 @@ const ArchiveQuery = ({ getIdToken }) => {
     (yearMax.trim() ? 1 : 0) +
     (father.trim() ? 1 : 0) +
     (mother.trim() ? 1 : 0) +
+    (child.trim() ? 1 : 0) +
+    (spouse.trim() ? 1 : 0) +
     (role !== 'all' ? 1 : 0) +
     (!fuzzy ? 1 : 0) +
     (!namesOnly ? 1 : 0);
@@ -78,6 +82,8 @@ const ArchiveQuery = ({ getIdToken }) => {
     setYearMax('');
     setFather('');
     setMother('');
+    setChild('');
+    setSpouse('');
     setRole('all');
     setFuzzy(true);
     setNamesOnly(true);
@@ -86,7 +92,7 @@ const ArchiveQuery = ({ getIdToken }) => {
   const run = async (e) => {
     if (e) e.preventDefault();
     const q = query.trim();
-    if (!q || loading) return;
+    if ((!q && activeFilterCount === 0) || loading) return;
 
     setLoading(true);
     setError(null);
@@ -105,6 +111,8 @@ const ArchiveQuery = ({ getIdToken }) => {
       if (yearMax.trim() && !isNaN(parseInt(yearMax))) url += `&year_max=${parseInt(yearMax)}`;
       if (father.trim()) url += `&father=${encodeURIComponent(father.trim())}`;
       if (mother.trim()) url += `&mother=${encodeURIComponent(mother.trim())}`;
+      if (child.trim()) url += `&child=${encodeURIComponent(child.trim())}`;
+      if (spouse.trim()) url += `&spouse=${encodeURIComponent(spouse.trim())}`;
       if (role !== 'all') url += `&role=${encodeURIComponent(role)}`;
       if (!fuzzy) url += `&fuzzy=false`;
       if (!namesOnly) url += `&names_only=false`;
@@ -166,14 +174,14 @@ const ArchiveQuery = ({ getIdToken }) => {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder='Search name or query with inline syntax (e.g. "Jan de Vries place:Leeuwarden year:1840..1860 type:birth archive:arg")'
+            placeholder='Search main name or query with inline syntax (e.g. "Jan de Vries place:Leeuwarden year:1840..1860 type:birth archive:arg")'
             className="input-field flex-1 text-[13px]"
             autoComplete="off"
             spellCheck={false}
           />
           <button
             type="submit"
-            disabled={loading || !query.trim()}
+            disabled={loading || (!query.trim() && activeFilterCount === 0)}
             className="px-5 rounded-lg bg-accent text-on-accent text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-40 flex items-center gap-2"
           >
             {loading ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
@@ -269,7 +277,7 @@ const ArchiveQuery = ({ getIdToken }) => {
             </div>
 
             {/* Relational Family & Person Filters */}
-            <div className="grid gap-4 sm:grid-cols-3 pt-2 border-t border-border/40">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 pt-2 border-t border-border/40">
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
                   Father's Name
@@ -298,6 +306,32 @@ const ArchiveQuery = ({ getIdToken }) => {
 
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Spouse / Partner
+                </label>
+                <input
+                  type="text"
+                  value={spouse}
+                  onChange={(e) => setSpouse(e.target.value)}
+                  placeholder="e.g. van Zwieten"
+                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Child / Subject
+                </label>
+                <input
+                  type="text"
+                  value={child}
+                  onChange={(e) => setChild(e.target.value)}
+                  placeholder="e.g. Klasina"
+                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
                   Subject Role
                 </label>
                 <select
@@ -309,8 +343,7 @@ const ArchiveQuery = ({ getIdToken }) => {
                   <option value="child">Child (Kind / Dopeling)</option>
                   <option value="father">Father (Vader)</option>
                   <option value="mother">Mother (Moeder)</option>
-                  <option value="groom">Groom (Bruidegom)</option>
-                  <option value="bride">Bride (Bruid)</option>
+                  <option value="spouse">Spouse / Partner (Bruidegom / Bruid / Relatie)</option>
                   <option value="deceased">Deceased (Overledene)</option>
                   <option value="witness">Witness (Getuige)</option>
                 </select>
@@ -391,6 +424,18 @@ const ArchiveQuery = ({ getIdToken }) => {
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
                 Mother: {mother.trim()}
                 <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setMother('')} />
+              </span>
+            )}
+            {spouse.trim() && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
+                Spouse: {spouse.trim()}
+                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setSpouse('')} />
+              </span>
+            )}
+            {child.trim() && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
+                Child: {child.trim()}
+                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setChild('')} />
               </span>
             )}
             {role !== 'all' && (

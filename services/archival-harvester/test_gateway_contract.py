@@ -89,7 +89,7 @@ def run_contract_tests():
       failures.append(f"POST /api/v1/admin/indexing/cancel failed: status {res.status_code}")
 
   # 10. Relational Admin Query
-  res = client.get("/api/v1/admin/query?q=Spruijt&archive=arg&father=Jacob&mother=Jacoba&role=child&fuzzy=true&names_only=true", headers=ADMIN_HEADERS)
+  res = client.get("/api/v1/admin/query?q=&archive=arg&father=Jacob&mother=Jacoba&child=Klasina&spouse=Zwieten&role=child&fuzzy=true&names_only=true", headers=ADMIN_HEADERS)
   if res.status_code != 200:
     failures.append(f"GET /api/v1/admin/query with relational filters failed: status {res.status_code}")
 
