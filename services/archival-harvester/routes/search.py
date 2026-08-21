@@ -60,6 +60,15 @@ def _parse_inline_query_filters(q_str: str) -> Tuple[str, Dict[str, Any]]:
               extracted["year_min"] = int(year_part)
           elif v.isdigit():
             extracted["year_min"] = int(v)
+        elif val.startswith(">"):
+          v = val[1:]
+          if "-" in v:
+            extracted["date_min"] = v
+            year_part = v.split("-")[0]
+            if year_part.isdigit():
+              extracted["year_min"] = int(year_part) + 1
+          elif v.isdigit():
+            extracted["year_min"] = int(v) + 1
         elif val.startswith("<="):
           v = val[2:]
           if "-" in v:
@@ -69,6 +78,15 @@ def _parse_inline_query_filters(q_str: str) -> Tuple[str, Dict[str, Any]]:
               extracted["year_max"] = int(year_part)
           elif v.isdigit():
             extracted["year_max"] = int(v)
+        elif val.startswith("<"):
+          v = val[1:]
+          if "-" in v:
+            extracted["date_max"] = v
+            year_part = v.split("-")[0]
+            if year_part.isdigit():
+              extracted["year_max"] = int(year_part) - 1
+          elif v.isdigit():
+            extracted["year_max"] = int(v) - 1
         elif ".." in val:
           parts = val.split("..")
           start_v = parts[0]
@@ -233,6 +251,13 @@ def _search_with_variants(index, query, params, fuzzy):
   }
 
 
+def _clean_meili_error(exc: Exception) -> str:
+  msg = str(exc)
+  if "invalid_search_filter" in msg or "invalid float literal" in msg:
+    return "Invalid date or filter syntax. Date ranges use years (e.g. 1873 or 1840..1860). Exact dates use YYYY-MM-DD (e.g. 1873-07-25)."
+  return msg
+
+
 @router.get("/api/v1/admin/query", dependencies=[Depends(require_admin)])
 def admin_query(
   q: Optional[str] = Query("", description="Free-text name or place"),
@@ -275,8 +300,6 @@ def admin_query(
   target_year_min = year_min if year_min is not None else inline_filters.get("year_min")
   target_year_max = year_max if year_max is not None else inline_filters.get("year_max")
   target_date_exact = inline_filters.get("date_exact")
-  target_date_min = inline_filters.get("date_min")
-  target_date_max = inline_filters.get("date_max")
   target_father = father or inline_filters.get("father")
   target_mother = mother or inline_filters.get("mother")
   target_child = child or inline_filters.get("child")
@@ -311,17 +334,30 @@ def admin_query(
     filters.append(f"event_place = '{escaped_place}'")
 
   if target_date_exact:
-    filters.append(f"event_date = '{target_date_exact}'")
-  else:
-    if target_date_min:
-      filters.append(f"event_date >= '{target_date_min}'")
-    if target_date_max:
-      filters.append(f"event_date <= '{target_date_max}'")
+    parts = target_date_exact.split("-")
+    if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit() and parts[2].isdigit():
+      y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+      fmt1 = f"{y}-{m}-{d}"
+      fmt2 = f"{y}-{m:02d}-{d:02d}"
+      if fmt1 == fmt2:
+        filters.append(f"event_date = '{fmt1}'")
+      else:
+        filters.append(f"(event_date = '{fmt1}' OR event_date = '{fmt2}')")
+    elif len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
+      y, m = int(parts[0]), int(parts[1])
+      fmt1 = f"{y}-{m}"
+      fmt2 = f"{y}-{m:02d}"
+      if fmt1 == fmt2:
+        filters.append(f"(event_date = '{fmt1}' OR event_year = {y})")
+      else:
+        filters.append(f"(event_date = '{fmt1}' OR event_date = '{fmt2}' OR event_year = {y})")
+    else:
+      filters.append(f"event_date = '{target_date_exact}'")
 
-  if target_year_min is not None and not target_date_min and not target_date_exact:
+  if target_year_min is not None:
     filters.append(f"event_year >= {target_year_min}")
 
-  if target_year_max is not None and not target_date_max and not target_date_exact:
+  if target_year_max is not None:
     filters.append(f"event_year <= {target_year_max}")
 
   if target_father:
@@ -377,7 +413,7 @@ def admin_query(
   try:
     results = _search_with_variants(index, target_q, params, fuzzy)
   except Exception as exc:
-    return {"status": "error", "error_message": str(exc)}
+    return {"status": "error", "error_message": _clean_meili_error(exc)}
 
   hits = []
   for hit in results.get("hits", []):
