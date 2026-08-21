@@ -82,6 +82,27 @@ check("row with no names", transform(row(), "x", "bsg", ["PR"]), None)
 check("no duplicate filterable fields", len(filterable_attributes()), len(set(filterable_attributes())))
 print("\n  filterable fields: %d" % len(filterable_attributes()))
 
+# --- regression guards ----------------------------------------------------
+# Both of these were dropped once already and nothing failed, because the tests
+# did not cover them. The age fallback matters because GROOM_BIR_YEAR is filled
+# 0.1% of the time and GROOM_AGE 98.5%.
+r_age = row(GROOM_NAME_GN="Klaas", GROOM_NAME_SURN="Postma", GROOM_AGE="30 jaar",
+            BRIDE_NAME_GN="Aaltje", BRIDE_NAME_SURN="Bos", BRIDE_AGE="28 jaar")
+d_age = transform(r_age, "frl", "bsh", ["GROOM", "BRIDE"])
+check("birth year derived from age alone", d_age.get("by_groom"), 1900)
+check("recorded birth year still wins", transform(
+    row(PR_NAME_GN="Jan", PR_NAME_SURN="Bos", PR_BIR_YEAR="1884", PR_AGE="10 jaar"),
+    "frl", "bsg", ["PR"]).get("by_child"), 1884)
+check("infant in months does not shift the year", transform(
+    row(PR_NAME_GN="Jan", PR_NAME_SURN="Bos", PR_AGE="3 maanden"),
+    "frl", "bso", ["PR"]).get("by_deceased"), 1930)
+
+# Pre-1811 people are identified by patronymic, not surname.
+d_patr = transform(row(PR_NAME_GN="Sietse", PR_NAME_PATR="Douwes", PR_NAME_SURN=""),
+                   "frl", "dtb_d", ["PR"])
+check("patronymic keyed with the given name",
+      sorted(d_patr.get("g_child") or []), sorted(["sits", "doufes"]))
+
 if fails:
     print("\nFAILURES:")
     for f in fails: print("  -", f)

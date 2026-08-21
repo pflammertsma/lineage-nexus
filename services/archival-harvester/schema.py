@@ -274,14 +274,27 @@ def rebuild_search_fields(doc):
             if p_phons:
                 person_phonetics.append(" ".join(p_phons))
 
-        if p["g"]:
-            given_p.extend(phonetic_all(p["g"]))
-            per_role_given.setdefault(role, []).extend(phonetic_all(p["g"]))
+        # The patronymic belongs with the given name: before 1811 most people
+        # have no surname at all, and the patronymic is what identifies them.
+        # 80,000 pre-1811 baptisms carry 133 distinct surnames; dropping the
+        # patronymic here makes that era close to unsearchable.
+        given_keys = phonetic_all(p["g"]) + phonetic_all(p.get("p") or "")
+        if given_keys:
+            given_p.extend(given_keys)
+            per_role_given.setdefault(role, []).extend(given_keys)
         if p["s"]:
             surnames_p.extend(phonetic_all(p["s"]))
             per_role_surname.setdefault(role, []).extend(phonetic_all(p["s"]))
-        if p.get("bir_year"):
-            per_role_birth.setdefault(role, []).append(p["bir_year"])
+
+        # Birth year: the recorded one when present, otherwise event year minus
+        # age. The recorded field is filled 0.1% of the time and age 98.5%, so
+        # without this fallback `by_*` is absent from almost every record and
+        # birth-year filtering silently does nothing.
+        year = p.get("bir_year")
+        if year is None and p.get("age") is not None and doc.get("event_year"):
+            year = doc["event_year"] - p["age"]
+        if year:
+            per_role_birth.setdefault(role, []).append(year)
 
     doc["person_names"] = person_names
     doc["person_phonetics"] = person_phonetics
