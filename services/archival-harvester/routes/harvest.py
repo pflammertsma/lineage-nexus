@@ -3,6 +3,7 @@ Archival catalog listing and harvest queue management endpoints.
 """
 
 import os
+import sys
 import re
 import time
 import json
@@ -197,9 +198,10 @@ def admin_queue_harvest(req: HarvestQueueRequest):
       "error_message": "An ingestion run is already in progress on the server."
     }
 
-  cmd = ["python", "ingest.py"] + req.archives
+  service_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+  cmd = [sys.executable, "ingest.py"] + req.archives
   try:
-    log_dir = os.environ.get("INGEST_LOG_DIR", "/logs")
+    log_dir = INGEST_LOG_DIR
     os.makedirs(log_dir, exist_ok=True)
     log_path = os.path.join(log_dir, "ingest.log")
     log_file = open(log_path, "a", encoding="utf-8")
@@ -208,7 +210,7 @@ def admin_queue_harvest(req: HarvestQueueRequest):
       cmd,
       stdout=log_file,
       stderr=subprocess.STDOUT,
-      cwd=os.path.dirname(__file__) or "."
+      cwd=service_root
     )
     return {
       "status": "success",

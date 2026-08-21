@@ -25,7 +25,7 @@ sudo docker run -d --name gateway-candidate \
   --env-file /opt/archival-harvester/.env \
   -p 8099:8090 \
   -v /opt/archival-state:/state \
-  -v /opt/ingest-logs:/ingest-logs:ro \
+  -v /opt/ingest-logs:/ingest-logs \
   archival-gateway:candidate
 
 echo "▸ Verifying candidate container across all core API endpoints..."
@@ -75,7 +75,7 @@ sudo docker run -d --name gateway \
   --restart always \
   --net=host \
   -v /opt/archival-state:/state \
-  -v /opt/ingest-logs:/ingest-logs:ro \
+  -v /opt/ingest-logs:/ingest-logs \
   archival-gateway:latest
 
 shred -u /opt/archival-harvester/.env 2>/dev/null || rm -f /opt/archival-harvester/.env
