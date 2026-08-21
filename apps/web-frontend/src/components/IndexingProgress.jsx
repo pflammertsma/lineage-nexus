@@ -360,7 +360,6 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
               style={{ width: `${Math.min(100, Math.max(0, job.percent || 0))}%` }}
             />
           </div>
-
           <div className="flex items-center justify-between text-xs text-secondary flex-wrap gap-2">
             <span>
               {job.downloaded_mb?.toFixed(1) || 0} MB of {job.total_mb?.toFixed(1) || '?'} MB
@@ -373,9 +372,10 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
         </div>
       )}
 
+
       {/* Stage 2: Active Meilisearch Engine Indexing Progress */}
       {batch && busy && (
-        <div className="bg-muted/40 border border-border/60 rounded-lg p-4">
+        <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
             <div className="flex items-center gap-2">
               <span className="font-semibold text-sm text-primary">
@@ -402,23 +402,22 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
           </div>
 
           {batch.steps?.length > 0 && (
-            <ul className="space-y-1 border-t border-border/40 pt-2 text-xs">
+            <ul className="space-y-1.5 border-t border-border/40 pt-2.5 my-2">
               {batch.steps.map((s, i) => (
-                <li key={i} className="flex items-center justify-between text-secondary">
-                  <span className="flex items-center gap-1.5">
+                <li key={i} className="flex items-center justify-between text-xs py-0.5">
+                  <span className="flex items-center gap-2">
                     {s.status === 'done' ? (
-                      <CheckCircle2 size={12} className="text-green-500 shrink-0" />
+                      <CheckCircle2 size={13} className="text-green-500 shrink-0" />
                     ) : s.status === 'active' ? (
-                      <Loader2 size={12} className="animate-spin text-amber-500 shrink-0" />
+                      <Loader2 size={13} className="animate-spin text-amber-500 shrink-0" />
                     ) : (
-                      <span className="w-3 h-3 rounded-full border border-border shrink-0 inline-block" />
+                      <span className="w-3 h-3 rounded-full border border-border/80 shrink-0 inline-block" />
                     )}
-                    <span>{s.label}</span>
+                    <span className={s.status === 'done' ? 'text-secondary/70' : s.status === 'active' ? 'text-primary font-semibold' : 'text-secondary/80'}>
+                      {s.label || s.step || `Phase ${i + 1}`}
+                    </span>
                   </span>
-                  <span
-                    className={`tabular-nums shrink-0 ${i === batch.steps.length - 1 ? 'text-primary font-medium' : 'text-secondary/70'
-                      }`}
-                  >
+                  <span className={`tabular-nums shrink-0 font-mono text-[11px] ${s.status === 'done' ? 'text-green-500 font-medium' : s.status === 'active' ? 'text-accent font-bold' : 'text-secondary/60'}`}>
                     {s.finished}/{s.total}
                   </span>
                 </li>
@@ -431,7 +430,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
               <span className="flex items-center gap-2">
                 <Loader2 size={13} className="animate-spin text-accent shrink-0" />
                 <span>
-                  {batch.sub_step_details?.summary || 'Working'}
+                  {batch.sub_step_details?.summary || 'Processing in memory...'}
                 </span>
               </span>
               {batch.sub_step_details?.read_mbs > 0 && (
@@ -441,6 +440,31 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Stage 3: Queued Archives Pipeline Banner */}
+      {indexing.harvest_queue?.pending?.length > 0 && (
+        <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 mb-4 text-xs animate-in fade-in duration-150">
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <span className="font-bold text-accent flex items-center gap-1.5">
+              <History size={13} />
+              <span>
+                {indexing.harvest_queue.pending.length} Archive{indexing.harvest_queue.pending.length === 1 ? '' : 's'} Queued in Pipeline
+              </span>
+            </span>
+            <span className="text-secondary/80">
+              Processes automatically after current indexing completes
+            </span>
+          </div>
+          <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+            {indexing.harvest_queue.pending.map((code, idx) => (
+              <span key={code} className="px-2 py-0.5 rounded bg-card border border-border text-[11px] font-medium text-primary flex items-center gap-1 shadow-2xs">
+                <span className="text-secondary/60">#{idx + 1}</span>
+                <span>{getArchiveName(code)}</span>
+              </span>
+            ))}
+          </div>
         </div>
       )}
       {stallLevel && (

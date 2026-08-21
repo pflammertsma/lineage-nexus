@@ -272,6 +272,23 @@ def admin_clear_failed_tasks():
     return {"status": "error", "error_message": f"Failed to clear failed tasks: {str(exc)}"}
 
 
+def _format_step_label(step_val: Any, index: int) -> str:
+  labels = {
+    "1": "Extracting payload & updating settings",
+    "2": "Parsing documents into memory",
+    "3": "Indexing fields & computing facets",
+    "4": "Writing database segment to disk",
+    "updateIndex": "Updating index schema",
+    "addDocuments": "Processing record batch",
+  }
+  str_val = str(step_val) if step_val is not None else ""
+  if str_val in labels:
+    return labels[str_val]
+  if str_val:
+    return f"Phase {index + 1}: {str_val}"
+  return f"Phase {index + 1}"
+
+
 @router.get("/api/v1/admin/indexing", dependencies=[Depends(require_admin)])
 def admin_indexing():
   """Queue depth, active batch, and throughput metrics."""
@@ -297,6 +314,7 @@ def admin_indexing():
       if finished is None and current is None:
         progress = batch.get("progress") or {}
         started = batch.get("startedAt")
+        steps_raw = progress.get("steps") or []
         current = {
           "uid": batch.get("uid"),
           "tasks": batch_stats.get("totalNbTasks"),
@@ -307,10 +325,12 @@ def admin_indexing():
           "steps": [
             {
               "step": s.get("currentStep"),
-              "finished": s.get("finished"),
-              "total": s.get("total"),
+              "label": _format_step_label(s.get("currentStep"), i),
+              "finished": s.get("finished", 0),
+              "total": s.get("total", 0),
+              "status": "done" if (s.get("finished") is not None and s.get("total") is not None and s.get("finished") >= s.get("total")) else ("active" if i == len(steps_raw) - 1 or (s.get("finished") or 0) > 0 else "pending"),
             }
-            for s in (progress.get("steps") or [])
+            for i, s in enumerate(steps_raw)
           ],
         }
       elif finished is not None and len(recent) < 8:
@@ -399,16 +419,26 @@ def admin_indexing():
     batch_telemetry.append(telemetry_sample)
     save_batch_telemetry()
 
+  from routes.harvest import _current_harvest_archive, _harvest_queue_list, _harvest_queue_lock
+  with _harvest_queue_lock:
+    current_arch = _current_harvest_archive
+    pending_archs = list(_harvest_queue_list)
+
   return {
     "status": "success",
     "documents": documents,
-    "is_indexing": is_indexing,
+    "is_indexing": is_indexing or bool(current_arch or pending_archs),
     "archive_names": ARCHIVE_NAMES,
     "queue": {
       "enqueued": enqueued,
       "processing": processing,
       "failed": failed,
       "total_pending": enqueued + processing,
+    },
+    "harvest_queue": {
+      "current": current_arch,
+      "pending": pending_archs,
+      "pending_count": len(pending_archs),
     },
     "current_batch": current,
     "current_ingest": _current_ingest(),
