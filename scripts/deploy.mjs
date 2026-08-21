@@ -265,31 +265,7 @@ function deployArchival(config) {
 
   try {
     run('scp', ['-i', config.ociKey, localEnv, `${target}:/opt/archival-harvester/.env`]);
-    const remote = [
-      'cd /opt/archival-harvester',
-      'echo "▸ Building Docker image..."',
-      'sudo docker build -t archival-gateway .',
-      'echo "▸ Validating container imports before swap..."',
-      'sudo docker run --rm archival-gateway python -m py_compile server.py',
-      'echo "▸ Swapping container..."',
-      'sudo docker stop gateway || true',
-      'sudo docker rm gateway || true',
-      // Metrics history lives on the host, not in the container, so redeploying
-      // does not blank the dashboard's 24-hour chart.
-      'sudo mkdir -p /opt/archival-state',
-      'sudo mkdir -p /opt/ingest-logs',
-      // Harvester log, read-only: lets the dashboard report which export is
-      // being ingested. Meilisearch only ever sees documents, never their origin.
-      'sudo docker run -d --name gateway --env-file /opt/archival-harvester/.env --restart always --net=host -v /opt/archival-state:/state -v /opt/ingest-logs:/ingest-logs:ro archival-gateway',
-      // The container has the values now; leave nothing readable at rest.
-      'shred -u /opt/archival-harvester/.env 2>/dev/null || rm -f /opt/archival-harvester/.env',
-      'echo "▸ Verifying production health check..."',
-      'for i in $(seq 1 10); do if curl -sf http://localhost:8090/health >/dev/null; then echo "✓ Health check passed!"; exit 0; fi; sleep 1; done',
-      'echo "✗ Health check failed! Dumping container logs:"',
-      'sudo docker logs gateway --tail 40',
-      'exit 1',
-    ].join(' && ');
-    run('ssh', ['-i', config.ociKey, target, `"${remote}"`]);
+    run('ssh', ['-i', config.ociKey, target, 'bash /opt/archival-harvester/deploy_remote.sh']);
   } finally {
     rmSync(localEnv, { force: true });
   }

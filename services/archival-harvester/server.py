@@ -37,6 +37,9 @@ START_TIME = time.time()
 
 meili_client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY)
 
+from eta_engine import EtaEngine
+global_eta_engine = EtaEngine()
+
 
 def ensure_meilisearch_index_settings():
   """Configures Meilisearch for sub-50ms query latency by setting proximityPrecision to 'byAttribute'."""
@@ -56,6 +59,8 @@ def ensure_meilisearch_index_settings():
         "event_year",
         "event_place",
         "archive_code",
+        "archive",
+        "kind",
         "province"
       ],
       "rankingRules": [
@@ -97,6 +102,8 @@ def search_records(
   name: str = Query(..., description="Query names or patronymics"),
   eventplace: Optional[str] = Query(None, description="Event city or place name"),
   eventtype: Optional[str] = Query(None, description="Event type (Geboorte, Huwelijk, Overlijden)"),
+  year_min: Optional[int] = Query(None, description="Minimum event year"),
+  year_max: Optional[int] = Query(None, description="Maximum event year"),
   start: int = Query(0, ge=0),
   number_show: int = Query(30, le=100)
 ):
@@ -108,9 +115,14 @@ def search_records(
 
   filter_conditions = []
   if eventplace:
-    filter_conditions.append(f"event_place = '{eventplace}'")
+    escaped_place = eventplace.replace("'", "\\'")
+    filter_conditions.append(f"event_place = '{escaped_place}'")
   if eventtype:
     filter_conditions.append(f"event_type = '{eventtype}'")
+  if year_min is not None:
+    filter_conditions.append(f"event_year >= {year_min}")
+  if year_max is not None:
+    filter_conditions.append(f"event_year <= {year_max}")
 
   search_params = {
     "limit": number_show,
@@ -417,27 +429,104 @@ def admin_history(minutes: int = Query(360, ge=5, le=1440)):
   }
 
 
+_INLINE_FILTER_RE = re.compile(r'\b(place|loc|location|year|type|kind|archive):([^\s]+)', re.IGNORECASE)
+
+def _parse_inline_query_filters(q_str: str) -> Tuple[str, Dict[str, Any]]:
+  """
+  Extracts inline filters like place:Leeuwarden year:1840..1860 type:birth from query string.
+  Returns (cleaned_query_string, extracted_filters_dict).
+  """
+  if not q_str:
+    return "", {}
+  extracted: Dict[str, Any] = {}
+  clean_parts = []
+
+  for token in q_str.split():
+    match = _INLINE_FILTER_RE.match(token)
+    if match:
+      key = match.group(1).lower()
+      val = match.group(2).strip()
+      if key in ("place", "loc", "location"):
+        extracted["place"] = val.replace("_", " ")
+      elif key == "archive":
+        extracted["archive"] = val
+      elif key in ("type", "kind"):
+        v_low = val.lower()
+        if v_low in ("birth", "geboorte", "doop", "baptisms", "bsg", "dtb_d"):
+          extracted["kind"] = ["bsg", "dtb_d"]
+        elif v_low in ("marriage", "huwelijk", "trouwen", "bsh", "dtb_t"):
+          extracted["kind"] = ["bsh", "dtb_t"]
+        elif v_low in ("death", "overlijden", "begraven", "bso", "dtb_b"):
+          extracted["kind"] = ["bso", "dtb_b"]
+        elif v_low in ("population", "bevolking", "bev"):
+          extracted["kind"] = ["bev"]
+        elif v_low in ("notary", "notarieel", "not"):
+          extracted["kind"] = ["not"]
+        else:
+          extracted["kind"] = [val]
+      elif key == "year":
+        if ".." in val:
+          parts = val.split("..")
+          if parts[0].isdigit(): extracted["year_min"] = int(parts[0])
+          if len(parts) > 1 and parts[1].isdigit(): extracted["year_max"] = int(parts[1])
+        elif val.isdigit():
+          extracted["year_min"] = int(val)
+          extracted["year_max"] = int(val)
+    else:
+      clean_parts.append(token)
+
+  return " ".join(clean_parts), extracted
+
+
 @app.get("/api/v1/admin/query", dependencies=[Depends(require_admin)])
 def admin_query(
   q: str = Query(..., min_length=1, description="Free-text name or place"),
   archive: Optional[str] = Query(None, description="Restrict to one archive code"),
-  kind: Optional[str] = Query(None, description="Restrict to one record type"),
+  kind: Optional[str] = Query(None, description="Restrict to record types (comma-separated or single)"),
+  place: Optional[str] = Query(None, description="Restrict to event place / city"),
+  event_type: Optional[str] = Query(None, description="Restrict to event type"),
+  year_min: Optional[int] = Query(None, description="Minimum event year"),
+  year_max: Optional[int] = Query(None, description="Maximum event year"),
   limit: int = Query(20, ge=1, le=100),
 ):
   """
-  Raw index search for validating coverage. No AI, no orchestration.
-
-  Reports where each hit came from — archive, record type and institution — so a
-  result can be traced to the export it was ingested from. That is the point of
-  this endpoint: answering "is this record actually in there, and from where".
+  Raw index search for validating coverage. Supports parametric filtering by location,
+  record type (kind), min/max years, and inline query syntax (place:..., year:1840..1860, type:birth).
   """
   index = meili_client.index(INDEX_NAME)
 
+  clean_q, inline_filters = _parse_inline_query_filters(q)
+  target_q = clean_q if clean_q else q
+
+  target_archive = archive or inline_filters.get("archive")
+  target_kind = kind.split(",") if kind else inline_filters.get("kind")
+  target_place = place or inline_filters.get("place")
+  target_event_type = event_type or inline_filters.get("event_type")
+  target_year_min = year_min if year_min is not None else inline_filters.get("year_min")
+  target_year_max = year_max if year_max is not None else inline_filters.get("year_max")
+
   filters = []
-  if archive:
-    filters.append(f"archive = '{archive}'")
-  if kind:
-    filters.append(f"kind = '{kind}'")
+  if target_archive:
+    filters.append(f"archive = '{target_archive}'")
+
+  if target_kind:
+    if isinstance(target_kind, list):
+      kind_or = " OR ".join(f"kind = '{k.strip()}'" for k in target_kind)
+      filters.append(f"({kind_or})")
+    else:
+      filters.append(f"kind = '{target_kind}'")
+  elif target_event_type:
+    filters.append(f"event_type = '{target_event_type}'")
+
+  if target_place:
+    escaped_place = target_place.replace("'", "\\'")
+    filters.append(f"event_place = '{escaped_place}'")
+
+  if target_year_min is not None:
+    filters.append(f"event_year >= {target_year_min}")
+
+  if target_year_max is not None:
+    filters.append(f"event_year <= {target_year_max}")
 
   params: Dict[str, Any] = {"limit": limit}
   if filters:
@@ -445,7 +534,7 @@ def admin_query(
 
   started = time.time()
   try:
-    results = index.search(q, params)
+    results = index.search(target_q, params)
   except Exception as exc:
     return {"status": "error", "error_message": str(exc)}
 
@@ -867,10 +956,10 @@ def admin_indexing():
   if current:
     b_uid = current.get("uid") or 0
     raw_pct = current.get("percentage") or 0.0
-    virtual_pct = _calculate_virtual_progress(current)
+    virtual_pct = global_eta_engine.calculate_virtual_progress(current)
     elapsed = current.get("elapsed_seconds") or 0
 
-    smoothed_eta, naive_eta = _compute_phase_weighted_eta(b_uid, current, elapsed)
+    smoothed_eta, naive_eta = global_eta_engine.compute_phase_weighted_eta(b_uid, current, elapsed)
     current["virtual_percentage"] = virtual_pct
     current["naive_eta_seconds"] = naive_eta
     eta_seconds = smoothed_eta
