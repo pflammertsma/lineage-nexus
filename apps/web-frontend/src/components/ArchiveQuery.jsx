@@ -808,7 +808,7 @@ const ArchiveQuery = ({ getIdToken }) => {
               coverage is per archive.
             </p>
           ) : (
-            <ol className="space-y-2 max-h-[26rem] overflow-y-auto pr-1">
+            <ol className="space-y-2">
               {result.hits.map((hit) => (
                 <li key={hit.id} className="border border-border/60 rounded-lg p-3 text-xs">
                   <div className="flex items-start justify-between gap-3 mb-1.5">
