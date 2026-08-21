@@ -94,6 +94,77 @@ understates it inside every bucket.
 
 ---
 
+## Harvest provenance and deltas
+
+`harvest_manifest.json` (in the log directory) records one entry per export:
+when we harvested it, which published version we got, how many rows and records
+it yielded, and the newest `SOURCE_LASTCHANGEDATE` seen.
+
+Two signals let a re-harvest skip work, and they operate at different levels.
+
+**Per file.** Every export serves `Last-Modified` and `ETag`. A HEAD request
+costs nothing, so a file whose exact version we already hold is skipped
+outright — no download, no parse, no indexing.
+
+**Per record.** Each row carries `SOURCE_LASTCHANGEDATE`, spread over years
+rather than clustered at the export date. In `arg.bsg`: 73% last changed in
+2016, 13.4% in 2022, 11.3% in 2023.
+
+The second matters because of a trap in the first. All three files below share
+one modification time:
+
+```
+arg.bsg    Sat, 29 Mar 2025 15:14:56 GMT
+bhi.dtb_d  Sat, 29 Mar 2025 15:16:51 GMT
+frl.bev    Sat, 29 Mar 2025 15:10:12 GMT
+```
+
+That is when Open Archieven **regenerated the exports**, not when their contents
+changed. A regeneration therefore invalidates the per-file check for every file,
+even those whose records did not move — and the per-record dates are what still
+separate new work from old.
+
+Delta mode still downloads and parses the whole file, because a gzip stream
+cannot be seeked by date. That is fine: parsing is seconds and indexing is
+hours, so filtering before submission skips almost all of the cost.
+
+Measured end to end on `arg.bsg`:
+
+| pass | documents sent to the engine |
+|---|---|
+| full harvest | 23,769 |
+| re-run, file unchanged | **0** |
+| delta at the watermark | **0** |
+| delta from 2021-01-01 | 5,916 (25%) |
+
+**Safety rules**, each covered by a test:
+
+- A file with no *completed* full pass is never skipped and never delta'd —
+  its records may not all be in the index, and skipping would make that
+  permanent.
+- A failed HEAD is not "unchanged". A network blip must not skip real work.
+- A `--limit` run is recorded as incomplete.
+- A delta pass may only move the watermark **forwards**, since it saw part of
+  the file.
+- A record with no change date is always taken; treating unknown as old would
+  drop it for good.
+
+### Selecting individual exports
+
+```
+python ingest.py --files bhi.dtb_d            # one export
+python ingest.py --files bhi.dtb_d,bhi.bsg    # several
+python ingest.py bhi --kinds dtb_d            # equivalent, by record type
+python ingest.py bhi --delta                  # only what changed
+python ingest.py bhi --force                  # ignore the manifest
+```
+
+The queue API takes the same labels: an entry of `bhi` harvests the archive,
+`bhi.dtb_d` harvests one export. Re-running a single failed export no longer
+costs a whole archive.
+
+---
+
 ## Captures we hold
 
 | capture | version | span | batches | notes |

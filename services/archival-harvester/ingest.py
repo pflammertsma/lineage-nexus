@@ -42,6 +42,7 @@ from typing import Any, Dict, Iterator, List, Optional
 
 import meilisearch
 
+import manifest
 import schema
 from schema import transform, role_prefixes
 
@@ -409,9 +410,24 @@ def merged_documents(rows: Iterator[Dict[str, str]], archive: str, kind: str,
         yield current
 
 
-def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None) -> int:
+def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None,
+                since: Optional[str] = None, manifest_data: Optional[Dict[str, Any]] = None,
+                force: bool = False) -> int:
     url = f"{EXPORT_BASE}/{archive}.{kind}.csv.gz"
+
+    # Ask what version is published before spending anything on it. A HEAD is
+    # free; a download, parse and re-index of an unchanged file is not.
+    version = manifest.source_version(url, USER_AGENT)
+    entry = (manifest_data or {}).get("%s.%s" % (archive, kind))
+    if not force and manifest.is_unchanged(entry, version):
+        logger.info("  %s.%s: unchanged since %s - skipped",
+                    archive, kind, entry.get("harvested_iso"))
+        return 0
+
     logger.info("streaming %s.%s", archive, kind)
+    if since:
+        logger.info("  %s.%s: delta mode, only records changed after %s",
+                    archive, kind, since)
 
     batch: List[Dict[str, Any]] = []
     started = time.time()
@@ -424,7 +440,8 @@ def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None) -> 
                 archive, kind, size / (1 << 20), time.time() - started)
 
     try:
-        return _ingest_staged(index, staged, archive, kind, limit, started, batch)
+        return _ingest_staged(index, staged, archive, kind, limit, started, batch,
+                          since, manifest_data, version)
     finally:
         # The staged copy exists only for the duration of one file.
         try:
@@ -461,7 +478,10 @@ def _record_task_archive(task_res: Any, archive_code: str):
 
 def _ingest_staged(index, staged: str, archive: str, kind: str,
                    limit: Optional[int], started: float,
-                   batch: List[Dict[str, Any]]) -> int:
+                   batch: List[Dict[str, Any]],
+                   since: Optional[str] = None,
+                   manifest_data: Optional[Dict[str, Any]] = None,
+                   version: Optional[Dict[str, Any]] = None) -> int:
     count = 0
     batch_bytes = 0
     file_progress: Dict[str, Any] = {}
@@ -484,11 +504,29 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
                 pct = (100.0 * done / size) if size else 0.0
                 logger.info(
                     "  %s.%s: %d rows parsed, %d records generated (%.0f rows/s, %.1f%%)",
-                            archive, kind, row_count, count, rate)
+                    archive, kind, row_count, count, rate, pct)
                 last_log_t = now
             yield item
 
+    max_changed = ""
+    skipped_unchanged = 0
+
     for doc in merged_documents(counted(rows), archive, kind, prefixes):
+        changed = doc.get("last_changed") or ""
+        if changed > max_changed:
+            max_changed = changed
+
+        # Delta mode. The file still has to be downloaded and parsed — there is
+        # no way to seek into a gzip stream by date — but parsing is seconds and
+        # indexing is the part that takes hours, so filtering here skips almost
+        # all of the cost.
+        #
+        # A record with no date is always taken: treating "unknown" as "old"
+        # would drop it permanently.
+        if since and changed and changed <= since:
+            skipped_unchanged += 1
+            continue
+
         batch.append(doc)
         batch_bytes += len(json.dumps(doc, ensure_ascii=False))
         count += 1
@@ -514,9 +552,22 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
         batch_bytes = 0
         await_queue()
 
+    if since:
+        logger.info("  %s.%s: %d records changed since %s, %d unchanged and skipped",
+                    archive, kind, count, since, skipped_unchanged)
     logger.info("  %s.%s: %d records from %d rows (%d merged or dropped), %.1fs",
                 archive, kind, count, row_count, row_count - count,
                 time.time() - started)
+
+    # Note what we took and which version of the source it came from, so a later
+    # run can tell whether there is anything new to do.
+    if manifest_data is not None:
+        manifest.record(manifest_data, archive, kind, version or {},
+                        rows=row_count, records=count,
+                        max_last_changed=max_changed,
+                        mode="delta" if since else "full",
+                        complete=not limit)
+        manifest.save(manifest_data)
     return count
 
 
@@ -526,6 +577,22 @@ def main() -> int:
     parser.add_argument("--list", action="store_true", help="list available exports")
     parser.add_argument("--limit", type=int, help="stop after N records per file")
     parser.add_argument("--kinds", help="comma-separated record types (default: all)")
+    parser.add_argument(
+        "--files",
+        help="specific exports by label, e.g. bhi.dtb_d or bhi.dtb_d,bhi.bsg. "
+             "Takes precedence over positional archives and --kinds.",
+    )
+    parser.add_argument(
+        "--delta", action="store_true",
+        help="only ingest records changed since the last full harvest of each "
+             "file. Requires a completed previous pass; falls back to a full "
+             "pass for any file without one.",
+    )
+    parser.add_argument(
+        "--force", action="store_true",
+        help="ingest even when the published file is byte-identical to the one "
+             "already harvested.",
+    )
     args = parser.parse_args()
 
     available = list_exports()
@@ -573,17 +640,60 @@ def main() -> int:
     run_started = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     total = 0
     failures: List[str] = []
-    for archive in args.archives:
-        kinds = [n.split(".", 1)[1] for n in available if n.startswith(f"{archive}.")]
-        if not kinds:
-            logger.warning("no exports found for archive %r", archive)
-            continue
-        for kind in sorted(kinds):
-            if wanted and kind not in wanted:
+    manifest_data = manifest.load()
+
+    # One flat list of (archive, kind), however it was asked for. `--files`
+    # names exports directly, which is what you want when re-running a single
+    # one rather than a whole archive.
+    targets: List[tuple] = []
+    if args.files:
+        for label in args.files.split(","):
+            label = label.strip()
+            if not label:
                 continue
+            if label.endswith(".csv.gz"):
+                label = label[: -len(".csv.gz")]
+            if "." not in label:
+                logger.error("  %r is not an export label; expected archive.kind", label)
+                failures.append(label)
+                continue
+            if label not in available:
+                logger.error("  %r is not a published export", label)
+                failures.append(label)
+                continue
+            targets.append(tuple(label.split(".", 1)))
+    else:
+        for archive in args.archives:
+            kinds = [n.split(".", 1)[1] for n in available if n.startswith(f"{archive}.")]
+            if not kinds:
+                logger.warning("no exports found for archive %r", archive)
+                continue
+            for kind in sorted(kinds):
+                if not wanted or kind in wanted:
+                    targets.append((archive, kind))
+
+    if not targets:
+        logger.error("nothing to harvest")
+        return 1
+
+    logger.info("harvesting %d file(s): %s", len(targets),
+                ", ".join("%s.%s" % t for t in targets))
+
+    for archive, kind in targets:
+        if True:
             for attempt in (1, 2):
                 try:
-                    total += ingest_file(index, archive, kind, args.limit)
+                    since = None
+                    if args.delta:
+                        since = manifest.delta_watermark(
+                            manifest_data.get("%s.%s" % (archive, kind)))
+                        if since is None:
+                            logger.info("  %s.%s: no completed full harvest to "
+                                        "compare against - taking the whole file",
+                                        archive, kind)
+                    total += ingest_file(index, archive, kind, args.limit,
+                                         since=since, manifest_data=manifest_data,
+                                         force=args.force)
                     break
                 except Exception as exc:
                     # One bad file should not abandon the rest of the run, but it
