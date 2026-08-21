@@ -128,6 +128,12 @@ def admin_query(
   event_type: Optional[str] = Query(None, description="Restrict to event type"),
   year_min: Optional[int] = Query(None, description="Minimum event year"),
   year_max: Optional[int] = Query(None, description="Maximum event year"),
+  names_only: bool = Query(
+    True,
+    description="Search person names only. Off widens the search to place, "
+                "record type and institution, which is useful for browsing but "
+                "lets a place name answer a person query.",
+  ),
   limit: int = Query(20, ge=1, le=100),
 ):
   """Raw index search with parametric and inline query syntax filtering."""
@@ -169,6 +175,19 @@ def admin_query(
   params: Dict[str, Any] = {"limit": limit}
   if filters:
     params["filter"] = " AND ".join(filters)
+
+  # Every term must match. Meilisearch defaults to `last`, which drops trailing
+  # words until something matches — so "Jan de Vries" happily returned records
+  # containing only "Jan", which is how a place called "Sint Jan bij Yperen"
+  # outranked actual people. Verified on an isolated index: `all` keeps the
+  # intended record and drops the near-misses.
+  params["matchingStrategy"] = "all"
+
+  # Restrict a person search to person names, so places and record types cannot
+  # answer it. Measured: searching "Jan" across all attributes returns the
+  # "Sint Jan bij Yperen" record; restricted to names it does not.
+  if names_only:
+    params["attributesToSearchOn"] = ["names"]
 
   started = time.time()
   try:

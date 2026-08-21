@@ -360,6 +360,200 @@ searches are served from our own index.
     scheme (`{archive}_{guid}`, no `kind`) is collapsing records that appear in
     two exports, and needs `kind` mixed in.
 
+### A2b. Search was broken at the schema level
+
+- [x] **Names were not searchable at all.** `searchableAttributes` named six
+  fields; four of them exist in **zero** of 15.4M documents:
+
+  | attribute | documents containing it |
+  |---|---|
+  | `full_names` | 0 |
+  | `person_names` | 0 |
+  | `deed_type` | 0 |
+  | `archive_name` | 0 |
+  | `event_place` | 15,382,172 |
+  | `event_year` | 15,382,172 |
+
+  Those four belong to `harvester.py`, a legacy builder that only ever wrote the
+  seed document. The live corpus is written by `ingest.py` (`names`, `persons`,
+  `event_type`, `institution`), and `routes/harvest.py` runs `ingest.py`. So
+  every name query fell through to `event_place`: "Jan de Vries" returned
+  records from "Sint Jan bij Yperen", and the quoted phrase returned nothing at
+  all, because a phrase can only match a searchable attribute.
+
+  Fixed in `config.py`, ordered so a name match outranks a place match on the
+  same term. `archive_code` and `province` were removed from
+  `filterableAttributes` for the same reason — filtering on them could only ever
+  return nothing.
+- [x] **Query now requires every term** (`matchingStrategy: "all"`). The default
+  `last` drops trailing words until something matches, which is why a one-word
+  place hit could answer a three-word name query.
+- [x] **`names_only` (default on) restricts a person search to person names** via
+  `attributesToSearchOn`. Measured: "Jan" across all attributes returns the
+  "Sint Jan bij Yperen" record; restricted to names it does not.
+- Verified on a throwaway Meilisearch instance rather than by reasoning, because
+  each settings change costs a full reindex. That also disproved two plausible
+  theories: indexing `persons.n` instead of the concatenated `names` changed
+  nothing, and `proximityPrecision` (`byWord` vs `byAttribute`) changed nothing.
+- [ ] **Known remaining edge case:** a phrase can still span two people. A record
+  with `["Pieter Jan", "de Vries Anna"]` matches `"Jan de Vries"` because
+  Meilisearch does not put positional distance between array elements. Rare, and
+  not fixable through settings — it needs either a person-per-document schema or
+  a separator that breaks adjacency.
+- [ ] **Blocked: apply the corrected settings.** They are queued behind batch
+  227, a rebuild started 09:36 against the *non-existent* attributes — hours of
+  work that cannot produce anything searchable. Cancelling it was denied by the
+  permission classifier, so it needs to be run by hand:
+
+  ```
+  curl -X POST -H "Authorization: Bearer $MEILI_KEY" \
+    'http://127.0.0.1:7700/tasks/cancel?statuses=processing'
+  ```
+
+### A2c. Proposed indexing schema for genealogical search
+
+Measured against the live corpus (2,000 records sampled across all eight record
+types): **2.96 persons per record**, **52 distinct roles** but heavily
+concentrated, and tussenvoegsels dominate the token counts — `van` 1,446,
+`der` 468, `de` 417.
+
+**The finding that decides the design:** typo tolerance does *not* cover Dutch
+orthographic drift. On the raw name field, `Sijbrand` matches and **`Sybrand`
+returns nothing**; `Siebrand` matches only because it happens to fall within one
+edit. ij↔y is the single most common variation in these registers, so a
+normalised field is required rather than optional. This was worth testing — the
+answer was not guessable in either direction.
+
+Proposed document:
+
+```
+id, archive, kind, institution, guid, url, last_changed    unchanged
+event_type, event_year (int), event_date, event_place      unchanged
+
+n_principal []   Kind, Bruidegom, Bruid, Overledene, Geregistreerde
+n_parent    []   Vader, Moeder + the four bruid/bruidegom parent variants
+n_witness   []   Getuige
+n_other     []   notarial parties, Vermeld, Relatie, Partner
+names_norm  []   ij->y, ck->k; required, see above
+surnames    []   filterable, for surname browse
+role_groups []   filterable: principal / parent / witness / other
+persons     []   {n, r, s, g, p} display, role, surname, given, patronym — stored
+```
+
+The four `n_*` fields **replace** the `names` blob rather than adding to it, so
+partitioning by role is close to free. Verified behaviour:
+
+| query | result |
+|---|---|
+| "Jan de Vries" any role | target + as_parent |
+| "Jan de Vries" **as parent** | as_parent only |
+| "Jan de Vries" **as principal** | target only |
+| filter `surnames = 'Feikema'` | all four Feikema records |
+| "Jan" restricted to name fields | no longer returns "Sint Jan bij Yperen" |
+
+Role-scoped search is the primitive that makes tree-walking possible: a person's
+own events versus the records where they appear as somebody's parent.
+
+**Cost: this needs a full re-ingest, not a settings rebuild.** The structured
+name parts (`*_NAME_SURN`, `*_NAME_GN`, `*_NAME_PATR`) are read by `ingest.py`
+and then discarded into a single display string, so surnames and normalised
+forms cannot be recovered from the index — only from the exports.
+
+That argues for settling this **before** harvesting the remaining 80 archives:
+re-ingesting 15.4M records now is far cheaper than re-ingesting 51M later.
+
+- [ ] **Known limitation, unchanged by this design:** a phrase can still span two
+  people *within the same role group*, because Meilisearch puts no positional
+  distance between array elements. Only a person-per-document schema fixes it,
+  which at 2.96 persons/record means ~45M documents instead of 15.4M.
+
+**Revision: singular roles must be scalar fields, not arrays.** Tested against
+the compound query "a de Vries born after 1899, married before 1935, to an
+Antje":
+
+| shape | result |
+|---|---|
+| scalar `groom_*` / `bride_*` fields | the one intended record |
+| arrays of persons ("any person is a Vries AND any person is an Antje") | 4 records, **3 false positives** |
+
+Array filters match *any* element independently, so they cannot bind two
+constraints to the same person — a record with Klaas Vries marrying Antje
+Dijkstra satisfies "a Vries" and "an Antje" without a de Vries ever marrying an
+Antje. The dominant record types have fixed singular roles, so scalars are
+available: `bsg` has one PR/PR_FTHR/PR_MTHR, `bsh` one GROOM/BRIDE plus their
+four parents, `bso` one PR. Only WITNESS_1..5 and OTHER are variable and stay as
+arrays.
+
+**Fields the exports carry that ingest.py currently discards** (measured over
+20,000 rows of each `frl` export):
+
+| field | fill rate | value |
+|---|---|---|
+| `GROOM_AGE` / `BRIDE_AGE` | 98.5% / 98.4% | uniformly "N jaar"; **birth year = EVENT_YEAR − AGE** |
+| `GROOM_BIR_PLACE` / `BRIDE_BIR_PLACE` | 96.6% / 96.5% | birth place of both spouses |
+| `PR_BIR_YEAR` (births) | 99.9% | exact birth year |
+| `PR_AGE` (deaths) | 94.1% | mixed units — jaar/maanden/weken/dagen, needs care for infants |
+| `GROOM_BIR_YEAR` | 0.1% | effectively absent — the age field is the real source |
+
+Deriving birth year from age is what makes the example query answerable inside a
+single marriage record, with no cross-record join.
+
+**Verified end to end** — "a de Vries, father named Jan, married before 1935 to
+an Antje" against seven near-miss records:
+
+```
+kind='bsh' AND groom_surname_n='vries' AND groom_father_given_n='jan'
+          AND bride_given_n='antje'  AND event_year < 1935
+```
+
+Returns the intended couple and the same couple spelled differently, and
+correctly rejects: father Pieter, bride Grietje, married 1940, **a record where
+Jan de Vries is the groom rather than the father**, and one where the bride is
+Aaltje. The role binding is what makes the fourth of those work.
+
+Two things the test settled about "or similar":
+
+- **Normalised filter values** (lowercase, diacritics folded, tussenvoegsel
+  dropped, ij→y) make `de Vries` / `De Vries` / `vries` interchangeable. That is
+  the systematic half of Dutch variation, and it is handled deterministically.
+- **Filters stay exact even after normalising**: `de Vriess` matches nothing.
+  Typos need the *search* half — `q="Vriess"` with
+  `attributesToSearchOn=["groom_surname"]` plus filters for the role bindings
+  finds it. So the API needs both: filters for structure, `q` for fuzziness on
+  one chosen field.
+
+- [ ] **Given-name variants remain unsolved.** `Sytse` does not find `Sietse` —
+  neither typo tolerance nor the normalisation above bridges it, because the
+  difference is `ie`↔`y` inside the stem. Dutch given names vary far more than
+  surnames (Sietse/Sytse/Sydse, Jan/Johannes/Joannes). This needs a phonetic key
+  (Dutch-tuned Soundex/Metaphone) as an extra indexed field, or a curated
+  variant dictionary. Worth deciding on before the re-ingest, since it is
+  another derived field.
+
+### A3. Deploy reliability
+
+- [x] **CRLF line endings were breaking deploys on the server.** An edit made on
+  Windows wrote `deploy_remote.sh` with CRLF; bash on Linux then failed with
+  `set: - : invalid option` before running a single line. Git Bash tolerates CRLF
+  locally, so `bash -n` passed on the workstation and the failure appeared only
+  mid-deploy. Fixed three ways: the file normalised, `.gitattributes` pins
+  `*.sh text eol=lf`, and the deploy normalises every `.sh` before upload.
+- [x] **Production is now verified after the swap, with automatic rollback.**
+  The candidate was probed on `:8099` in bridge networking, then production
+  started with `--net=host` and *nothing checked it*. A host-mode-only failure
+  would have reported a successful deploy while the API was down. The same probe
+  now runs against `:8090` after the swap; on failure it restores
+  `archival-gateway:previous` and re-verifies.
+- [x] **Probes are bounded.** Every `curl` has `--max-time`, so one hung endpoint
+  can no longer stall the deploy indefinitely.
+- [x] **"Zero downtime" claim corrected.** Production binds `:8090` via
+  `--net=host`, so the old container must release the port before the new one
+  binds it — a few seconds' gap. Genuine zero-downtime needs a proxy in front.
+- [x] **Web deploy now runs lint first.** `vite build` neither type-checks nor
+  lints, so a reference to an undefined variable builds cleanly and fails in the
+  browser. Five errors had accumulated on `main` unnoticed, which is exactly how
+  the next real one would have been missed.
+
 ### B. Post-launch cleanups
 - [x] **Admin dashboard** at `/admin`, gated on a Firebase `admin` custom claim,
   with the gateway verifying the ID token against Google's public certs — no

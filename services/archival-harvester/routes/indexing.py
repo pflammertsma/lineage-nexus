@@ -2,13 +2,15 @@
 Indexing progress, system status, coverage, and telemetry endpoints.
 """
 
+import json
 import time
+import urllib.request
 import psutil
 from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Query, Depends
 from fastapi.responses import Response
 
-from config import meili_client, INDEX_NAME, MEILI_HOST, START_TIME, ARCHIVE_NAMES
+from config import meili_client, INDEX_NAME, MEILI_HOST, MEILI_MASTER_KEY, START_TIME, ARCHIVE_NAMES
 from auth import require_admin
 from metrics import _get_disk_io_rates, _metrics, _metrics_30d
 from telemetry import batch_telemetry, save_batch_telemetry, _meili_get, _elapsed_since, synthesize_past_batch_samples
@@ -190,6 +192,31 @@ def admin_coverage():
   }
 
 
+@router.post("/api/v1/admin/indexing/cancel", dependencies=[Depends(require_admin)])
+def admin_cancel_indexing():
+  """Cancels all active and enqueued Meilisearch tasks."""
+  import urllib.request
+  try:
+    req = urllib.request.Request(
+      f"{MEILI_HOST}/tasks/cancel?statuses=enqueued,processing",
+      data=b"",
+      headers={
+        "Authorization": f"Bearer {MEILI_MASTER_KEY}",
+        "Content-Type": "application/json",
+      },
+      method="POST",
+    )
+    with urllib.request.urlopen(req, timeout=10) as resp:
+      result = json.loads(resp.read().decode("utf-8"))
+      return {
+        "status": "success",
+        "message": "Cancellation request submitted to Meilisearch engine.",
+        "task": result,
+      }
+  except Exception as exc:
+    return {"status": "error", "error_message": f"Failed to cancel indexing tasks: {str(exc)}"}
+
+
 @router.get("/api/v1/admin/indexing", dependencies=[Depends(require_admin)])
 def admin_indexing():
   """Queue depth, active batch, and throughput metrics."""
@@ -279,12 +306,16 @@ def admin_indexing():
       "read_mbs": read_mbs,
       "write_mbs": write_mbs,
       "processed_gb": read_gb,
+      # What we measured, not what we guessed from it. "Crunching word proximity
+      # matrices" was inferred purely from read_mbs > 5 — plausible, but stated
+      # as fact when the only thing actually known is the I/O rate. The step
+      # name beside it already says which phase the engine is in.
       "summary": (
-        f"Crunching word proximity matrices: {read_mbs} MB/s read (~{read_gb} GB cumulative multi-pass read)"
+        f"Reading {read_mbs:.0f} MB/s ({read_gb:.1f} GB so far)"
         if read_mbs > 5.0
-        else f"Flushing LMDB index transactions to disk ({write_mbs} MB/s write)"
+        else f"Writing {write_mbs:.0f} MB/s"
         if write_mbs > 1.0
-        else "Analyzing index dictionary postings in memory..."
+        else "Working in memory"
       )
     }
 

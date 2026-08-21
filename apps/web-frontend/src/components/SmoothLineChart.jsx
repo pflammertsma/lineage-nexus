@@ -25,6 +25,9 @@ function downsample(values, target) {
  * Fritsch-Carlson Monotone Cubic Hermite Interpolation.
  * Guarantees zero undershoot/overshoot dips on sharp steps.
  */
+// Pure helper shared with other components, co-located with the chart that
+// defines its behaviour. The rule below only governs hot-reload granularity.
+// eslint-disable-next-line react-refresh/only-export-components
 export function smoothPath(pts, top, bottom) {
   const n = pts.length;
   if (n < 2) return '';

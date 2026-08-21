@@ -27,7 +27,7 @@
  *     `.firebaserc` is needed.
  */
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -190,6 +190,13 @@ function deployApi(config) {
 }
 
 function deployWeb(config) {
+  // Lint before build, because `vite build` does not type-check or lint: a
+  // reference to an undefined variable compiles happily and fails in the
+  // browser. Five errors had accumulated on main unnoticed for exactly this
+  // reason, which then hides the next real one.
+  step('Linting frontend');
+  run('pnpm', ['--dir', 'apps/web-frontend', 'lint']);
+
   step('Building frontend');
   // build.mjs enforces that production config is actually present.
   run('pnpm', ['--dir', 'apps/web-frontend', 'build']);
@@ -244,6 +251,29 @@ function deployArchival(config) {
 
   step('Deploying self-hosted archival gateway');
   const target = `${config.ociUser}@${config.ociHost}`;
+
+  // Shell scripts must reach the host with LF endings. An editor on Windows
+  // writes CRLF, bash then fails with `set: - : invalid option` before running a
+  // single line, and Git Bash tolerates CRLF locally — so this breaks only ever
+  // on the server, in the middle of a deploy. Normalising here is cheaper than
+  // quoting a `sed` through ssh.
+  step('Normalising shell script line endings');
+  for (const name of readdirSync(join(ROOT, 'services/archival-harvester'))) {
+    if (!name.endsWith('.sh')) continue;
+    const file = join(ROOT, 'services/archival-harvester', name);
+    const original = readFileSync(file);
+    // Character codes rather than escape sequences: a literal backslash-r in
+    // this file has been mangled by every tool that has edited it.
+    const CR = String.fromCharCode(13);
+    const LF = String.fromCharCode(10);
+    const normalised = Buffer.from(
+      original.toString('binary').split(CR + LF).join(LF), 'binary'
+    );
+    if (!original.equals(normalised)) {
+      writeFileSync(file, normalised);
+      console.log(`${DIM}  normalised ${name} (had CRLF)${RESET}`);
+    }
+  }
 
   step(`Syncing service to ${target}:/opt/archival-harvester/`);
   run('scp', ['-i', config.ociKey, '-r', 'services/archival-harvester/*', `${target}:/opt/archival-harvester/`]);

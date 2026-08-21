@@ -99,22 +99,30 @@ def ensure_meilisearch_index_settings():
   try:
     index = meili_client.index(INDEX_NAME)
     index.update_settings({
+      # These MUST name fields the documents actually contain. Four of the six
+      # here previously did not exist in a single one of 15.4M records —
+      # `full_names`, `person_names`, `deed_type` and `archive_name` belong to
+      # harvester.py, a legacy builder that only ever wrote the seed document.
+      # The live corpus is written by ingest.py, so names were not searchable at
+      # all: every name query fell through to `event_place`, and "Jan de Vries"
+      # returned records from "Sint Jan bij Yperen".
+      #
+      # Order matters — the `attribute` ranking rule weights earlier entries
+      # higher, so a name match outranks a place match on the same term.
       "searchableAttributes": [
-        "full_names",
-        "person_names",
+        "names",
         "event_place",
-        "deed_type",
-        "archive_name",
-        "event_year"
+        "event_type",
+        "institution"
       ],
+      # `archive_code` and `province` are likewise absent from every document;
+      # filtering on them can only ever return nothing.
       "filterableAttributes": [
         "event_type",
         "event_year",
         "event_place",
-        "archive_code",
         "archive",
-        "kind",
-        "province"
+        "kind"
       ],
       "rankingRules": [
         "words",

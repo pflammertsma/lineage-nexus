@@ -7,6 +7,9 @@ import SmoothLineChart from './SmoothLineChart';
  * Generates an infinitely distinct, visually harmonious HSL color for any archive index
  * using the Golden Ratio (Golden Angle = 137.508°).
  */
+// Pure helper shared with other components, co-located with the chart that
+// defines its behaviour. The rule below only governs hot-reload granularity.
+// eslint-disable-next-line react-refresh/only-export-components
 export function getArchiveColor(index) {
   const hue = (index * 137.508) % 360;
   const saturation = 70 + (index % 3) * 8;

@@ -60,12 +60,10 @@ const Meter = ({ icon: Icon, label, percent, detail }) => (
  * Header navigation, titles, and actions are rendered inside Header.jsx.
  */
 const AdminDashboard = ({ getIdToken }) => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  // Tab selection is written by Header.jsx; this view only reads it.
+  const [searchParams] = useSearchParams();
   const activeTab = searchParams.get('tab') || 'overview';
 
-  const setTab = (tab) => {
-    setSearchParams({ tab }, { replace: true });
-  };
 
   const [status, setStatus] = useState(null);
   const [history, setHistory] = useState([]);
@@ -90,7 +88,9 @@ const AdminDashboard = ({ getIdToken }) => {
   }, []);
 
   const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(true);
+  // Only the setter is used — the spinner reads it via the refresh button's
+  // own disabled state, so the value itself has no reader.
+  const [, setLoading] = useState(true);
   const [fetchedAt, setFetchedAt] = useState(null);
 
   const [telemetryModalOpen, setTelemetryModalOpen] = useState(false);
@@ -372,7 +372,12 @@ const AdminDashboard = ({ getIdToken }) => {
             {/* Tab 2: Ingest & Harvester Queue */}
             {activeTab === 'harvesting' && (
               <div className="space-y-8">
-                <IndexingProgress indexing={indexing} onOpenTelemetry={handleOpenTelemetry} />
+                <IndexingProgress
+                  indexing={indexing}
+                  onOpenTelemetry={handleOpenTelemetry}
+                  getIdToken={getIdToken}
+                  onRefresh={load}
+                />
                 <HarvestCatalog getIdToken={getIdToken} onHarvestQueued={load} />
               </div>
             )}

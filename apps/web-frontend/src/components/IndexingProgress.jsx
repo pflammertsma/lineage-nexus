@@ -1,6 +1,6 @@
-import React from 'react';
-import { Layers, Loader2, AlertTriangle, CheckCircle2 } from 'lucide-react';
-import { getArchiveName } from '../config';
+import React, { useState } from 'react';
+import { Layers, Loader2, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { getArchiveName, ADMIN_API_BASE_URL } from '../config';
 
 /**
  * How long everything must be frozen before it is worth mentioning.
@@ -54,7 +54,38 @@ function parseIsoDuration(value) {
  * can be hours wide. Without this panel a stalled harvest and a finished one look
  * exactly the same from the dashboard.
  */
-const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
+const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) => {
+  const [confirmCancelOpen, setConfirmCancelOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelFeedback, setCancelFeedback] = useState(null);
+
+  const handleCancelIndexing = async () => {
+    setCancelling(true);
+    setCancelFeedback(null);
+    try {
+      const token = getIdToken ? await getIdToken() : null;
+      const res = await fetch(`${ADMIN_API_BASE_URL}/api/v1/admin/indexing/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+      const data = await res.json();
+      if (data.status === 'success') {
+        setCancelFeedback({ type: 'success', text: 'Indexing cancellation request submitted to Meilisearch engine.' });
+        onRefresh?.();
+      } else {
+        setCancelFeedback({ type: 'error', text: data.error_message || 'Failed to submit cancellation request.' });
+      }
+    } catch (err) {
+      setCancelFeedback({ type: 'error', text: String(err) });
+    } finally {
+      setCancelling(false);
+      setConfirmCancelOpen(false);
+    }
+  };
+
   if (!indexing) {
     return (
       <div className="bg-card border border-border rounded-lg p-5">
@@ -94,11 +125,18 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
           : null
       : null;
 
-  const pct = Number.isFinite(batch?.percentage) ? batch.percentage : null;
   const job = indexing.current_ingest;
 
   return (
     <div className="bg-card border border-border rounded-lg p-5">
+      {cancelFeedback && (
+        <div className={`p-3 rounded-lg mb-4 text-xs flex items-center justify-between gap-2 border ${cancelFeedback.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-red-500/10 border-red-500/30 text-red-400'
+          }`}>
+          <span>{cancelFeedback.text}</span>
+          <button type="button" onClick={() => setCancelFeedback(null)} className="hover:opacity-80 cursor-pointer font-bold px-1">✕</button>
+        </div>
+      )}
+
       <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Layers size={14} className="text-secondary" />
@@ -106,19 +144,33 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
             Indexing
           </span>
         </div>
-        <span className="flex items-center gap-1.5 text-[11px]">
-          {busy ? (
-            <>
-              <Loader2 size={12} className="animate-spin text-accent" />
-              <span className="text-accent">Working</span>
-            </>
-          ) : (
-            <>
-              <CheckCircle2 size={12} className="text-green-600" />
-              <span className="text-green-600">Idle — queue empty</span>
-            </>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-1.5 text-[11px]">
+            {busy ? (
+              <>
+                <Loader2 size={12} className="animate-spin text-accent" />
+                <span className="text-accent">Working</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={12} className="text-green-600" />
+                <span className="text-green-600">Idle — queue empty</span>
+              </>
+            )}
+          </span>
+
+          {busy && (
+            <button
+              type="button"
+              onClick={() => setConfirmCancelOpen(true)}
+              className="px-2.5 py-1 text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/30 rounded-md hover:bg-red-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
+              title="Cancel all active and queued Meilisearch indexing tasks"
+            >
+              <XCircle size={13} />
+              Cancel
+            </button>
           )}
-        </span>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3 mb-5">
@@ -197,8 +249,8 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
           <div className="flex items-center justify-between gap-3 text-xs text-secondary flex-wrap">
             <span>
               {Number.isFinite(job.submitted)
-                ? `${job.submitted.toLocaleString()} rows streamed & parsed`
-                : 'Streaming S3 bulk export...'}
+                ? `${job.submitted.toLocaleString()} rows`
+                : 'Fetching export…'}
             </span>
             {indexing.eta_seconds != null && (
               <button
@@ -213,8 +265,11 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
           </div>
 
           {job.waiting_for_queue && (
-            <p className="text-[10px] text-amber-500 mt-2 font-medium">
-              Throttled by backpressure — harvester is waiting for queue to drain to preserve RAM.
+            <p
+              className="text-[10px] text-amber-500 mt-2 font-medium cursor-help"
+              title="The harvester pauses while the engine catches up, so no batch grows larger than memory allows."
+            >
+              Throttled
             </p>
           )}
         </div>
@@ -226,26 +281,15 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
           <div className="flex items-baseline justify-between gap-3 flex-wrap mb-2">
             <span className="text-xs text-primary font-semibold flex items-center gap-2 flex-wrap">
               <span>Batch {batch.uid}</span>
-              {job?.archive && (
-                <span className="px-1.5 py-0.5 rounded bg-card border border-border text-[10px] font-mono font-medium text-primary">
-                  {getArchiveName(job.archive)} ({job.archive}.{job.kind})
-                </span>
-              )}
-              {busy && (
-                <span className="px-1.5 py-0.5 rounded bg-accent/10 border border-accent/30 text-[10px] font-medium text-accent">
-                  Indexing
-                </span>
-              )}
+              {/* No archive chip and no "Indexing" badge: the header above
+                  already names the file, and the panel header already says
+                  whether the engine is working. */}
             </span>
             <span className="text-[11px] text-secondary tabular-nums">
               {batch.tasks?.toLocaleString()} tasks ·{' '}
               {batch.documents ? `${batch.documents.toLocaleString()} docs · ` : ''}
               {formatDuration(batch.elapsed_seconds)}
-              {batch.is_indeterminate ? (
-                <span className="text-amber-500/90 font-medium ml-1">
-                  · ETA Indeterminate (Settings Rebuild)
-                </span>
-              ) : indexing.eta_seconds != null ? (
+              {batch.is_indeterminate ? null : indexing.eta_seconds != null ? (
                 <button
                   type="button"
                   onClick={() => onOpenTelemetry?.(batch.uid)}
@@ -266,31 +310,30 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
               <>
                 <div aria-hidden="true" className="h-1.5 rounded-full bg-muted overflow-hidden mb-1">
                   <div
-                    className={`h-full rounded-full transition-all duration-500 ${
-                      isIndeterminate
-                        ? 'bg-accent/80 animate-pulse w-full'
-                        : stallLevel === 'alert'
+                    className={`h-full rounded-full transition-all duration-500 ${isIndeterminate
+                      ? 'bg-accent/80 animate-pulse w-full'
+                      : stallLevel === 'alert'
                         ? 'bg-red-500'
                         : stallLevel === 'warn'
-                        ? 'bg-amber-500'
-                        : 'bg-accent'
-                    }`}
+                          ? 'bg-amber-500'
+                          : 'bg-accent'
+                      }`}
                     style={isIndeterminate ? {} : { width: `${Math.min(100, Math.max(0, virtualPct ?? 0))}%` }}
                   />
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-secondary tabular-nums mb-3">
-                  <span>
+                  <span
+                    className={rawPct != null && rawPct !== virtualPct ? 'cursor-help' : undefined}
+                    title={rawPct != null && rawPct !== virtualPct
+                      ? `${rawPct.toFixed(1)}% by the engine's own step counters, reweighted by how long each phase usually takes`
+                      : undefined}
+                  >
                     {isIndeterminate
-                      ? 'Indeterminate (Index-Wide Settings Rebuild)'
+                      ? 'Settings rebuild — no progress reported'
                       : virtualPct === null
-                      ? 'progress unreported'
-                      : `${virtualPct.toFixed(1)}% phase weighted`}
+                        ? 'progress unreported'
+                        : `${virtualPct.toFixed(1)}%`}
                   </span>
-                  {!isIndeterminate && rawPct != null && rawPct !== virtualPct && (
-                    <span className="text-[10px] text-secondary/70 font-mono">
-                      {rawPct.toFixed(1)}% raw steps
-                    </span>
-                  )}
                 </div>
               </>
             );
@@ -324,8 +367,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
               <span className="flex items-center gap-2">
                 <Loader2 size={13} className="animate-spin text-accent shrink-0" />
                 <span>
-                  {batch.sub_step_details?.summary ||
-                    'Engine is actively crunching word proximity matrices in memory.'}
+                  {batch.sub_step_details?.summary || 'Working'}
                 </span>
               </span>
               {batch.sub_step_details?.read_mbs > 0 && (
@@ -391,6 +433,40 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
             })}
           </ul>
         </div>
+      )}
+
+      {confirmCancelOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+        <div className="bg-card border border-border rounded-xl p-5 max-w-md w-full shadow-2xl space-y-4">
+          <div className="flex items-center gap-3 text-red-400">
+            <AlertTriangle size={20} className="shrink-0 text-red-400" />
+            <h3 className="text-sm font-bold text-primary">Cancel Active Indexing?</h3>
+          </div>
+          <p className="text-xs text-secondary leading-relaxed">
+            Are you sure you want to cancel all enqueued and currently processing tasks in Meilisearch?
+            Active batch processing will be aborted by the engine.
+          </p>
+          <div className="flex items-center justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setConfirmCancelOpen(false)}
+              disabled={cancelling}
+              className="px-3 py-1.5 text-xs text-secondary hover:text-primary transition-colors cursor-pointer"
+            >
+              Keep Indexing
+            </button>
+            <button
+              type="button"
+              onClick={handleCancelIndexing}
+              disabled={cancelling}
+              className="px-3.5 py-1.5 text-xs font-semibold text-white bg-red-600 hover:bg-red-500 rounded-lg transition-colors cursor-pointer flex items-center gap-2"
+            >
+              {cancelling && <Loader2 size={13} className="animate-spin" />}
+              {cancelling ? 'Cancelling...' : 'Yes, cancel indexing'}
+            </button>
+          </div>
+        </div>
+      </div>
       )}
     </div>
   );

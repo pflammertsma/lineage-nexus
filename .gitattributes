@@ -1,0 +1,5 @@
+
+# Shell scripts run on Linux. A CRLF line ending makes bash fail with
+# `set: - : invalid option` and `$'': command not found`, which Git Bash on
+# Windows does not reproduce locally — so it only ever breaks on the server.
+*.sh text eol=lf

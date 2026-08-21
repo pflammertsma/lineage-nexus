@@ -79,13 +79,22 @@ def run_contract_tests():
   if res.status_code != 200:
     failures.append(f"GET /api/v1/admin/batch-telemetry failed: status {res.status_code}")
 
+  # 9. Admin Indexing Cancel
+  with patch("urllib.request.urlopen") as mock_urlopen:
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = b'{"taskUid": 42, "status": "enqueued"}'
+    mock_urlopen.return_value.__enter__.return_value = mock_resp
+    res = client.post("/api/v1/admin/indexing/cancel", headers=ADMIN_HEADERS)
+    if res.status_code != 200:
+      failures.append(f"POST /api/v1/admin/indexing/cancel failed: status {res.status_code}")
+
   if failures:
     print("❌ PRE-FLIGHT CONTRACT TESTS FAILED:")
     for f in failures:
       print(f"  - {f}")
     sys.exit(1)
 
-  print("✓ All 8 core API route contracts verified successfully!")
+  print("✓ All 9 core API route contracts verified successfully!")
 
 
 if __name__ == "__main__":
