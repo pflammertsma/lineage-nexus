@@ -87,12 +87,16 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
     ...filteredSamples.map((s) => Math.max(s.eta_seconds || 0, s.naive_eta_seconds || 0))
   );
 
+  const formatTimeSpan = (seconds) => {
+    if (!seconds || seconds <= 0) return '0s';
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  };
+
   const getX = (elapsed) => {
     if (spanElapsed <= 0) return P;
-    if (minElapsed > 30 && spanElapsed > 5) {
-      return P + (((elapsed || 0) - minElapsed) / spanElapsed) * (W - 2 * P);
-    }
-    return P + ((elapsed || 0) / maxElapsed) * (W - 2 * P);
+    return P + (((elapsed || 0) - minElapsed) / spanElapsed) * (W - 2 * P);
   };
   const getYPct = (pct) => H - P - ((pct || 0) / 100) * (H - 2 * P);
   const getYEta = (eta) => H - P - ((eta || 0) / maxEta) * (H - 2 * P);
@@ -235,6 +239,8 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
                     ))}
                     {rawPath && <path d={rawPath} fill="none" stroke="#F59E0B" strokeWidth="2" opacity="0.75" />}
                     {virtPath && <path d={virtPath} fill="none" stroke="var(--color-accent, #3B82F6)" strokeWidth="2.5" />}
+                    <text x={P} y={H - 5} className="text-[9px] fill-secondary/70 font-mono">{formatTimeSpan(minElapsed)}</text>
+                    <text x={W - P} y={H - 5} textAnchor="end" className="text-[9px] fill-secondary/70 font-mono">{formatTimeSpan(maxElapsed)}</text>
                   </svg>
                 </div>
               </div>
@@ -273,6 +279,8 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
                     {smoothedEtaPath && (
                       <path d={smoothedEtaPath} fill="none" stroke="#10B981" strokeWidth="2.5" />
                     )}
+                    <text x={P} y={H - 5} className="text-[9px] fill-secondary/70 font-mono">{formatTimeSpan(minElapsed)}</text>
+                    <text x={W - P} y={H - 5} textAnchor="end" className="text-[9px] fill-secondary/70 font-mono">{formatTimeSpan(maxElapsed)}</text>
                   </svg>
                 </div>
               </div>
