@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, ExternalLink, Loader2, ChevronRight, SlidersHorizontal, MapPin, Calendar, X, Filter } from 'lucide-react';
+import { Search, ExternalLink, Loader2, ChevronRight, SlidersHorizontal, MapPin, X, HelpCircle } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
 
 /**
@@ -408,7 +408,7 @@ const ArchiveQuery = ({ getIdToken }) => {
             {/* Search Toggles & Presets */}
             <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40 flex-wrap">
               <div className="flex items-center gap-4 flex-wrap text-xs text-primary">
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={fuzzy}
@@ -416,9 +416,15 @@ const ArchiveQuery = ({ getIdToken }) => {
                     className="rounded border-border text-accent focus:ring-accent"
                   />
                   <span>Phonetic variants</span>
+                  <div className="group relative inline-flex items-center">
+                    <HelpCircle size={12} className="text-secondary/70 hover:text-accent cursor-help transition-colors" />
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-56 p-2 bg-card border border-border-strong rounded-md shadow-xl text-[11px] text-secondary font-normal normal-case z-50 leading-relaxed">
+                      Matches sound-alike historical spelling variants (e.g. Clasina / Klasina / Klazina). Exact spellings are always ranked first.
+                    </div>
+                  </div>
                 </label>
 
-                <label className="flex items-center gap-1.5 cursor-pointer">
+                <label className="flex items-center gap-1.5 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={namesOnly}
@@ -426,6 +432,12 @@ const ArchiveQuery = ({ getIdToken }) => {
                     className="rounded border-border text-accent focus:ring-accent"
                   />
                   <span>Names only</span>
+                  <div className="group relative inline-flex items-center">
+                    <HelpCircle size={12} className="text-secondary/70 hover:text-accent cursor-help transition-colors" />
+                    <div className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 hidden group-hover:block w-56 p-2 bg-card border border-border-strong rounded-md shadow-xl text-[11px] text-secondary font-normal normal-case z-50 leading-relaxed">
+                      Restricts search strictly to person names. Unchecking this widens search to include event places, cities, and archive institutions.
+                    </div>
+                  </div>
                 </label>
               </div>
               {activeFilterCount > 0 && (
