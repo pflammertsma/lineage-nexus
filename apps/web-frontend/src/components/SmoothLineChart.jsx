@@ -278,11 +278,10 @@ const SmoothLineChart = ({
                 type="button"
                 onClick={() => onRangeChange?.(r.minutes)}
                 aria-pressed={rangeMinutes === r.minutes}
-                className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${
-                  rangeMinutes === r.minutes
+                className={`px-2 py-0.5 text-[10px] transition-colors cursor-pointer ${rangeMinutes === r.minutes
                     ? 'bg-accent text-on-accent'
                     : 'text-secondary hover:text-primary'
-                }`}
+                  }`}
               >
                 {r.label}
               </button>
@@ -368,7 +367,7 @@ const SmoothLineChart = ({
             style={{
               left: `${(x(hovered.t) / W) * 100}%`,
               transform:
-                x(hovered.t) / W > 0.62
+                x(hovered.t) / W > 0.5
                   ? 'translateX(calc(-100% - 10px))'
                   : 'translateX(10px)',
             }}
@@ -382,8 +381,8 @@ const SmoothLineChart = ({
                   processedSeries.length > 30
                     ? 'grid grid-cols-3 gap-x-4 gap-y-1 text-[11px] min-w-[34rem]'
                     : processedSeries.length > 10
-                    ? 'grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] min-w-[22rem]'
-                    : 'space-y-1 text-[11px] min-w-[11rem]'
+                      ? 'grid grid-cols-2 gap-x-4 gap-y-1 text-[11px] min-w-[22rem]'
+                      : 'space-y-1 text-[11px] min-w-[11rem]'
                 }
               >
                 {processedSeries.map((s) => {
@@ -391,8 +390,8 @@ const SmoothLineChart = ({
                   const formatted = s.formatter
                     ? s.formatter(val, hovered)
                     : Number.isFinite(val)
-                    ? `${val.toFixed(1)}%`
-                    : '—';
+                      ? `${val.toFixed(1)}%`
+                      : '—';
                   return (
                     <li key={s.field} className="flex items-center justify-between gap-3">
                       <span className="flex items-center gap-1.5 truncate max-w-[10rem]">

@@ -1,6 +1,44 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Download, RefreshCw, BarChart2, X, Activity } from 'lucide-react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Download, RefreshCw, BarChart2, X, Activity, Clock } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
+import SmoothLineChart from './SmoothLineChart';
+
+const formatTimeSpan = (seconds) => {
+  if (seconds == null || seconds < 0) return '0s';
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+};
+
+const PROGRESS_SERIES = [
+  {
+    field: 'raw_progress_pct',
+    label: 'Raw Engine %',
+    colour: '#F59E0B',
+    formatter: (val) => `${(typeof val === 'number' ? val : 0).toFixed(1)}%`,
+  },
+  {
+    field: 'virtual_progress_pct',
+    label: 'Virtual Phase %',
+    colour: 'var(--color-accent)',
+    formatter: (val) => `${(typeof val === 'number' ? val : 0).toFixed(1)}%`,
+  },
+];
+
+const ETA_SERIES = [
+  {
+    field: 'naive_eta_seconds',
+    label: 'Naive Linear ETA',
+    colour: '#EF4444',
+    formatter: (val) => formatTimeSpan(val),
+  },
+  {
+    field: 'eta_seconds',
+    label: 'Smoothed EWMA ETA',
+    colour: '#10B981',
+    formatter: (val) => formatTimeSpan(val),
+  },
+];
 
 export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', getIdToken }) => {
   const [telemetry, setTelemetry] = useState([]);
@@ -54,10 +92,29 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
 
+  const chartPoints = useMemo(() => {
+    const filtered =
+      selectedBatchUid === 'all'
+        ? telemetry
+        : telemetry.filter((s) => String(s.batch_uid) === String(selectedBatchUid));
+
+    return filtered.map((s, idx) => ({
+      t: s.timestamp || (s.elapsed_seconds != null ? s.elapsed_seconds : idx * 15),
+      raw_progress_pct: typeof s.raw_progress_pct === 'number' ? s.raw_progress_pct : 0,
+      virtual_progress_pct: typeof s.virtual_progress_pct === 'number' ? s.virtual_progress_pct : 0,
+      eta_seconds: typeof s.eta_seconds === 'number' ? s.eta_seconds : null,
+      naive_eta_seconds: typeof s.naive_eta_seconds === 'number' ? s.naive_eta_seconds : null,
+    }));
+  }, [telemetry, selectedBatchUid]);
+
   if (!isOpen) return null;
 
   const handleDownloadJson = () => {
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(filteredSamples, null, 2));
+    const filtered =
+      selectedBatchUid === 'all'
+        ? telemetry
+        : telemetry.filter((s) => String(s.batch_uid) === String(selectedBatchUid));
+    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(filtered, null, 2));
     const a = document.createElement('a');
     a.href = dataStr;
     a.download = `batch_telemetry_${selectedBatchUid}.json`;
@@ -68,64 +125,10 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
 
   // Distinct batch UIDs
   const batchUids = Array.from(new Set(telemetry.map((s) => s.batch_uid).filter(Boolean)));
-  const filteredSamples =
-    selectedBatchUid === 'all'
-      ? telemetry
-      : telemetry.filter((s) => String(s.batch_uid) === String(selectedBatchUid));
-
-  // SVGs layout metrics
-  const W = 600;
-  const H = 180;
-  const P = 30;
-
-  const minElapsed = Math.min(...filteredSamples.map((s) => s.elapsed_seconds || 0));
-  const maxElapsed = Math.max(1, ...filteredSamples.map((s) => s.elapsed_seconds || 0));
-  const spanElapsed = maxElapsed - minElapsed;
-
-  const maxEta = Math.max(
-    1,
-    ...filteredSamples.map((s) => Math.max(s.eta_seconds || 0, s.naive_eta_seconds || 0))
-  );
-
-  const formatTimeSpan = (seconds) => {
-    if (!seconds || seconds <= 0) return '0s';
-    const m = Math.floor(seconds / 60);
-    const s = Math.floor(seconds % 60);
-    return m > 0 ? `${m}m ${s}s` : `${s}s`;
-  };
-
-  const getX = (elapsed) => {
-    if (spanElapsed <= 0) return P;
-    return P + (((elapsed || 0) - minElapsed) / spanElapsed) * (W - 2 * P);
-  };
-  const getYPct = (pct) => H - P - ((pct || 0) / 100) * (H - 2 * P);
-  const getYEta = (eta) => H - P - ((eta || 0) / maxEta) * (H - 2 * P);
-
-  // SVG Paths
-  const rawPath = filteredSamples
-    .map((s, i) => `${i === 0 ? 'M' : 'L'} ${getX(s.elapsed_seconds)} ${getYPct(s.raw_progress_pct)}`)
-    .join(' ');
-
-  const virtPath = filteredSamples
-    .map(
-      (s, i) =>
-        `${i === 0 ? 'M' : 'L'} ${getX(s.elapsed_seconds)} ${getYPct(s.virtual_progress_pct)}`
-    )
-    .join(' ');
-
-  const smoothedEtaPath = filteredSamples
-    .filter((s) => s.eta_seconds != null)
-    .map((s, i) => `${i === 0 ? 'M' : 'L'} ${getX(s.elapsed_seconds)} ${getYEta(s.eta_seconds)}`)
-    .join(' ');
-
-  const naiveEtaPath = filteredSamples
-    .filter((s) => s.naive_eta_seconds != null)
-    .map((s, i) => `${i === 0 ? 'M' : 'L'} ${getX(s.elapsed_seconds)} ${getYEta(s.naive_eta_seconds)}`)
-    .join(' ');
 
   return (
     <div className="fixed inset-0 z-[2000] bg-black/70 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-card border border-border-strong rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+      <div className="bg-card border border-border-strong rounded-2xl shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
         {/* Modal Header */}
         <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-border/80 bg-surface">
           <div className="flex items-center gap-2.5">
@@ -199,7 +202,7 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
 
         {/* Modal Body */}
         <div className="p-6 overflow-y-auto space-y-6">
-          {filteredSamples.length < 2 ? (
+          {chartPoints.length < 2 ? (
             <div className="py-12 text-center text-secondary">
               <Activity size={24} className="mx-auto mb-3 text-secondary/40 animate-pulse" />
               <p className="text-sm font-medium">No telemetry samples recorded for Batch #{selectedBatchUid}</p>
@@ -209,81 +212,28 @@ export const BatchTelemetryModal = ({ isOpen, onClose, initialBatchUid = 'all', 
             </div>
           ) : (
             <div className="grid gap-6 md:grid-cols-2">
-              {/* Chart 1: Progress Curves */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-primary">Progress Curve</span>
-                  <div className="flex items-center gap-3 text-[10px]">
-                    <span className="flex items-center gap-1 text-amber-500 font-medium">
-                      <span className="w-2 h-0.5 bg-amber-500 rounded-full" /> Raw Engine %
-                    </span>
-                    <span className="flex items-center gap-1 text-accent font-medium">
-                      <span className="w-2 h-0.5 bg-accent rounded-full" /> Virtual Phase %
-                    </span>
-                  </div>
-                </div>
+              <SmoothLineChart
+                icon={Activity}
+                title="Progress Curve"
+                points={chartPoints}
+                series={PROGRESS_SERIES}
+                autoScaleY={false}
+                maxY={100}
+                height={240}
+                ranges={[]}
+                emptyMessage="Collecting batch progress samples…"
+              />
 
-                <div className="bg-surface border border-border/60 rounded-xl p-3">
-                  <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto overflow-visible">
-                    {[0, 25, 50, 75, 100].map((v) => (
-                      <line
-                        key={v}
-                        x1={P}
-                        y1={getYPct(v)}
-                        x2={W - P}
-                        y2={getYPct(v)}
-                        stroke="currentColor"
-                        className="text-border/40"
-                        strokeDasharray="2,2"
-                      />
-                    ))}
-                    {rawPath && <path d={rawPath} fill="none" stroke="#F59E0B" strokeWidth="2" opacity="0.75" />}
-                    {virtPath && <path d={virtPath} fill="none" stroke="var(--color-accent, #3B82F6)" strokeWidth="2.5" />}
-                    <text x={P} y={H - 5} className="text-[9px] fill-secondary/70 font-mono">{formatTimeSpan(minElapsed)}</text>
-                    <text x={W - P} y={H - 5} textAnchor="end" className="text-[9px] fill-secondary/70 font-mono">{formatTimeSpan(maxElapsed)}</text>
-                  </svg>
-                </div>
-              </div>
-
-              {/* Chart 2: ETA Stability */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-primary">ETA Stability</span>
-                  <div className="flex items-center gap-3 text-[10px]">
-                    <span className="flex items-center gap-1 text-red-400 font-medium">
-                      <span className="w-2 h-0.5 bg-red-400 rounded-full" /> Naive Linear ETA
-                    </span>
-                    <span className="flex items-center gap-1 text-green-500 font-medium">
-                      <span className="w-2 h-0.5 bg-green-500 rounded-full" /> Smoothed EWMA ETA
-                    </span>
-                  </div>
-                </div>
-
-                <div className="bg-surface border border-border/60 rounded-xl p-3">
-                  <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-auto overflow-visible">
-                    {[0, maxEta * 0.5, maxEta].map((v, i) => (
-                      <line
-                        key={i}
-                        x1={P}
-                        y1={getYEta(v)}
-                        x2={W - P}
-                        y2={getYEta(v)}
-                        stroke="currentColor"
-                        className="text-border/40"
-                        strokeDasharray="2,2"
-                      />
-                    ))}
-                    {naiveEtaPath && (
-                      <path d={naiveEtaPath} fill="none" stroke="#EF4444" strokeWidth="1.5" strokeDasharray="3,3" opacity="0.8" />
-                    )}
-                    {smoothedEtaPath && (
-                      <path d={smoothedEtaPath} fill="none" stroke="#10B981" strokeWidth="2.5" />
-                    )}
-                    <text x={P} y={H - 5} className="text-[9px] fill-secondary/70 font-mono">{formatTimeSpan(minElapsed)}</text>
-                    <text x={W - P} y={H - 5} textAnchor="end" className="text-[9px] fill-secondary/70 font-mono">{formatTimeSpan(maxElapsed)}</text>
-                  </svg>
-                </div>
-              </div>
+              <SmoothLineChart
+                icon={Clock}
+                title="ETA Stability"
+                points={chartPoints}
+                series={ETA_SERIES}
+                autoScaleY={true}
+                height={240}
+                ranges={[]}
+                emptyMessage="Collecting batch ETA samples…"
+              />
             </div>
           )}
         </div>
