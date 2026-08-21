@@ -88,13 +88,18 @@ def run_contract_tests():
     if res.status_code != 200:
       failures.append(f"POST /api/v1/admin/indexing/cancel failed: status {res.status_code}")
 
+  # 10. Relational Admin Query
+  res = client.get("/api/v1/admin/query?q=Spruijt&archive=arg&father=Jacob&mother=Jacoba&role=child&fuzzy=true&names_only=true", headers=ADMIN_HEADERS)
+  if res.status_code != 200:
+    failures.append(f"GET /api/v1/admin/query with relational filters failed: status {res.status_code}")
+
   if failures:
     print("❌ PRE-FLIGHT CONTRACT TESTS FAILED:")
     for f in failures:
       print(f"  - {f}")
     sys.exit(1)
 
-  print("✓ All 9 core API route contracts verified successfully!")
+  print("✓ All 10 core API route contracts verified successfully!")
 
 
 if __name__ == "__main__":

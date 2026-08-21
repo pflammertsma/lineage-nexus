@@ -34,10 +34,16 @@ const kindLabel = (kind) => KIND_LABELS[kind] || `Record type: ${kind}`;
  */
 const ArchiveQuery = ({ getIdToken }) => {
   const [query, setQuery] = useState('');
+  const [archive, setArchive] = useState('all');
   const [place, setPlace] = useState('');
   const [kind, setKind] = useState('all');
   const [yearMin, setYearMin] = useState('');
   const [yearMax, setYearMax] = useState('');
+  const [father, setFather] = useState('');
+  const [mother, setMother] = useState('');
+  const [role, setRole] = useState('all');
+  const [fuzzy, setFuzzy] = useState(true);
+  const [namesOnly, setNamesOnly] = useState(true);
   const [showFilters, setShowFilters] = useState(false);
 
   const [result, setResult] = useState(null);
@@ -53,21 +59,28 @@ const ArchiveQuery = ({ getIdToken }) => {
     });
 
   const activeFilterCount =
+    (archive !== 'all' ? 1 : 0) +
     (place.trim() ? 1 : 0) +
     (kind !== 'all' ? 1 : 0) +
     (yearMin.trim() ? 1 : 0) +
-    (yearMax.trim() ? 1 : 0);
+    (yearMax.trim() ? 1 : 0) +
+    (father.trim() ? 1 : 0) +
+    (mother.trim() ? 1 : 0) +
+    (role !== 'all' ? 1 : 0) +
+    (!fuzzy ? 1 : 0) +
+    (!namesOnly ? 1 : 0);
 
   const clearAllFilters = () => {
+    setArchive('all');
     setPlace('');
     setKind('all');
     setYearMin('');
     setYearMax('');
-  };
-
-  const applyYearPreset = (min, max) => {
-    setYearMin(String(min));
-    setYearMax(String(max));
+    setFather('');
+    setMother('');
+    setRole('all');
+    setFuzzy(true);
+    setNamesOnly(true);
   };
 
   const run = async (e) => {
@@ -85,10 +98,16 @@ const ArchiveQuery = ({ getIdToken }) => {
       }
 
       let url = `${ADMIN_API_BASE_URL}/api/v1/admin/query?q=${encodeURIComponent(q)}&limit=25`;
+      if (archive !== 'all') url += `&archive=${encodeURIComponent(archive)}`;
       if (place.trim()) url += `&place=${encodeURIComponent(place.trim())}`;
       if (kind !== 'all') url += `&kind=${encodeURIComponent(kind)}`;
       if (yearMin.trim() && !isNaN(parseInt(yearMin))) url += `&year_min=${parseInt(yearMin)}`;
       if (yearMax.trim() && !isNaN(parseInt(yearMax))) url += `&year_max=${parseInt(yearMax)}`;
+      if (father.trim()) url += `&father=${encodeURIComponent(father.trim())}`;
+      if (mother.trim()) url += `&mother=${encodeURIComponent(mother.trim())}`;
+      if (role !== 'all') url += `&role=${encodeURIComponent(role)}`;
+      if (!fuzzy) url += `&fuzzy=false`;
+      if (!namesOnly) url += `&names_only=false`;
 
       const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) {
@@ -147,7 +166,7 @@ const ArchiveQuery = ({ getIdToken }) => {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder='Search name or query with inline syntax (e.g. "Jan de Vries place:Leeuwarden year:1840..1860 type:birth")'
+            placeholder='Search name or query with inline syntax (e.g. "Jan de Vries place:Leeuwarden year:1840..1860 type:birth archive:arg")'
             className="input-field flex-1 text-[13px]"
             autoComplete="off"
             spellCheck={false}
@@ -165,7 +184,29 @@ const ArchiveQuery = ({ getIdToken }) => {
         {/* Expandable Filter Drawer */}
         {showFilters && (
           <div className="bg-surface/60 border border-border/80 rounded-lg p-4 space-y-4 animate-in fade-in duration-150">
-            <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              {/* Archive Code Selector */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Archive / Institution
+                </label>
+                <select
+                  value={archive}
+                  onChange={(e) => setArchive(e.target.value)}
+                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary font-medium focus:border-accent shadow-xs"
+                >
+                  <option value="all">All Archives</option>
+                  <option value="arg">Archief Eemland (ARG)</option>
+                  <option value="ade">Archief Delft (ADE)</option>
+                  <option value="frl">Tresoar Fryslân (FRL)</option>
+                  <option value="gra">Groninger Archieven (GRA)</option>
+                  <option value="bda">Stadsarchief Breda (BDA)</option>
+                  <option value="dor">Dordrechts Archief (DOR)</option>
+                  <option value="shv">Streekarchief Goeree-Overflakkee (SHV)</option>
+                  <option value="cod">CODA Apeldoorn (COD)</option>
+                </select>
+              </div>
+
               {/* Record / Event Type Filter */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
@@ -227,33 +268,78 @@ const ArchiveQuery = ({ getIdToken }) => {
               </div>
             </div>
 
-            {/* Quick Presets & Controls */}
-            <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40 flex-wrap">
-              <div className="flex items-center gap-1.5 flex-wrap text-[10px] text-secondary">
-                <span className="font-semibold text-secondary/70">Year Presets:</span>
-                <button
-                  type="button"
-                  onClick={() => applyYearPreset(1800, 1850)}
-                  className="px-2 py-0.5 rounded bg-card border border-border hover:border-accent text-primary cursor-pointer transition-colors"
-                >
-                  1800–1850
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyYearPreset(1850, 1900)}
-                  className="px-2 py-0.5 rounded bg-card border border-border hover:border-accent text-primary cursor-pointer transition-colors"
-                >
-                  1850–1900
-                </button>
-                <button
-                  type="button"
-                  onClick={() => applyYearPreset(1900, 1940)}
-                  className="px-2 py-0.5 rounded bg-card border border-border hover:border-accent text-primary cursor-pointer transition-colors"
-                >
-                  1900–1940
-                </button>
+            {/* Relational Family & Person Filters */}
+            <div className="grid gap-4 sm:grid-cols-3 pt-2 border-t border-border/40">
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Father's Name
+                </label>
+                <input
+                  type="text"
+                  value={father}
+                  onChange={(e) => setFather(e.target.value)}
+                  placeholder="e.g. Jacob"
+                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs"
+                />
               </div>
 
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Mother's Name
+                </label>
+                <input
+                  type="text"
+                  value={mother}
+                  onChange={(e) => setMother(e.target.value)}
+                  placeholder="e.g. Jacoba"
+                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Subject Role
+                </label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary font-medium focus:border-accent shadow-xs"
+                >
+                  <option value="all">Any Role</option>
+                  <option value="child">Child (Kind / Dopeling)</option>
+                  <option value="father">Father (Vader)</option>
+                  <option value="mother">Mother (Moeder)</option>
+                  <option value="groom">Groom (Bruidegom)</option>
+                  <option value="bride">Bride (Bruid)</option>
+                  <option value="deceased">Deceased (Overledene)</option>
+                  <option value="witness">Witness (Getuige)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Search Toggles & Presets */}
+            <div className="flex items-center justify-between gap-3 pt-2 border-t border-border/40 flex-wrap">
+              <div className="flex items-center gap-4 flex-wrap text-xs text-primary">
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={fuzzy}
+                    onChange={(e) => setFuzzy(e.target.checked)}
+                    className="rounded border-border text-accent focus:ring-accent"
+                  />
+                  <span>Phonetic variants (Clasina/Klasina)</span>
+                </label>
+
+                <label className="flex items-center gap-1.5 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={namesOnly}
+                    onChange={(e) => setNamesOnly(e.target.checked)}
+                    className="rounded border-border text-accent focus:ring-accent"
+                  />
+                  <span>Names only</span>
+                </label>
+              </div>
               {activeFilterCount > 0 && (
                 <button
                   type="button"
@@ -271,6 +357,12 @@ const ArchiveQuery = ({ getIdToken }) => {
         {activeFilterCount > 0 && !showFilters && (
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[10px] font-semibold text-secondary/70">Active Filters:</span>
+            {archive !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium uppercase font-mono">
+                Archive: {archive}
+                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setArchive('all')} />
+              </span>
+            )}
             {kind !== 'all' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
                 Type: {kind === 'bsg,dtb_d' ? 'Births' : kind === 'bsh,dtb_t' ? 'Marriages' : kind === 'bso,dtb_b' ? 'Deaths' : kind}
@@ -287,6 +379,36 @@ const ArchiveQuery = ({ getIdToken }) => {
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium font-mono">
                 Years: {yearMin || '...'} – {yearMax || '...'}
                 <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => { setYearMin(''); setYearMax(''); }} />
+              </span>
+            )}
+            {father.trim() && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
+                Father: {father.trim()}
+                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setFather('')} />
+              </span>
+            )}
+            {mother.trim() && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
+                Mother: {mother.trim()}
+                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setMother('')} />
+              </span>
+            )}
+            {role !== 'all' && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
+                Role: {role}
+                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setRole('all')} />
+              </span>
+            )}
+            {!fuzzy && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-500 text-[11px] font-medium">
+                Exact spelling only
+                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setFuzzy(true)} />
+              </span>
+            )}
+            {!namesOnly && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
+                All document fields
+                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setNamesOnly(true)} />
               </span>
             )}
             <button

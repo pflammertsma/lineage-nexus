@@ -179,6 +179,9 @@ def admin_query(
   event_type: Optional[str] = Query(None, description="Restrict to event type"),
   year_min: Optional[int] = Query(None, description="Minimum event year"),
   year_max: Optional[int] = Query(None, description="Maximum event year"),
+  father: Optional[str] = Query(None, description="Restrict father name"),
+  mother: Optional[str] = Query(None, description="Restrict mother name"),
+  role: Optional[str] = Query(None, description="Restrict to specific person role slug"),
   fuzzy: bool = Query(
     True,
     description="Also match names that sound the same but are spelled "
@@ -228,6 +231,21 @@ def admin_query(
 
   if target_year_max is not None:
     filters.append(f"event_year <= {target_year_max}")
+
+  if father:
+    f_clean = father.replace("'", "\\'")
+    f_p = phonetic(father)
+    if f_p:
+      filters.append(f"(s_father = '{f_p}' OR s_groom_father = '{f_p}' OR s_bride_father = '{f_p}' OR g_father = '{f_p}' OR g_groom_father = '{f_p}' OR g_bride_father = '{f_p}')")
+
+  if mother:
+    m_clean = mother.replace("'", "\\'")
+    m_p = phonetic(mother)
+    if m_p:
+      filters.append(f"(s_mother = '{m_p}' OR s_groom_mother = '{m_p}' OR s_bride_mother = '{m_p}' OR g_mother = '{m_p}' OR g_groom_mother = '{m_p}' OR g_bride_mother = '{m_p}')")
+
+  if role:
+    filters.append(f"roles = '{role}'")
 
   params: Dict[str, Any] = {"limit": limit}
   if filters:
