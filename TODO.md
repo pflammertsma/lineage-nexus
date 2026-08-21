@@ -819,6 +819,40 @@ of engine time, and decelerating.
   15.4M documents), the trim must stay trimmed, and neither module may reintroduce
   an inline settings dict.
 
+### A2h. Telemetry made measurable
+
+- [x] **Fixed: a batch's duration was not recorded.** `elapsed_seconds` is the
+  last poll, so a batch finishing between polls was logged far shorter than it
+  ran — median 1.2x understated, worst case **702x** (10s recorded for a ~26
+  minute batch). Reconstructing it needed the next batch's start, which only
+  holds while batches run back-to-back, leaving **48 of 71** batches usable.
+  There is now one `event: "complete"` row per batch carrying Meilisearch's own
+  `duration`.
+
+- [x] **Fixed: the strongest predictor was not recorded.** `documents` is the
+  *batch* size; nothing captured how large the index already was, which is what
+  governs duration (r = +0.81, against **r = −0.06** for batch size). Samples now
+  carry `index_documents`.
+
+- [x] **Fixed: no harvest context.** Samples now carry `archive` and `kind`, so
+  throughput can be separated by record type instead of assumed uniform — a
+  population register and a notarial deed produce very different documents.
+
+- [x] **Rows are self-describing.** `schema_version` is on every row (absent = v1),
+  and `docs/telemetry_methodology.md` records which captures we hold, what each
+  version can answer, how to analyse v1 correctly, and the findings so far.
+
+- [x] **Correction recorded.** The earlier "~232s fixed cost per batch" was an
+  artefact: index size barely moved during that measurement, so a cost
+  proportional to index size was indistinguishable from a constant.
+
+  *Tested: completion rows written once per batch, unfinished batches skipped,
+  v1/v2 rows distinguishable, throughput separable by kind.*
+
+- [ ] **Next capture on a different archive**, once the trim is deployed — same
+  archive before and after, to see whether the trim moves the throughput curve
+  rather than shaving a constant.
+
 ### A3. Deploy reliability
 
 - [x] **CRLF line endings were breaking deploys on the server.** An edit made on

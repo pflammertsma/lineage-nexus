@@ -16,6 +16,12 @@ from config import meili_client, INDEX_NAME, MEILI_HOST, MEILI_MASTER_KEY, START
 from auth import require_admin
 
 logger = logging.getLogger("indexing")
+
+# Telemetry row format. See docs/telemetry_methodology.md.
+#   1  samples only; no index size, no completion rows
+#   2  adds schema_version, event, archive, kind, index_documents,
+#      and a per-batch completion row carrying the engine duration
+TELEMETRY_SCHEMA_VERSION = 2
 from metrics import _get_disk_io_rates, _metrics, _metrics_30d
 from telemetry import batch_telemetry, save_batch_telemetry, _meili_get, _elapsed_since, synthesize_past_batch_samples
 from eta_engine import calculate_virtual_progress, compute_phase_weighted_eta
@@ -326,6 +332,12 @@ def admin_indexing():
   processing = _count_tasks("processing")
   failed = _count_tasks("failed")
 
+  # Read once and reuse: the samples below record which export is being
+  # harvested, so a later analysis can separate "this archive is slow" from
+  # "the index has grown". Population registers, notarial deeds and marriage
+  # registers produce very differently shaped documents.
+  harvest_ctx = _current_ingest() or {}
+
   current = None
   recent: List[Dict[str, Any]] = []
   try:
@@ -486,12 +498,26 @@ def admin_indexing():
     }
 
     telemetry_sample = {
+      # Bumped whenever the meaning or completeness of these rows changes, so a
+      # file can be analysed correctly without knowing when it was captured.
+      # See docs/telemetry_methodology.md for what each version contains.
+      "schema_version": TELEMETRY_SCHEMA_VERSION,
+      "event": "sample",
       "timestamp": int(time.time()),
       "iso_time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
       "batch_uid": b_uid,
+      "archive": harvest_ctx.get("archive"),
+      "kind": harvest_ctx.get("kind"),
       "step": current_step_name,
       "steps": steps,
       "documents": current.get("documents"),
+      # How big the index already was. Analysing 21.6 hours of these samples,
+      # batch size correlated with duration at r = -0.06 and index size at
+      # r = +0.81 — throughput fell from 4,775 docs/s under 1M documents to
+      # 64 docs/s at 7.2M. Index size is the predictor, and it was the one
+      # quantity the samples did not carry, so it had to be proxied by a
+      # cumulative sum that is confounded with time-into-run.
+      "index_documents": documents,
       "tasks": current.get("tasks"),
       "raw_progress_pct": raw_pct,
       "virtual_progress_pct": virtual_pct,
@@ -506,12 +532,49 @@ def admin_indexing():
     batch_telemetry.append(telemetry_sample)
     save_batch_telemetry()
 
+  # A completion row per finished batch, carrying the engine's authoritative
+  # duration.
+  #
+  # Samples alone cannot give a batch's duration: `elapsed_seconds` is whatever
+  # the last poll saw, and a batch that ends between polls is recorded as far
+  # shorter than it was — median 1.2x understated, worst case 702x (one batch
+  # logged 10s for a run of about 26 minutes). Reconstructing the truth needed
+  # the *next* batch's start time, which only works when batches run
+  # back-to-back, and left 23 of 71 batches with no determinable end at all.
+  #
+  # Meilisearch reports `duration` on a finished batch. Recording it once
+  # removes the guesswork.
+  try:
+    recorded = {t.get("batch_uid") for t in batch_telemetry if t.get("event") == "complete"}
+    newly_done = [b for b in recent if b.get("uid") not in recorded and b.get("duration")]
+    if newly_done:
+      for b in newly_done:
+        batch_telemetry.append({
+          "schema_version": TELEMETRY_SCHEMA_VERSION,
+          "event": "complete",
+          "timestamp": int(time.time()),
+          "iso_time": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+          "batch_uid": b.get("uid"),
+          "archive": b.get("archive") or harvest_ctx.get("archive"),
+          "kind": harvest_ctx.get("kind"),
+          "status": b.get("status"),
+          "tasks": b.get("tasks"),
+          "documents": b.get("documents"),
+          "index_documents": documents,
+          "duration": b.get("duration"),
+          "started_at": b.get("started_at"),
+          "finished_at": b.get("finished_at"),
+        })
+      save_batch_telemetry()
+  except Exception:
+    logger.exception("could not record batch completions")
+
   from routes.harvest import _current_harvest_archive, _harvest_queue_list, _harvest_queue_lock
   with _harvest_queue_lock:
     current_arch = _current_harvest_archive
     pending_archs = list(_harvest_queue_list)
 
-  ingest_status = _current_ingest() or {}
+  ingest_status = harvest_ctx
   is_active_ingest = ingest_status.get("is_active", False)
   is_actually_busy = bool((enqueued + processing) > 0 or current_arch or pending_archs or is_active_ingest)
 
