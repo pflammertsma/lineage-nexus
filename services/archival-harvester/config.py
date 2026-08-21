@@ -114,25 +114,31 @@ meili_client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY)
 
 
 def ensure_meilisearch_index_settings():
-  """Configures Meilisearch for sub-50ms query latency by setting proximityPrecision to 'byAttribute'."""
+  """
+  Applies the index settings defined in schema.py.
+
+  This function used to carry its own copy of the settings, and so did
+  `ingest.py`. Whichever ran last won, and the one that lost still logged
+  success — this very function reported "Configured proximityPrecision:
+  'byAttribute' successfully" on every start while the live value read `byWord`,
+  because the harvester had replaced the whole settings object behind it.
+  There is now one definition and two callers of it.
+
+  Note that changing `searchableAttributes` or `filterableAttributes` makes
+  Meilisearch reindex every document, so this is not free the first time new
+  values reach a populated index.
+  """
   try:
-    index = meili_client.index(INDEX_NAME)
     import schema
-    index.update_settings({
-      # Taken from schema.py so the gateway and the harvester cannot disagree
-      # about which fields exist. Four of the six attributes hardcoded here
-      # previously appeared in zero of 15.4M documents.
-      "searchableAttributes": schema.searchable_attributes(),
-      "filterableAttributes": schema.filterable_attributes(),
-      "sortableAttributes": ["event_year"],
-      "rankingRules": ["words", "typo", "proximity", "attribute", "sort", "exactness"],
-      "typoTolerance": {
-        "enabled": True,
-        "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9},
-      },
-      "pagination": {"maxTotalHits": 1000},
-    })
-    logger.info("Configured Meilisearch proximityPrecision: 'byAttribute' successfully.")
+    settings = schema.index_settings()
+    meili_client.index(INDEX_NAME).update_settings(settings)
+    logger.info(
+      "Applied index settings from schema.py: %d searchable, %d filterable, "
+      "proximityPrecision=%s",
+      len(settings["searchableAttributes"]),
+      len(settings["filterableAttributes"]),
+      settings["proximityPrecision"],
+    )
   except Exception as e:
     logger.warning(f"Could not auto-update Meilisearch index settings: {e}")
 

@@ -103,6 +103,37 @@ d_patr = transform(row(PR_NAME_GN="Sietse", PR_NAME_PATR="Douwes", PR_NAME_SURN=
 check("patronymic keyed with the given name",
       sorted(d_patr.get("g_child") or []), sorted(["sits", "doufes"]))
 
+# --- index settings: one definition, and it matches the documents ------------
+from schema import index_settings, searchable_attributes, filterable_attributes
+
+settings = index_settings()
+
+# Every searchable and filterable attribute must be a field the transform can
+# actually emit. Four of six searchable attributes once referred to fields that
+# appeared in zero of 15.4M documents, which made names unsearchable entirely.
+emitted = set(doc) | {"g_" + r for r in __import__("schema").ROLES}                    | {"s_" + r for r in __import__("schema").ROLES}                    | {"by_" + r for r in __import__("schema").DATED_ROLES}
+for attr in settings["searchableAttributes"]:
+    check("searchable %-14s is a real field" % attr, attr in emitted, True)
+unknown = [a for a in settings["filterableAttributes"] if a not in emitted]
+check("no filterable attribute is a phantom field", unknown, [])
+
+# The trim measured at -26% must stay trimmed.
+check("duplicate name fields not searchable",
+      [a for a in settings["searchableAttributes"] if a.startswith("person_")], [])
+check("given_p/surnames_p not filterable",
+      [a for a in settings["filterableAttributes"] if a in ("given_p", "surnames_p")], [])
+check("proximityPrecision is byAttribute", settings["proximityPrecision"], "byAttribute")
+check("Dutch stop words present", len(settings["stopWords"]), 13)
+check("documents no longer carry the dropped fields",
+      [k for k in doc if k in ("person_names", "person_phonetics", "given_p", "surnames_p")], [])
+
+# config.py and ingest.py must not carry their own copies again.
+import re as _re
+for path in ("config.py", "ingest.py"):
+    body = open(path, encoding="utf-8").read()
+    inline = _re.search(r'update_settings\(\s*\{', body)
+    check("%s has no inline settings dict" % path, inline, None)
+
 if fails:
     print("\nFAILURES:")
     for f in fails: print("  -", f)

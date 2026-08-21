@@ -257,7 +257,6 @@ def parse_date_bounds(year_str, month_str, day_str):
 def rebuild_search_fields(doc):
     """Derives everything searchable or filterable from doc['persons']."""
     names, phon, surnames_p, given_p, roles = [], [], [], [], []
-    person_names, person_phonetics = [], []
     per_role_given, per_role_surname, per_role_birth = {}, {}, {}
 
     for p in doc["persons"]:
@@ -267,12 +266,6 @@ def rebuild_search_fields(doc):
         p_phon = phonetic_all(p["n"])
         phon.extend(p_phon)
 
-        p_name = p["n"].strip()
-        if p_name:
-            person_names.append(p_name)
-            p_phons = phonetic_all(p_name)
-            if p_phons:
-                person_phonetics.append(" ".join(p_phons))
 
         # The patronymic belongs with the given name: before 1811 most people
         # have no surname at all, and the patronymic is what identifies them.
@@ -296,12 +289,17 @@ def rebuild_search_fields(doc):
         if year:
             per_role_birth.setdefault(role, []).append(year)
 
-    doc["person_names"] = person_names
-    doc["person_phonetics"] = person_phonetics
+    # person_names / person_phonetics were added so a phrase could not span two
+    # people. Tested on exactly that case — the phrase "Boekesteijn Pietertje",
+    # which straddles two persons in one record — and they returned the same 4
+    # hits as `names`. They cost 17% of the index and delivered nothing.
+    #
+    # given_p / surnames_p were the union of g_* / s_*, a further 9%. Nothing
+    # queried them: role-agnostic *search* is served by names_p, and no caller
+    # filtered role-agnostically. Reinstating either means a reindex, so do it
+    # only when a query actually needs it.
     doc["names"] = " ".join(names)
     doc["names_p"] = sorted(set(phon))
-    doc["given_p"] = sorted(set(given_p))
-    doc["surnames_p"] = sorted(set(surnames_p))
     doc["roles"] = sorted(set(roles))
 
     for role in ROLES:
@@ -315,10 +313,18 @@ def rebuild_search_fields(doc):
             doc["by_" + role] = min(years)
 
 
+# Dutch tussenvoegsels. They are the highest-frequency tokens in the corpus
+# (van 1,446, der 468, de 417 per 5,914 sampled names) and carry no
+# distinguishing information. The phonetic keys already drop them; this keeps
+# them out of the display field's inverted index too.
+STOP_WORDS = ["aan", "de", "den", "der", "een", "het", "in", "op", "te", "ten",
+              "ter", "uit", "van"]
+
+
 def filterable_attributes():
     """Every field the API may filter on."""
-    fields = ["archive", "kind", "event_type", "event_year", "event_date", "date_min_num", "date_max_num", "event_place",
-              "roles", "given_p", "surnames_p"]
+    fields = ["archive", "kind", "event_type", "event_year", "event_date",
+              "date_min_num", "date_max_num", "event_place", "roles"]
     fields += ["g_" + r for r in ROLES]
     fields += ["s_" + r for r in ROLES]
     fields += ["by_" + r for r in DATED_ROLES]
@@ -326,5 +332,40 @@ def filterable_attributes():
 
 
 def searchable_attributes():
-    """Ordered: per-person name matches outrank multi-person cross-matches, which outrank place matches."""
-    return ["person_names", "person_phonetics", "names", "names_p", "event_place", "event_type", "institution"]
+    """Ordered: a name match must outrank a place match on the same term."""
+    return ["names", "names_p", "event_place", "event_type", "institution"]
+
+
+def index_settings():
+    """
+    The one definition of how this index is configured.
+
+    It lived in two places — `config.py` applied a set on every gateway start and
+    `ingest.py` applied a different set on every harvest — so the last writer won
+    and the loser announced success anyway. `config.py` logged "Configured
+    proximityPrecision: 'byAttribute' successfully" while the live value read
+    `byWord`, because the harvester had replaced the whole settings object.
+
+    The sizes quoted below were measured over the same 150,000 documents indexed
+    five times, changing one setting at a time.
+    """
+    return {
+        "searchableAttributes": searchable_attributes(),
+        "filterableAttributes": filterable_attributes(),
+        "sortableAttributes": ["event_year"],
+        "rankingRules": ["words", "typo", "proximity", "attribute", "sort",
+                         "exactness"],
+        # 9% of index size. Word-level proximity buys nothing here: names are
+        # already partitioned into per-role fields, so proximity *within* an
+        # attribute is the only kind that could matter, and this records it at
+        # attribute granularity rather than per word.
+        "proximityPrecision": "byAttribute",
+        "stopWords": STOP_WORDS,
+        # The phonetic keys fold the systematic spelling variation, so typo
+        # tolerance only has to cover genuine slips.
+        "typoTolerance": {
+            "enabled": True,
+            "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9},
+        },
+        "pagination": {"maxTotalHits": 1000},
+    }

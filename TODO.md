@@ -746,6 +746,79 @@ Notarial deeds become queryable this way: "Verkoper named X to Koper named Y".
 populated, and `batch_history.json` / `task_archives.json` present in
 `/opt/ingest-logs`.
 
+### A2h. Meilisearch review — measured, not assumed
+
+Same 150,000 live documents indexed five times with different settings, so each
+line is the cost of one decision:
+
+| variant | per doc | vs deployed |
+|---|---|---|
+| **A** as deployed | 4.76 kB | — |
+| **B** + `proximityPrecision: byAttribute` | 4.32 kB | −9% |
+| **C** B + drop duplicate name fields | 3.96 kB | −17% |
+| **D** C + drop `given_p` / `surnames_p` | 3.50 kB | **−26%** |
+| **E** D + Dutch stop words | 3.51 kB | −26% (no further gain) |
+
+- [ ] **The new schema cost 3.1x in index size**, 1.50 -> 4.72 kB/document. That
+  is the headline number: the full 51.6M corpus projects to **238 GB against a
+  200 GB volume**. Trimmed to 3.50 kB it is ~172 GB — it fits, but only just.
+- [ ] **Two settings were silently reverted by my own `configure_index`.** It
+  replaces the whole settings object, so `proximityPrecision` fell back from
+  `byAttribute` to `byWord` (9% of index size) and the 13 Dutch stop words were
+  dropped. `config.py` still logs *"Configured Meilisearch proximityPrecision:
+  'byAttribute' successfully"* on every start while the live value reads
+  `byWord`. Two modules writing the same settings, last writer wins.
+- [ ] **`person_names` / `person_phonetics` do not do what they were added for.**
+  They exist so a phrase cannot span two people. Tested on exactly that case —
+  the phrase `"Boekesteijn Pietertje"`, which straddles two persons in one
+  record — and both `names` and `person_names` returned **4 hits**. No benefit,
+  17% of the index.
+- [ ] **`given_p` / `surnames_p` are the union of `g_*` / `s_*`** and cost a
+  further 9%. Only worth keeping if role-agnostic filtering is a real query;
+  role-agnostic *search* is already served by `names_p`.
+- [ ] Stop words now buy nothing, because the phonetic keys already strip
+  tussenvoegsels. Restore them for correctness of the display field, not size.
+
+**Latency is fine, and my first reading was wrong.** A cold query at 4.5M
+documents takes 1770 ms; the next four take 9, 9, 9 and 17 ms. That is page
+cache, not scale — I nearly reported a latency problem that does not exist for
+warm queries. What *does* scale badly is the cold fraction: 19.7 GB of index
+against ~9 GB of usable page cache today, and ~172 GB projected. The
+index-to-RAM ratio is the binding constraint, exactly as it was for the 9-hour
+batch and the 88 MB hang.
+
+**Indexing throughput is 348 docs/s and falling** — 710 down to 265 across the
+last eleven batches as the index grew. At that rate 51.6M documents is 40+ hours
+of engine time, and decelerating.
+
+- [x] **Trim written, deliberately not deployed.** `schema.py` now drops
+  `person_names`, `person_phonetics`, `given_p` and `surnames_p`, sets
+  `proximityPrecision: byAttribute` and restores the 13 Dutch stop words. The
+  document itself also shrinks, since those fields are no longer emitted at all:
+  **2,171 -> 1,797 bytes, 33 -> 29 fields (-17%)**, on top of the measured −26%
+  index saving.
+
+  | corpus | before | after |
+  |---|---|---|
+  | frl+gra+ade | 62 GB | **46 GB** |
+  | full 51.6M | 234 GB | **172 GB** |
+
+  **Deploy this after the current harvest finishes** — changing
+  `searchableAttributes` or `filterableAttributes` reindexes every document, and
+  the live index is still on `byWord` with 7 searchable fields until then.
+
+- [x] **One owner for index settings.** `schema.index_settings()` is now the
+  single definition; `config.py` and `ingest.py` both apply it and neither holds
+  a dict of its own. The false success line is gone — `config.py` used to log
+  *"Configured proximityPrecision: 'byAttribute' successfully"* while the live
+  value read `byWord`, because the harvester had overwritten the whole object
+  behind it. It now logs what it actually applied.
+
+  Guarded by tests: every searchable and filterable attribute must be a field the
+  transform can emit (four of six once referred to fields present in zero of
+  15.4M documents), the trim must stay trimmed, and neither module may reintroduce
+  an inline settings dict.
+
 ### A3. Deploy reliability
 
 - [x] **CRLF line endings were breaking deploys on the server.** An edit made on

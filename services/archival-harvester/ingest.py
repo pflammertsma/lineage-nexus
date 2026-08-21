@@ -315,19 +315,9 @@ def configure_index(client) -> Any:
             logger.warning("could not create index %s: %s", INDEX_NAME, exc)
 
     index = client.index(INDEX_NAME)
-    index.update_settings({
-        "searchableAttributes": schema.searchable_attributes(),
-        "filterableAttributes": schema.filterable_attributes(),
-        "sortableAttributes": ["event_year"],
-        "rankingRules": ["words", "typo", "proximity", "attribute", "sort", "exactness"],
-        # Phonetic keys already fold the systematic spelling variation, so typo
-        # tolerance only has to cover genuine slips.
-        "typoTolerance": {
-            "enabled": True,
-            "minWordSizeForTypos": {"oneTypo": 5, "twoTypos": 9},
-        },
-        "pagination": {"maxTotalHits": 1000},
-    })
+    # One definition, in schema.py. See the note there about why this used to
+    # live in two files.
+    index.update_settings(schema.index_settings())
     return index
 
 
