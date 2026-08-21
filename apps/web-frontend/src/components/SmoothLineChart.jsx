@@ -165,9 +165,12 @@ const SmoothLineChart = ({
         const topLine = smoothPath(ptsTop, PAD_TOP, height - PAD_BOTTOM);
         const botLine = sIdx > 0 ? smoothPath([...ptsBot].reverse(), PAD_TOP, height - PAD_BOTTOM) : null;
 
+        const startX = ptsTop[0]?.x ?? 0;
+        const endX = ptsTop[ptsTop.length - 1]?.x ?? W;
+
         const area = botLine
           ? `${topLine} ${botLine.replace(/^M/, 'L')} Z`
-          : `${topLine} L${W},${height - PAD_BOTTOM} L0,${height - PAD_BOTTOM} Z`;
+          : `${topLine} L${endX},${height - PAD_BOTTOM} L${startX},${height - PAD_BOTTOM} Z`;
 
         return {
           ...s,
@@ -215,11 +218,15 @@ const SmoothLineChart = ({
         .filter((p) => p.v !== null);
       const sampled = downsample(raw, MAX_POINTS);
       const pts = sampled.map((p) => ({ x: x(p.t), y: y(p.v) }));
-      const line = smoothPath(pts, PAD_TOP, height - PAD_BOTTOM);
-      const area = line ? `${line}L${W},${height - PAD_BOTTOM}L0,${height - PAD_BOTTOM}Z` : '';
+      const topLine = smoothPath(pts, PAD_TOP, height - PAD_BOTTOM);
+      const startX = pts[0]?.x ?? 0;
+      const endX = pts[pts.length - 1]?.x ?? W;
+      const area = topLine
+        ? `${topLine} L${endX},${height - PAD_BOTTOM} L${startX},${height - PAD_BOTTOM} Z`
+        : '';
       return {
         ...s,
-        line,
+        line: topLine,
         area,
         last: raw[raw.length - 1]?.v ?? 0,
       };
