@@ -197,6 +197,9 @@ def transform(row, archive, kind, prefixes, institution_default=""):
 
     year_raw = _clean(row.get("EVENT_YEAR")) or _clean(row.get("SOURCE_DATE_YEAR"))
     event_year = int(year_raw) if year_raw.isdigit() else 0
+    month_raw = _clean(row.get("EVENT_MONTH"))
+    day_raw = _clean(row.get("EVENT_DAY"))
+    date_min_num, date_max_num = parse_date_bounds(year_raw, month_raw, day_raw)
 
     doc = {
         "id": ("%s_%s" % (archive, guid)).replace("-", "_"),
@@ -208,13 +211,47 @@ def transform(row, archive, kind, prefixes, institution_default=""):
         "last_changed": _clean(row.get("SOURCE_LASTCHANGEDATE")),
         "event_type": _clean(row.get("EVENT_TYPE")) or _clean(row.get("SOURCE_TYPE")),
         "event_year": event_year,
-        "event_date": "-".join(p for p in (
-            year_raw, _clean(row.get("EVENT_MONTH")), _clean(row.get("EVENT_DAY"))) if p),
+        "event_date": "-".join(p for p in (year_raw, month_raw, day_raw) if p),
+        "date_min_num": date_min_num,
+        "date_max_num": date_max_num,
         "event_place": _clean(row.get("EVENT_PLACE")) or _clean(row.get("SOURCE_PLACE")),
         "persons": persons,
     }
     rebuild_search_fields(doc)
     return doc
+
+
+MONTH_DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+
+def is_leap_year(year: int) -> bool:
+    return (year % 4 == 0 and year % 100 != 0) or (year % 400 == 0)
+
+
+def parse_date_bounds(year_str, month_str, day_str):
+    """Derives integer YYYYMMDD min/max bounds for a record date interval."""
+    if not year_str or not year_str.isdigit():
+        return None, None
+    y = int(year_str)
+    if y <= 0:
+        return None, None
+
+    m = int(month_str) if month_str and month_str.isdigit() else 0
+    d = int(day_str) if day_str and day_str.isdigit() else 0
+
+    if 1 <= m <= 12:
+        if 1 <= d <= 31:
+            num = y * 10000 + m * 100 + d
+            return num, num
+        else:
+            min_num = y * 10000 + m * 100 + 1
+            max_day = 29 if (m == 2 and is_leap_year(y)) else MONTH_DAYS[m]
+            max_num = y * 10000 + m * 100 + max_day
+            return min_num, max_num
+    else:
+        min_num = y * 10000 + 101
+        max_num = y * 10000 + 1231
+        return min_num, max_num
 
 
 def rebuild_search_fields(doc):
@@ -229,30 +266,30 @@ def rebuild_search_fields(doc):
         names.append(p["n"])
         p_phon = phonetic_all(p["n"])
         phon.extend(p_phon)
-        person_names.append(p["n"])
-        person_phonetics.append(" ".join(p_phon))
 
-        gk = phonetic_all(p["g"]) + phonetic_all(p["p"])
-        sk = phonetic_all(p["s"])
-        given_p.extend(gk)
-        surnames_p.extend(sk)
-        per_role_given.setdefault(role, []).extend(gk)
-        per_role_surname.setdefault(role, []).extend(sk)
+        p_name = p["n"].strip()
+        if p_name:
+            person_names.append(p_name)
+            p_phons = phonetic_all(p_name)
+            if p_phons:
+                person_phonetics.append(" ".join(p_phons))
 
-        # Birth year: the recorded one if present, else event year minus age.
-        year = p.get("bir_year")
-        if year is None and p.get("age") is not None and doc["event_year"]:
-            year = doc["event_year"] - p["age"]
-        if year:
-            per_role_birth.setdefault(role, []).append(year)
+        if p["g"]:
+            given_p.extend(phonetic_all(p["g"]))
+            per_role_given.setdefault(role, []).extend(phonetic_all(p["g"]))
+        if p["s"]:
+            surnames_p.extend(phonetic_all(p["s"]))
+            per_role_surname.setdefault(role, []).extend(phonetic_all(p["s"]))
+        if p.get("bir_year"):
+            per_role_birth.setdefault(role, []).append(p["bir_year"])
 
     doc["person_names"] = person_names
     doc["person_phonetics"] = person_phonetics
     doc["names"] = " ".join(names)
-    doc["names_p"] = " ".join(dict.fromkeys(phon))
-    doc["roles"] = sorted(set(roles))
+    doc["names_p"] = sorted(set(phon))
     doc["given_p"] = sorted(set(given_p))
     doc["surnames_p"] = sorted(set(surnames_p))
+    doc["roles"] = sorted(set(roles))
 
     for role in ROLES:
         if per_role_given.get(role):
@@ -267,7 +304,7 @@ def rebuild_search_fields(doc):
 
 def filterable_attributes():
     """Every field the API may filter on."""
-    fields = ["archive", "kind", "event_type", "event_year", "event_date", "event_place",
+    fields = ["archive", "kind", "event_type", "event_year", "event_date", "date_min_num", "date_max_num", "event_place",
               "roles", "given_p", "surnames_p"]
     fields += ["g_" + r for r in ROLES]
     fields += ["s_" + r for r in ROLES]

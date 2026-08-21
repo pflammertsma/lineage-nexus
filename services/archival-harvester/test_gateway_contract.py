@@ -107,5 +107,27 @@ def run_contract_tests():
   print("✓ All 11 core API route contracts verified successfully!")
 
 
+def test_date_interval_math():
+  from schema import parse_date_bounds
+  from routes.search import _parse_date_string_to_num_bounds
+
+  # 1. Schema parse_date_bounds tests
+  assert parse_date_bounds("1873", "7", "25") == (18730725, 18730725)
+  assert parse_date_bounds("1873", "7", None) == (18730701, 18730731)
+  assert parse_date_bounds("1873", None, None) == (18730101, 18731231)
+  assert parse_date_bounds("1872", "2", None) == (18720201, 18720229)
+
+  # 2. Date query string boundary tests
+  min_b, max_b = _parse_date_string_to_num_bounds("1873-7")
+  assert min_b == 18730701 and max_b == 18730731
+  cutoff_lt = min_b - 1
+  assert cutoff_lt == 18730700
+  assert not (18730725 <= cutoff_lt)  # 1873-7-25 is EXCLUDED from date:<1873-7
+
+  cutoff_le = max_b
+  assert 18730725 <= cutoff_le  # 1873-7-25 is INCLUDED in date:<=1873-7
+
+
 if __name__ == "__main__":
+  test_date_interval_math()
   run_contract_tests()

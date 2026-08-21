@@ -53,67 +53,26 @@ def _parse_inline_query_filters(q_str: str) -> Tuple[str, Dict[str, Any]]:
       elif key in ("date", "year"):
         if val.startswith(">="):
           v = val[2:]
-          if "-" in v:
-            extracted["date_min"] = v
-            year_part = v.split("-")[0]
-            if year_part.isdigit():
-              extracted["year_min"] = int(year_part)
-          elif v.isdigit():
-            extracted["year_min"] = int(v)
+          extracted["date_ge"] = v
         elif val.startswith(">"):
           v = val[1:]
-          if "-" in v:
-            extracted["date_min"] = v
-            year_part = v.split("-")[0]
-            if year_part.isdigit():
-              extracted["year_min"] = int(year_part) + 1
-          elif v.isdigit():
-            extracted["year_min"] = int(v) + 1
+          extracted["date_gt"] = v
         elif val.startswith("<="):
           v = val[2:]
-          if "-" in v:
-            extracted["date_max"] = v
-            year_part = v.split("-")[0]
-            if year_part.isdigit():
-              extracted["year_max"] = int(year_part)
-          elif v.isdigit():
-            extracted["year_max"] = int(v)
+          extracted["date_le"] = v
         elif val.startswith("<"):
           v = val[1:]
-          if "-" in v:
-            extracted["date_max"] = v
-            year_part = v.split("-")[0]
-            if year_part.isdigit():
-              extracted["year_max"] = int(year_part) - 1
-          elif v.isdigit():
-            extracted["year_max"] = int(v) - 1
+          extracted["date_lt"] = v
         elif ".." in val:
           parts = val.split("..")
-          start_v = parts[0]
-          end_v = parts[1] if len(parts) > 1 else ""
-          if start_v:
-            if "-" in start_v:
-              extracted["date_min"] = start_v
-              if start_v.split("-")[0].isdigit():
-                extracted["year_min"] = int(start_v.split("-")[0])
-            elif start_v.isdigit():
-              extracted["year_min"] = int(start_v)
-          if end_v:
-            if "-" in end_v:
-              extracted["date_max"] = end_v
-              if end_v.split("-")[0].isdigit():
-                extracted["year_max"] = int(end_v.split("-")[0])
-            elif end_v.isdigit():
-              extracted["year_max"] = int(end_v)
+          if parts[0]:
+            extracted["date_ge"] = parts[0]
+          if len(parts) > 1 and parts[1]:
+            extracted["date_le"] = parts[1]
         elif "-" in val:
           extracted["date_exact"] = val
-          year_part = val.split("-")[0]
-          if year_part.isdigit():
-            extracted["year_min"] = int(year_part)
-            extracted["year_max"] = int(year_part)
         elif val.isdigit():
-          extracted["year_min"] = int(val)
-          extracted["year_max"] = int(val)
+          extracted["date_exact"] = val
       elif key in ("father", "mother", "child", "spouse", "witness"):
         name_val = val.replace("_", " ")
         if "relatives" not in extracted:
@@ -251,6 +210,40 @@ def _search_with_variants(index, query, params, fuzzy):
   }
 
 
+MONTH_DAYS = [0, 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+
+
+def _is_leap(y: int) -> bool:
+  return (y % 4 == 0 and y % 100 != 0) or (y % 400 == 0)
+
+
+def _parse_date_string_to_num_bounds(s: str):
+  """Converts a date string (YYYY, YYYY-M, YYYY-MM-DD) to (min_num, max_num) YYYYMMDD integers."""
+  if not s:
+    return None, None
+  parts = [p.strip() for p in s.split("-") if p.strip().isdigit()]
+  if not parts:
+    return None, None
+  y = int(parts[0])
+  if y <= 0:
+    return None, None
+  if len(parts) == 1:
+    return (y * 10000 + 101, y * 10000 + 1231)
+  elif len(parts) == 2:
+    m = int(parts[1])
+    if 1 <= m <= 12:
+      max_day = 29 if (m == 2 and _is_leap(y)) else MONTH_DAYS[m]
+      return (y * 10000 + m * 100 + 1, y * 10000 + m * 100 + max_day)
+    return (y * 10000 + 101, y * 10000 + 1231)
+  else:
+    m = int(parts[1])
+    d = int(parts[2])
+    if 1 <= m <= 12 and 1 <= d <= 31:
+      num = y * 10000 + m * 100 + d
+      return num, num
+    return (y * 10000 + 101, y * 10000 + 1231)
+
+
 def _clean_meili_error(exc: Exception) -> str:
   msg = str(exc)
   if "invalid_search_filter" in msg or "invalid float literal" in msg:
@@ -329,35 +322,50 @@ def admin_query(
   elif target_event_type:
     filters.append(f"event_type = '{target_event_type}'")
 
+  target_date_ge = inline_filters.get("date_ge")
+  target_date_gt = inline_filters.get("date_gt")
+  target_date_le = inline_filters.get("date_le")
+  target_date_lt = inline_filters.get("date_lt")
+  target_date_exact = inline_filters.get("date_exact")
+
   if target_place:
     escaped_place = target_place.replace("'", "\\'")
     filters.append(f"event_place = '{escaped_place}'")
 
-  if target_date_exact:
-    parts = target_date_exact.split("-")
-    if len(parts) == 3 and parts[0].isdigit() and parts[1].isdigit() and parts[2].isdigit():
-      y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
-      fmt1 = f"{y}-{m}-{d}"
-      fmt2 = f"{y}-{m:02d}-{d:02d}"
-      if fmt1 == fmt2:
-        filters.append(f"event_date = '{fmt1}'")
-      else:
-        filters.append(f"(event_date = '{fmt1}' OR event_date = '{fmt2}')")
-    elif len(parts) == 2 and parts[0].isdigit() and parts[1].isdigit():
-      y, m = int(parts[0]), int(parts[1])
-      fmt1 = f"{y}-{m}"
-      fmt2 = f"{y}-{m:02d}"
-      if fmt1 == fmt2:
-        filters.append(f"(event_date = '{fmt1}' OR event_year = {y})")
-      else:
-        filters.append(f"(event_date = '{fmt1}' OR event_date = '{fmt2}' OR event_year = {y})")
-    else:
-      filters.append(f"event_date = '{target_date_exact}'")
+  if target_date_lt:
+    min_b, max_b = _parse_date_string_to_num_bounds(target_date_lt)
+    if min_b:
+      y = int(str(min_b)[:4])
+      filters.append(f"(date_min_num <= {min_b - 1} OR (date_min_num IS NULL AND event_year <= {y - 1}))")
 
-  if target_year_min is not None:
+  if target_date_le:
+    min_b, max_b = _parse_date_string_to_num_bounds(target_date_le)
+    if max_b:
+      y = int(str(max_b)[:4])
+      filters.append(f"(date_min_num <= {max_b} OR (date_min_num IS NULL AND event_year <= {y}))")
+
+  if target_date_gt:
+    min_b, max_b = _parse_date_string_to_num_bounds(target_date_gt)
+    if max_b:
+      y = int(str(max_b)[:4])
+      filters.append(f"(date_max_num >= {max_b + 1} OR (date_max_num IS NULL AND event_year >= {y + 1}))")
+
+  if target_date_ge:
+    min_b, max_b = _parse_date_string_to_num_bounds(target_date_ge)
+    if min_b:
+      y = int(str(min_b)[:4])
+      filters.append(f"(date_max_num >= {min_b} OR (date_max_num IS NULL AND event_year >= {y}))")
+
+  if target_date_exact:
+    min_b, max_b = _parse_date_string_to_num_bounds(target_date_exact)
+    if min_b and max_b:
+      y = int(str(min_b)[:4])
+      filters.append(f"((date_min_num <= {max_b} AND date_max_num >= {min_b}) OR (date_min_num IS NULL AND event_year = {y}))")
+
+  if target_year_min is not None and not target_date_ge and not target_date_gt and not target_date_exact:
     filters.append(f"event_year >= {target_year_min}")
 
-  if target_year_max is not None:
+  if target_year_max is not None and not target_date_le and not target_date_lt and not target_date_exact:
     filters.append(f"event_year <= {target_year_max}")
 
   if target_father:
