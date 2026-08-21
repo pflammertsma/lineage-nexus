@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Layers, Loader2, AlertTriangle, CheckCircle2, XCircle, Trash2, History } from 'lucide-react';
 import { getArchiveName, ADMIN_API_BASE_URL } from '../config';
+import { formatDuration, formatAgo } from '../utils/formatters';
 import IndexingHistory from './IndexingHistory';
 
 /**
@@ -18,31 +19,6 @@ import IndexingHistory from './IndexingHistory';
  */
 const STALL_WARN_SECONDS = 300;
 const STALL_ALERT_SECONDS = 900;
-
-function formatDuration(seconds) {
-  if (!Number.isFinite(seconds)) return '—';
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const m = Math.floor(seconds / 60);
-  if (m < 60) return `${m}m ${Math.round(seconds % 60)}s`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ${m % 60}m`;
-  return `${Math.floor(h / 24)}d ${h % 24}h`;
-}
-
-/** Formats timestamp into relative 'X h ago' or 'X m ago' */
-function formatAgo(timestamp) {
-  if (!timestamp) return '—';
-  const when = new Date(timestamp);
-  const diffSec = Math.floor((Date.now() - when.getTime()) / 1000);
-  if (Number.isNaN(diffSec) || diffSec < 0) return '—';
-  if (diffSec < 60) return 'Just now';
-  const m = Math.floor(diffSec / 60);
-  if (m < 60) return `${m}m ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  const d = Math.floor(h / 24);
-  return `${d}d ago`;
-}
 
 /**
  * How the harvest is actually going.

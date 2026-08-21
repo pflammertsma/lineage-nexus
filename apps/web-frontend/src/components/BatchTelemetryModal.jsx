@@ -1,14 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Download, RefreshCw, BarChart2, X, Activity, Clock, AlertTriangle } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
+import { formatDuration } from '../utils/formatters';
 import SmoothLineChart from './SmoothLineChart';
-
-const formatTimeSpan = (seconds) => {
-  if (seconds == null || seconds < 0) return '0s';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
-};
 
 const PROGRESS_SERIES = [
   {
@@ -30,13 +24,13 @@ const ETA_SERIES = [
     field: 'naive_eta_seconds',
     label: 'Naive Linear ETA',
     colour: '#EF4444',
-    formatter: (val) => formatTimeSpan(val),
+    formatter: (val) => formatDuration(val),
   },
   {
     field: 'eta_seconds',
     label: 'Smoothed EWMA ETA',
     colour: '#10B981',
-    formatter: (val) => formatTimeSpan(val),
+    formatter: (val) => formatDuration(val),
   },
 ];
 

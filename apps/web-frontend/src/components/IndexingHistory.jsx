@@ -1,38 +1,6 @@
 import React, { useEffect } from 'react';
 import { History, X, AlertTriangle, CheckCircle2, Clock, Activity, ArrowRight } from 'lucide-react';
-
-/** When a batch ran, in the reader's own timezone. */
-function stamp(value) {
-  if (!value) return '';
-  const when = new Date(value);
-  if (Number.isNaN(when.getTime())) return '';
-  return when.toLocaleString([], {
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-}
-
-/** Formats duration in seconds to human string. */
-function formatDuration(seconds) {
-  if (!Number.isFinite(seconds)) return '0s';
-  if (seconds < 60) return `${Math.round(seconds)}s`;
-  const m = Math.floor(seconds / 60);
-  if (m < 60) return `${m}m ${Math.round(seconds % 60)}s`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ${m % 60}m`;
-  return `${Math.floor(h / 24)}d ${h % 24}h`;
-}
-
-/** Meilisearch reports batch durations as ISO 8601, e.g. `PT189.380307315S`. */
-function parseIsoDuration(value) {
-  if (typeof value !== 'string') return null;
-  const match = value.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:([\d.]+)S)?$/);
-  if (!match) return null;
-  return (+match[1] || 0) * 3600 + (+match[2] || 0) * 60 + (+match[3] || 0);
-}
+import { stamp, formatDuration, parseIsoDuration } from '../utils/formatters';
 
 export const IndexingHistory = ({ isOpen, onClose, recentBatches = [], onOpenTelemetry }) => {
   // Prevent background page scrolling when modal is open
