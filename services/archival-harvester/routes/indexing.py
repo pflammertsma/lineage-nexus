@@ -18,6 +18,7 @@ from auth import require_admin
 logger = logging.getLogger("indexing")
 from metrics import _get_disk_io_rates, _metrics, _metrics_30d
 from telemetry import batch_telemetry, save_batch_telemetry, _meili_get, _elapsed_since, synthesize_past_batch_samples
+from eta_engine import calculate_virtual_progress, compute_phase_weighted_eta
 from eta_engine import EtaEngine
 
 router = APIRouter()
@@ -373,14 +374,21 @@ def admin_indexing():
             "status": "done" if is_done else ("active" if is_active else "pending"),
           })
 
+        v_pct = calculate_virtual_progress(progress)
+        elapsed_sec = _elapsed_since(started)
+        smoothed_eta, _ = compute_phase_weighted_eta(b_uid, {"steps": steps_raw}, elapsed_sec)
+
         current = {
           "uid": b_uid,
           "archive": arch_code,
           "tasks": batch_stats.get("totalNbTasks"),
           "documents": (batch.get("details") or {}).get("receivedDocuments"),
           "percentage": progress.get("percentage"),
+          "virtual_progress_pct": v_pct if v_pct is not None else progress.get("percentage"),
+          "progress_percent": v_pct if v_pct is not None else progress.get("percentage"),
           "started_at": started,
-          "elapsed_seconds": _elapsed_since(started),
+          "elapsed_seconds": elapsed_sec,
+          "eta_seconds": smoothed_eta,
           "steps": steps,
         }
       elif finished is not None and len(recent) < 12:

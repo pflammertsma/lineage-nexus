@@ -136,14 +136,14 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
   return (
     <div className="bg-card border border-border rounded-lg p-5">
       {cancelFeedback && (
-        <div className={`p-3 rounded-lg mb-4 text-xs flex items-center justify-between gap-2 border ${cancelFeedback.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-red-500/10 border-red-500/30 text-red-400'
+        <div className={`p-3 rounded-lg mt-4 text-xs flex items-center justify-between gap-2 border ${cancelFeedback.type === 'success' ? 'bg-green-500/10 border-green-500/30 text-green-400' : 'bg-red-500/10 border-red-500/30 text-red-400'
           }`}>
           <span>{cancelFeedback.text}</span>
           <button type="button" onClick={() => setCancelFeedback(null)} className="hover:opacity-80 cursor-pointer font-bold px-1">✕</button>
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+      <div className="flex items-center justify-between gap-3 mt-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Layers size={14} className="text-secondary" />
           <span className="text-[10px] font-bold uppercase tracking-widest text-secondary">
@@ -238,7 +238,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
       </div>
 
       {queue.failed > 0 && (
-        <div className="mb-4">
+        <div className="mt-4">
           <button
             type="button"
             onClick={fetchFailedTasks}
@@ -291,7 +291,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
 
       {/* Stage 1: Active / Last Harvester Streaming & Indexing Banner */}
       {job && job.archive && (
-        <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
+        <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mt-4">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-sm text-primary">
@@ -358,7 +358,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
 
       {/* Stage 2: Active Meilisearch Engine Indexing Progress */}
       {batch && (rawBatch || busy) && (
-        <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mb-4">
+        <div className="bg-muted/40 border border-border/60 rounded-lg p-4 mt-4">
           <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-sm text-primary">
@@ -433,7 +433,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
 
       {/* Stage 3: Queued Archives Pipeline Banner */}
       {indexing.harvest_queue?.pending?.length > 0 && (
-        <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 mb-4 text-xs animate-in fade-in duration-150">
+        <div className="bg-accent/5 border border-accent/20 rounded-lg p-3 mt-4 text-xs animate-in fade-in duration-150">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <span className="font-bold text-accent flex items-center gap-1.5">
               <History size={13} />
@@ -458,7 +458,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
 
       {stallLevel && (
         <div
-          className={`flex items-start gap-2.5 rounded-lg p-3 mb-4 border ${stallLevel === 'alert'
+          className={`flex items-start gap-2.5 rounded-lg p-3 mt-4 border ${stallLevel === 'alert'
             ? 'border-red-500/40 text-red-500'
             : 'border-amber-500/40 text-amber-500'
             }`}
