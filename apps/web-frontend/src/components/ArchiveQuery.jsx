@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Search, ExternalLink, Loader2, ChevronRight, SlidersHorizontal, MapPin, X, HelpCircle } from 'lucide-react';
+import { Search, ExternalLink, Loader2, ChevronRight, SlidersHorizontal, MapPin, X, HelpCircle, UserPlus, Plus } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
 
 /**
@@ -71,7 +71,7 @@ const parseInlineTokens = (qStr) => {
   return { cleanQ: cleanParts.join(' '), tokens };
 };
 
-const buildFullQueryString = (baseQ, { archive, place, kind, yearMin, yearMax, father, mother, child, spouse, role }) => {
+const buildFullQueryString = (baseQ, { archive, place, kind, yearMin, yearMax, relatives, role }) => {
   const parts = [];
   const clean = baseQ ? parseInlineTokens(baseQ).cleanQ.trim() : '';
   if (clean) parts.push(clean);
@@ -92,10 +92,14 @@ const buildFullQueryString = (baseQ, { archive, place, kind, yearMin, yearMax, f
       parts.push(`date:<=${yearMax.trim()}`);
     }
   }
-  if (father && father.trim()) parts.push(`father:${father.trim().replace(/\s+/g, '_')}`);
-  if (mother && mother.trim()) parts.push(`mother:${mother.trim().replace(/\s+/g, '_')}`);
-  if (child && child.trim()) parts.push(`child:${child.trim().replace(/\s+/g, '_')}`);
-  if (spouse && spouse.trim()) parts.push(`spouse:${spouse.trim().replace(/\s+/g, '_')}`);
+  if (relatives && relatives.length > 0) {
+    relatives.forEach((rel) => {
+      if (rel.name && rel.name.trim()) {
+        const rRole = rel.role || 'father';
+        parts.push(`${rRole}:${rel.name.trim().replace(/\s+/g, '_')}`);
+      }
+    });
+  }
   if (role && role !== 'all') parts.push(`role:${role}`);
 
   return parts.join(' ');
@@ -110,13 +114,32 @@ const ArchiveQuery = ({ getIdToken }) => {
   const [kind, setKind] = useState(() => searchParams.get('kind') || 'all');
   const [yearMin, setYearMin] = useState(() => searchParams.get('year_min') || '');
   const [yearMax, setYearMax] = useState(() => searchParams.get('year_max') || '');
-  const [father, setFather] = useState(() => searchParams.get('father') || '');
-  const [mother, setMother] = useState(() => searchParams.get('mother') || '');
-  const [child, setChild] = useState(() => searchParams.get('child') || '');
-  const [spouse, setSpouse] = useState(() => searchParams.get('spouse') || '');
   const [role, setRole] = useState(() => searchParams.get('role') || 'all');
   const [fuzzy, setFuzzy] = useState(() => searchParams.get('fuzzy') !== 'false');
   const [namesOnly, setNamesOnly] = useState(() => searchParams.get('names_only') !== 'false');
+
+  const [relatives, setRelatives] = useState(() => {
+    const list = [];
+    if (searchParams.get('father')) list.push({ id: 'f_init', role: 'father', name: searchParams.get('father') });
+    if (searchParams.get('mother')) list.push({ id: 'm_init', role: 'mother', name: searchParams.get('mother') });
+    if (searchParams.get('spouse')) list.push({ id: 's_init', role: 'spouse', name: searchParams.get('spouse') });
+    if (searchParams.get('child')) list.push({ id: 'c_init', role: 'child', name: searchParams.get('child') });
+    return list;
+  });
+
+  const addRelative = (roleType = 'father', nameVal = '') => {
+    setRelatives((prev) => [...prev, { id: `${roleType}_${Date.now()}_${Math.random()}`, role: roleType, name: nameVal }]);
+    setShowFilters(true);
+  };
+
+  const updateRelative = (id, field, value) => {
+    setRelatives((prev) => prev.map((r) => (r.id === id ? { ...r, [field]: value } : r)));
+  };
+
+  const removeRelative = (id) => {
+    setRelatives((prev) => prev.filter((r) => r.id !== id));
+  };
+
   const [showFilters, setShowFilters] = useState(() => {
     return Boolean(
       (searchParams.get('archive') && searchParams.get('archive') !== 'all') ||
@@ -150,10 +173,7 @@ const ArchiveQuery = ({ getIdToken }) => {
     (kind !== 'all' ? 1 : 0) +
     (yearMin.trim() ? 1 : 0) +
     (yearMax.trim() ? 1 : 0) +
-    (father.trim() ? 1 : 0) +
-    (mother.trim() ? 1 : 0) +
-    (child.trim() ? 1 : 0) +
-    (spouse.trim() ? 1 : 0) +
+    relatives.filter((r) => r.name && r.name.trim()).length +
     (role !== 'all' ? 1 : 0) +
     (!fuzzy ? 1 : 0) +
     (!namesOnly ? 1 : 0);
@@ -164,10 +184,7 @@ const ArchiveQuery = ({ getIdToken }) => {
     setKind('all');
     setYearMin('');
     setYearMax('');
-    setFather('');
-    setMother('');
-    setChild('');
-    setSpouse('');
+    setRelatives([]);
     setRole('all');
     setFuzzy(true);
     setNamesOnly(true);
@@ -194,11 +211,17 @@ const ArchiveQuery = ({ getIdToken }) => {
     const effKind = tokens.kind || kind;
     const effYearMin = tokens.yearMin || yearMin.trim();
     const effYearMax = tokens.yearMax || yearMax.trim();
-    const effFather = tokens.father || father.trim();
-    const effMother = tokens.mother || mother.trim();
-    const effChild = tokens.child || child.trim();
-    const effSpouse = tokens.spouse || spouse.trim();
     const effRole = tokens.role || role;
+
+    let effRelatives = relatives;
+    if (tokens.relatives && tokens.relatives.length > 0) {
+      effRelatives = tokens.relatives.map((r, idx) => ({
+        id: `inline_${idx}_${Date.now()}`,
+        role: r.role,
+        name: r.name,
+      }));
+      setRelatives(effRelatives);
+    }
 
     // Build unified full query string showing exact search syntax
     const fullQuery = buildFullQueryString(cleanQ, {
@@ -207,10 +230,7 @@ const ArchiveQuery = ({ getIdToken }) => {
       kind: effKind,
       yearMin: effYearMin,
       yearMax: effYearMax,
-      father: effFather,
-      mother: effMother,
-      child: effChild,
-      spouse: effSpouse,
+      relatives: effRelatives,
       role: effRole,
     });
 
@@ -327,7 +347,7 @@ const ArchiveQuery = ({ getIdToken }) => {
         {/* Expandable Filter Drawer */}
         {showFilters && (
           <div className="bg-surface/60 border border-border/80 rounded-lg p-4 space-y-4 animate-in fade-in duration-150">
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
               {/* Archive Code Selector */}
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
@@ -366,6 +386,26 @@ const ArchiveQuery = ({ getIdToken }) => {
                   <option value="bso,dtb_b">Deaths & Burials (Overlijden / Begraven)</option>
                   <option value="bev">Population Register (Bevolkingsregister)</option>
                   <option value="not">Notarial Deeds (Notarieel)</option>
+                </select>
+              </div>
+
+              {/* Subject Role in Record */}
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
+                  Subject Role in Record
+                </label>
+                <select
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary font-medium focus:border-accent shadow-xs"
+                >
+                  <option value="all">Any Role</option>
+                  <option value="child">Child (Kind / Dopeling)</option>
+                  <option value="father">Father (Vader)</option>
+                  <option value="mother">Mother (Moeder)</option>
+                  <option value="spouse">Spouse / Partner (Bruidegom / Bruid / Relatie)</option>
+                  <option value="deceased">Deceased (Overledene)</option>
+                  <option value="witness">Witness (Getuige)</option>
                 </select>
               </div>
 
@@ -411,78 +451,90 @@ const ArchiveQuery = ({ getIdToken }) => {
               </div>
             </div>
 
-            {/* Relational Family & Person Filters */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 pt-2 border-t border-border/40">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
-                  Father's Name
+            {/* Relational Family & Person Filters Dynamic Section */}
+            <div className="pt-3 border-t border-border/40 space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <label className="text-[11px] font-bold uppercase tracking-wider text-secondary flex items-center gap-1.5">
+                  <UserPlus size={13} className="text-accent" />
+                  Relational Family & Persons
                 </label>
-                <input
-                  type="text"
-                  value={father}
-                  onChange={(e) => setFather(e.target.value)}
-                  placeholder="e.g. Jacob"
-                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs"
-                />
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => addRelative('father')}
+                    className="px-2.5 py-1 rounded bg-card hover:bg-muted border border-border text-[11px] font-medium text-primary flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                  >
+                    <Plus size={11} className="text-accent" /> Father
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addRelative('mother')}
+                    className="px-2.5 py-1 rounded bg-card hover:bg-muted border border-border text-[11px] font-medium text-primary flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                  >
+                    <Plus size={11} className="text-accent" /> Mother
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addRelative('spouse')}
+                    className="px-2.5 py-1 rounded bg-card hover:bg-muted border border-border text-[11px] font-medium text-primary flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                  >
+                    <Plus size={11} className="text-accent" /> Spouse / Partner
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addRelative('child')}
+                    className="px-2.5 py-1 rounded bg-card hover:bg-muted border border-border text-[11px] font-medium text-primary flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                  >
+                    <Plus size={11} className="text-accent" /> Child
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => addRelative('witness')}
+                    className="px-2.5 py-1 rounded bg-card hover:bg-muted border border-border text-[11px] font-medium text-primary flex items-center gap-1 cursor-pointer transition-colors shadow-xs"
+                  >
+                    <Plus size={11} className="text-accent" /> Witness / Other
+                  </button>
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
-                  Mother's Name
-                </label>
-                <input
-                  type="text"
-                  value={mother}
-                  onChange={(e) => setMother(e.target.value)}
-                  placeholder="e.g. Jacoba"
-                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
-                  Spouse / Partner
-                </label>
-                <input
-                  type="text"
-                  value={spouse}
-                  onChange={(e) => setSpouse(e.target.value)}
-                  placeholder="e.g. van Zwieten"
-                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
-                  Child / Subject
-                </label>
-                <input
-                  type="text"
-                  value={child}
-                  onChange={(e) => setChild(e.target.value)}
-                  placeholder="e.g. Klasina"
-                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary focus:border-accent shadow-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider text-secondary mb-1.5">
-                  Subject Role
-                </label>
-                <select
-                  value={role}
-                  onChange={(e) => setRole(e.target.value)}
-                  className="w-full bg-card border border-border rounded-md px-2.5 py-1.5 text-xs text-primary font-medium focus:border-accent shadow-xs"
-                >
-                  <option value="all">Any Role</option>
-                  <option value="child">Child (Kind / Dopeling)</option>
-                  <option value="father">Father (Vader)</option>
-                  <option value="mother">Mother (Moeder)</option>
-                  <option value="spouse">Spouse / Partner (Bruidegom / Bruid / Relatie)</option>
-                  <option value="deceased">Deceased (Overledene)</option>
-                  <option value="witness">Witness (Getuige)</option>
-                </select>
-              </div>
+              {relatives.length === 0 ? (
+                <div className="text-xs text-secondary/70 italic py-1">
+                  No relational filters added yet. Click a button above to specify parents, spouses, or witnesses.
+                </div>
+              ) : (
+                <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                  {relatives.map((rel) => (
+                    <div key={rel.id} className="flex items-center gap-1.5 bg-card/80 border border-border/80 rounded-md p-1.5 shadow-xs">
+                      <select
+                        value={rel.role}
+                        onChange={(e) => updateRelative(rel.id, 'role', e.target.value)}
+                        className="bg-surface border border-border rounded px-2 py-1 text-xs text-primary font-medium focus:border-accent w-32 shrink-0"
+                      >
+                        <option value="father">Father</option>
+                        <option value="mother">Mother</option>
+                        <option value="spouse">Spouse / Partner</option>
+                        <option value="child">Child</option>
+                        <option value="witness">Witness</option>
+                      </select>
+                      <input
+                        type="text"
+                        value={rel.name}
+                        onChange={(e) => updateRelative(rel.id, 'name', e.target.value)}
+                        placeholder={`Name of ${rel.role}`}
+                        className="flex-1 bg-surface border border-border rounded px-2.5 py-1 text-xs text-primary focus:border-accent"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeRelative(rel.id)}
+                        className="p-1 rounded text-secondary hover:text-red-400 hover:bg-muted/80 transition-colors cursor-pointer shrink-0"
+                        title="Remove relationship filter"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Search Toggles & Presets */}

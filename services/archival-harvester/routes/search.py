@@ -15,13 +15,13 @@ from auth import require_admin
 router = APIRouter()
 
 _INLINE_FILTER_RE = re.compile(
-    r'\b(place|loc|location|date|year|type|kind|archive|father|mother|child|spouse|role):([^\s]+)',
+    r'\b(place|loc|location|date|year|type|kind|archive|father|mother|child|spouse|witness|role):([^\s]+)',
     re.IGNORECASE
 )
 
 
 def _parse_inline_query_filters(q_str: str) -> Tuple[str, Dict[str, Any]]:
-  """Extracts inline filters like place:Leeuwarden date:1848-10-02..1852-05-10 type:birth archive:arg father:Jacob mother:Jacoba from query string."""
+  """Extracts inline filters like place:Leeuwarden date:1848-10-02..1852-05-10 type:birth archive:arg father:Jacob mother:Jacoba witness:Leendert_Vis from query string."""
   if not q_str:
     return "", {}
   extracted: Dict[str, Any] = {}
@@ -96,14 +96,12 @@ def _parse_inline_query_filters(q_str: str) -> Tuple[str, Dict[str, Any]]:
         elif val.isdigit():
           extracted["year_min"] = int(val)
           extracted["year_max"] = int(val)
-      elif key == "father":
-        extracted["father"] = val.replace("_", " ")
-      elif key == "mother":
-        extracted["mother"] = val.replace("_", " ")
-      elif key == "child":
-        extracted["child"] = val.replace("_", " ")
-      elif key == "spouse":
-        extracted["spouse"] = val.replace("_", " ")
+      elif key in ("father", "mother", "child", "spouse", "witness"):
+        name_val = val.replace("_", " ")
+        if "relatives" not in extracted:
+          extracted["relatives"] = []
+        extracted["relatives"].append({"role": key, "name": name_val})
+        extracted[key] = name_val
       elif key == "role":
         extracted["role"] = val.lower()
     else:
