@@ -5,7 +5,7 @@ import {
   Database, AlertTriangle, CheckCircle2,
   Layers, Search, PieChart,
 } from 'lucide-react';
-import { ADMIN_API_BASE_URL, setArchiveNames, ADMIN_CHART_RANGE_STORAGE } from '../config';
+import { ADMIN_API_BASE_URL, setArchiveNames, setKindLabels, ADMIN_CHART_RANGE_STORAGE } from '../config';
 import MetricChart from './MetricChart';
 import CorpusGrowthChart from './CorpusGrowthChart';
 import ArchiveQuery from './ArchiveQuery';
@@ -223,6 +223,7 @@ const AdminDashboard = ({ getIdToken, tab: tabProp }) => {
           if (body.status === 'success') {
             setIndexing(body);
             if (body.archive_names) setArchiveNames(body.archive_names);
+            if (body.kind_labels) setKindLabels(body.kind_labels);
 
             const isIndexingActive = Boolean(
               body.is_indexing ||

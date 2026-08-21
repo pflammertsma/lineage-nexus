@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Query, Depends
 from fastapi.responses import Response
 
-from config import meili_client, INDEX_NAME, MEILI_HOST, MEILI_MASTER_KEY, START_TIME, ARCHIVE_NAMES, INGEST_LOG_DIR
+from config import meili_client, INDEX_NAME, MEILI_HOST, MEILI_MASTER_KEY, START_TIME, ARCHIVE_NAMES, INGEST_LOG_DIR, REGISTER_KIND_LABELS
 from auth import require_admin
 from metrics import _get_disk_io_rates, _metrics, _metrics_30d
 from telemetry import batch_telemetry, save_batch_telemetry, _meili_get, _elapsed_since, synthesize_past_batch_samples
@@ -488,6 +488,7 @@ def admin_indexing():
     "documents": documents,
     "is_indexing": is_actually_busy,
     "archive_names": ARCHIVE_NAMES,
+    "kind_labels": REGISTER_KIND_LABELS,
     "queue": {
       "enqueued": enqueued,
       "processing": processing,

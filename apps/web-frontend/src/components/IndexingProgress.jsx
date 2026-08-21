@@ -308,7 +308,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
             {job.is_active !== false && (
               <span className="text-xs font-medium text-accent flex items-center gap-1.5">
                 <Loader2 size={12} className="animate-spin shrink-0 text-accent" />
-                <span className={job.rows_per_second > 0 || job.speed_mbs > 0 ? 'font-mono' : ''}>
+                <span>
                   {job.rows_per_second > 0
                     ? `${Math.round(job.rows_per_second).toLocaleString()} docs/s`
                     : (job.speed_mbs > 0 ? `${job.speed_mbs.toFixed(1)} MB/s` : 'Buffering stream...')}

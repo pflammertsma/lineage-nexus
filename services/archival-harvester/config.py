@@ -14,6 +14,17 @@ INDEX_NAME = "records"
 START_TIME = time.time()
 INGEST_LOG_DIR = os.environ.get("INGEST_LOG_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "scratch"))
 
+REGISTER_KIND_LABELS = {
+  "bsg": "Burgerlijke Stand — Geboorte (civil birth register, 1811 onwards)",
+  "bsh": "Burgerlijke Stand — Huwelijk (civil marriage register, 1811 onwards)",
+  "bso": "Burgerlijke Stand — Overlijden (civil death register, 1811 onwards)",
+  "bev": "Bevolkingsregister (population register — households and residents)",
+  "dtb_d": "DTB — Doop (church baptism register, generally pre-1811)",
+  "dtb_t": "DTB — Trouwen (church marriage register, generally pre-1811)",
+  "dtb_b": "DTB — Begraven (church burial register, generally pre-1811)",
+  "not": "Notarieel (notarial deeds — wills, estates, contracts)",
+}
+
 ARCHIVE_NAMES = {
   "aal": "Streekarchief Goeree-Overflakkee / Aalsmeer",
   "ade": "Archief Delft",

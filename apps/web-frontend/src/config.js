@@ -51,9 +51,10 @@ export const isMonitoringConfigured = Boolean(SENTRY_DSN);
 // the admin dashboard reports that it is not configured rather than guessing a host.
 export const ADMIN_API_BASE_URL = import.meta.env.VITE_ADMIN_API_BASE_URL || '';
 
-// Dynamic store for Archive Names supplied by the archival API server (server.py).
-// The backend API is the single authoritative owner of institutional archive names.
+// Dynamic store for Archive & Register Kind names supplied by the archival API server (server.py).
+// The backend API is the single authoritative owner of institutional archive and register metadata.
 let dynamicArchiveNames = {};
+let dynamicKindLabels = {};
 
 export function setArchiveNames(names) {
   if (names && typeof names === 'object') {
@@ -61,22 +62,16 @@ export function setArchiveNames(names) {
   }
 }
 
-// Institutional Register Kinds Single Source of Truth
-export const REGISTER_KIND_LABELS = {
-  bsg: 'Birth Certificates (bsg)',
-  bsh: 'Marriage Certificates (bsh)',
-  bso: 'Death Certificates (bso)',
-  bev: 'Population Register (bev)',
-  dtb_d: 'Baptism Register (dtb_d)',
-  dtb_t: 'Church Marriages (dtb_t)',
-  dtb_b: 'Burial Register (dtb_b)',
-  not: 'Notarial Deeds (not)',
-};
+export function setKindLabels(labels) {
+  if (labels && typeof labels === 'object') {
+    dynamicKindLabels = { ...dynamicKindLabels, ...labels };
+  }
+}
 
 export function getKindLabel(kind) {
   if (!kind) return '';
   const key = String(kind).toLowerCase();
-  return REGISTER_KIND_LABELS[key] || `register: ${kind}`;
+  return dynamicKindLabels[key] || `register: ${kind}`;
 }
 
 export function getArchiveName(code) {
