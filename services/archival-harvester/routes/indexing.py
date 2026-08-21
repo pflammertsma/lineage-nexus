@@ -3,6 +3,8 @@ Indexing progress, system status, coverage, and telemetry endpoints.
 """
 
 import json
+import logging
+import os
 import time
 import urllib.request
 import psutil
@@ -12,6 +14,8 @@ from fastapi.responses import Response
 
 from config import meili_client, INDEX_NAME, MEILI_HOST, MEILI_MASTER_KEY, START_TIME, ARCHIVE_NAMES, INGEST_LOG_DIR, REGISTER_KIND_LABELS
 from auth import require_admin
+
+logger = logging.getLogger("indexing")
 from metrics import _get_disk_io_rates, _metrics, _metrics_30d
 from telemetry import batch_telemetry, save_batch_telemetry, _meili_get, _elapsed_since, synthesize_past_batch_samples
 from eta_engine import EtaEngine
@@ -373,7 +377,12 @@ def admin_indexing():
         recent.append({
           "uid": b_uid,
           "archive": arch_code,
-          "status": batch.get("status"),
+          # Meilisearch has no top-level batch status; it reports a tally under
+          # stats.status, e.g. {"succeeded": 4}. Reading the absent key gave the
+          # history a blank column for every row.
+          "status": (max(batch_stats.get("status", {}) or {"unknown": 0},
+                         key=(batch_stats.get("status") or {"unknown": 0}).get)
+                     if batch_stats.get("status") else None),
           "error_code": err.get("code"),
           "error_message": err.get("message"),
           "tasks": batch_stats.get("totalNbTasks"),
@@ -383,7 +392,10 @@ def admin_indexing():
           "documents": details.get("indexedDocuments") or details.get("receivedDocuments"),
         })
   except Exception:
-    pass
+    # Logged, not swallowed. A missing `import os` made every batch lookup in
+    # this endpoint fail silently: the dashboard showed "0 batches" and an empty
+    # Indexing History for as long as it took someone to ask why.
+    logger.exception("failed to read batch state from the engine")
 
   # Persistent Batch History across container deployments
   try:

@@ -647,6 +647,105 @@ against any element of `role_koper` is still a correct seller/buyer pairing.
 
 Notarial deeds become queryable this way: "Verkoper named X to Koper named Y".
 
+### A2f. The harvester hang — docker-proxy and an 88 MB POST
+
+- [x] **Diagnosed: it was hung, not dead.** The dashboard said "Working" with 0
+  queued and 0/s, stalled 39m. The process was alive the whole time — 47 minutes
+  elapsed, 1.0 GB RSS, one thread asleep in `wait_woken`, blocked on a socket:
+
+  ```
+  ESTAB  Send-Q 4176576  127.0.0.1:41924 -> 127.0.0.1:7700   python3.12 (ingest.py bhi)
+  ESTAB  Recv-Q 1600123  127.0.0.1:7700  <- ...              docker-proxy
+  ```
+
+  4.2 MB stuck in the harvester's send buffer, and **six docker-proxy relay
+  connections holding 10.6 MB** that had stopped draining. It had written 324 MB
+  and then stopped; `wchar` did not move across a 5-second sample. Meilisearch
+  was idle throughout, because the body never arrived.
+
+- [x] **Two causes, both ours.**
+  - **Meilisearch was on bridge networking** with a `127.0.0.1:7700` port
+    mapping, while the gateway runs `--net=host`. Every byte therefore crossed
+    `docker-proxy`, a userspace TCP relay, and it wedged under a large body.
+    Moved to `--net=host` with `MEILI_HTTP_ADDR=127.0.0.1:7700` — verified still
+    refused from the host's external address, and docker-proxy is out of the
+    path entirely.
+  - **The batch had grown to 88 MB.** `INGEST_BATCH_SIZE=100000` was chosen from
+    the 232s-fixed-cost measurement, taken when a document was small. Under the
+    per-role schema a document serialises to **923 bytes**, so the same count is
+    a 10x larger payload. Batches are now capped by **bytes** (32 MB), which is
+    what the transport actually cares about; the count is a poor proxy for size
+    the moment the schema changes.
+
+- [x] **A hang now surfaces as an error.** The Meilisearch client had no
+  timeout, so the stall produced no exception, no log line and no failed task.
+  Set to 600s.
+
+- [x] **`create_index` no longer enqueues a doomed task.** It is asynchronous, so
+  calling it on an existing index queues a task that fails with "Index `records`
+  already exists" — 13 had accumulated, each one inflating the failed-task count
+  the dashboard shows and the run's own success check reads.
+
+**Result**, same file, before and after:
+
+| | wedged run | after |
+|---|---|---|
+| batch | 88 MB, never delivered | uniform 32 MB / ~35,200 docs |
+| throughput | 3,500 rows/s then 0 | **6,893 rec/s** |
+| stuck in send queues | 10.6 MB | **0.0 MB** |
+| harvester RSS | 1.0 GB | 262 MB |
+
+- [x] **Bug I introduced and caught mid-fix.** The `batch_bytes = 0` reset did
+  not land, because the flush site had gained a line since I last read it and I
+  had not asserted on that one replacement. `batch_bytes` stayed above the cap,
+  so every subsequent document submitted its own batch — 410 rec/s. Both flush
+  sites now reset, proven by simulating the loop and asserting every batch is
+  uniform and under the cap. Four of the five replacements in that patch were
+  asserted; the unasserted one is the one that silently did nothing.
+
+- [ ] **The dashboard cannot tell "working" from "hung".** It correctly reported
+  a 39-minute stall, but "Working / In progress" came from harvest state that
+  nothing checks for liveness, and the panel had no way to say *what* the process
+  was blocked on. `_current_ingest` already computes `log_age_seconds` with a
+  five-minute staleness rule; the newer panel uses a different signal. Worth
+  driving "in progress" from: process alive **and** log written recently.
+
+### A2g. Empty Indexing History — a missing import behind a bare except
+
+- [x] **Root cause: `routes/indexing.py` never imported `os`.**
+
+  ```
+  NameError: name 'os' is not defined   (routes/indexing.py:299)
+  ```
+
+  `_get_task_archive_map()` is the first call inside `admin_indexing`'s try
+  block, and its first statement is `os.path.join(...)`. So the endpoint threw on
+  every request, `except Exception: pass` swallowed it, and `current_batch` and
+  `recent_batches` stayed `None` and `[]` for good. The modal was reporting
+  honestly — the API had nothing to give it. Five `os.*` calls in that file were
+  unreachable the whole time and nothing said so.
+
+  The bare except is the real defect; it now logs with `logger.exception`.
+
+- [x] **The two halves of the service disagreed about where their shared state
+  lived.** `routes/harvest.py` defaulted `INGEST_LOG_DIR` to `/ingest-logs` (the
+  bind mount); `config.py` defaulted it to `<module>/scratch`, which is *inside
+  the image*. `routes/indexing.py` uses the latter, so `batch_history.json` — the
+  "persistent batch history across container deployments" — was written into the
+  container and discarded on every deploy, and `task_archives.json` was read from
+  a directory the harvester never writes to, so batch-to-archive attribution
+  never resolved either. `config.py` now defaults to `/ingest-logs` and the state
+  files land on the mount.
+
+- [x] **Batch status was always blank.** The code read `batch["status"]`, which
+  Meilisearch does not return; it reports a tally under `stats.status`, e.g.
+  `{"succeeded": 4}`. Now derived from the dominant entry, so a batch containing
+  any failures reads `failed` rather than blank.
+
+**Verified live:** `recent_batches: 14`, `current_batch: 301 (48.7%)`, statuses
+populated, and `batch_history.json` / `task_archives.json` present in
+`/opt/ingest-logs`.
+
 ### A3. Deploy reliability
 
 - [x] **CRLF line endings were breaking deploys on the server.** An edit made on

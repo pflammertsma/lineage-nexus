@@ -12,7 +12,14 @@ MEILI_MASTER_KEY = os.environ.get("MEILI_MASTER_KEY", "")
 ADMIN_SECRET_TOKEN = os.environ.get("ADMIN_SECRET_TOKEN", "")
 INDEX_NAME = "records"
 START_TIME = time.time()
-INGEST_LOG_DIR = os.environ.get("INGEST_LOG_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "scratch"))
+# The harvester's log and state directory, bind-mounted from /opt/ingest-logs on
+# the host. The default used to be <module>/scratch, which lives *inside the
+# image*: routes/indexing.py wrote `batch_history.json` and read
+# `task_archives.json` there, so the "persistent batch history across container
+# deployments" was discarded on every deploy, and batch-to-archive attribution
+# never resolved. routes/harvest.py already defaulted to /ingest-logs, so the two
+# halves of the same service disagreed about where their shared state lived.
+INGEST_LOG_DIR = os.environ.get("INGEST_LOG_DIR", "/ingest-logs")
 
 REGISTER_KIND_LABELS = {
   "bsg": "Burgerlijke Stand — Geboorte (civil birth register, 1811 onwards)",

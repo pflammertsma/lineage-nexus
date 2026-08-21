@@ -77,6 +77,18 @@ INDEX_NAME = os.environ.get("MEILI_INDEX", "records")
 # Half the wall-clock time went to batches carrying a quarter of the documents.
 BATCH_SIZE = int(os.environ.get("INGEST_BATCH_SIZE", "100000"))
 
+# Hard ceiling on one submission's payload, which the document count alone does
+# not bound. A document under the old flat schema was small; under the per-role
+# schema it serialises to ~923 bytes, so 100,000 of them is an **88 MB POST**.
+# One of those wedged the harvester for 40 minutes: 324 MB written, then the
+# socket stopped draining with 4.2 MB stuck in its send buffer and six stalled
+# relay connections behind it. The engine sat idle throughout, because the body
+# never arrived.
+#
+# Size, not count, is what the transport cares about, and the count is a poor
+# proxy for it whenever the schema changes.
+MAX_BATCH_BYTES = int(os.environ.get("INGEST_MAX_BATCH_BYTES", str(32 * 1024 * 1024)))
+
 # Backpressure. Submitting is ~10,000 records/second; indexing is far slower, so
 # an unthrottled run does not "finish" — it just moves the whole corpus into
 # Meilisearch's queue and leaves. That is what happened on the first frl+gra run:
@@ -290,10 +302,17 @@ def configure_index(client) -> Any:
     # `index_primary_key_multiple_candidates_found`. The old index predated the
     # check and carried a primary key already, which is why it only appeared
     # after the index was rebuilt from empty.
+    # create_index is asynchronous: calling it when the index exists enqueues a
+    # task that then fails with "Index `records` already exists". Thirteen of
+    # those had accumulated, each one polluting the failed-task count the
+    # dashboard shows and the run's own success check reads. Ask first.
     try:
-        client.create_index(INDEX_NAME, {"primaryKey": "id"})
+        client.get_index(INDEX_NAME)
     except Exception:
-        pass  # Already exists, which is the normal case.
+        try:
+            client.create_index(INDEX_NAME, {"primaryKey": "id"})
+        except Exception as exc:
+            logger.warning("could not create index %s: %s", INDEX_NAME, exc)
 
     index = client.index(INDEX_NAME)
     index.update_settings({
@@ -437,6 +456,7 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
                    limit: Optional[int], started: float,
                    batch: List[Dict[str, Any]]) -> int:
     count = 0
+    batch_bytes = 0
     rows = rows_from_file(staged)
     prefixes = role_prefixes(next(rows))
     logger.info("  %s.%s: %d person roles in this schema", archive, kind, len(prefixes))
@@ -458,14 +478,17 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
 
     for doc in merged_documents(counted(rows), archive, kind, prefixes):
         batch.append(doc)
+        batch_bytes += len(json.dumps(doc, ensure_ascii=False))
         count += 1
 
-        if len(batch) >= BATCH_SIZE:
+        if len(batch) >= BATCH_SIZE or batch_bytes >= MAX_BATCH_BYTES:
             task_res = index.add_documents(batch)
             _record_task_archive(task_res, archive)
+            logger.info("  %s.%s: %d submitted, %d docs / %.0f MB this batch (%.0f rec/s)",
+                        archive, kind, count, len(batch), batch_bytes / (1 << 20),
+                        count / max(1e-6, time.time() - started))
             batch = []
-            logger.info("  %s.%s: %d submitted (%.0f rec/s)",
-                        archive, kind, count, count / max(1e-6, time.time() - started))
+            batch_bytes = 0
             await_queue()
         if limit and count >= limit:
             break
@@ -473,6 +496,10 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
     if batch:
         task_res = index.add_documents(batch)
         _record_task_archive(task_res, archive)
+        logger.info("  %s.%s: final batch, %d docs / %.0f MB",
+                    archive, kind, len(batch), batch_bytes / (1 << 20))
+        batch = []
+        batch_bytes = 0
         await_queue()
 
     logger.info("  %s.%s: %d records from %d rows (%d merged or dropped), %.1fs",
@@ -504,7 +531,11 @@ def main() -> int:
     if not args.archives:
         parser.error("give at least one archive code, or --list")
 
-    client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY)
+    # Without a timeout the client waits indefinitely. The 40-minute hang above
+    # produced no error, no log line and no failed task — it simply stopped, and
+    # the dashboard went on reporting "Working".
+    client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY,
+                                timeout=int(os.environ.get("MEILI_TIMEOUT", "600")))
     index = configure_index(client)
 
     wanted = set(args.kinds.split(",")) if args.kinds else None
