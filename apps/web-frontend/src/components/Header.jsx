@@ -5,6 +5,7 @@ import {
   Activity, Layers, PieChart, Search, RefreshCw, ChevronDown,
 } from 'lucide-react';
 import logo from '../assets/logo.svg';
+import Button from './Button';
 
 const THEME_ICON = { light: Sun, dark: Moon, system: Monitor };
 const THEME_LABEL = {
@@ -250,15 +251,14 @@ const Header = ({
         {/* Right Section: Admin Refresh, Theme, Account Dropdown */}
         <div className="flex items-center gap-2 sm:gap-3">
           {isAdminPage && (
-            <button
-              type="button"
+            <Button
               onClick={() => window.dispatchEvent(new Event('admin-refresh'))}
               title="Refresh status"
-              className="admin-btn-secondary py-1.5 px-2.5 sm:px-3 text-xs"
+              icon={RefreshCw}
+              className="py-1.5 px-2.5 sm:px-3 text-xs"
             >
-              <RefreshCw size={13} />
               <span className="hidden sm:inline">Refresh</span>
-            </button>
+            </Button>
           )}
 
           {isSimulated && (

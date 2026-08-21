@@ -4,6 +4,7 @@ import {
   AlertCircle, CheckCircle, Clock, Archive, FileText, Sparkles, Filter,
 } from 'lucide-react';
 import { ADMIN_API_BASE_URL, ADMIN_HARVEST_STATUS_FILTER_STORAGE } from '../config';
+import Button from './Button';
 
 export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
   const [loading, setLoading] = useState(true);
@@ -140,15 +141,14 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
             Dutch Archival Catalog & Harvester Queue
           </span>
         </div>
-        <button
-          type="button"
+        <Button
           onClick={fetchCatalog}
-          disabled={loading}
-          className="admin-btn-secondary py-1.5 px-3"
+          loading={loading}
+          icon={RefreshCw}
+          className="py-1.5 px-3"
         >
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           Reload Catalog
-        </button>
+        </Button>
       </div>
 
       <p className="text-xs text-secondary mb-6 leading-relaxed">

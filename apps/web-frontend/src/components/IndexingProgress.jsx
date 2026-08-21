@@ -3,6 +3,7 @@ import { Layers, Loader2, AlertTriangle, CheckCircle2, XCircle, Trash2, History 
 import { getArchiveName, getKindLabel, ADMIN_API_BASE_URL } from '../config';
 import { formatDuration, formatAgo } from '../utils/formatters';
 import IndexingHistory from './IndexingHistory';
+import Button from './Button';
 
 const STALL_WARN_SECONDS = 300;
 const STALL_ALERT_SECONDS = 900;
@@ -143,7 +144,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
         </div>
       )}
 
-      <div className="flex items-center justify-between gap-3 mt-4 flex-wrap">
+      <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
         <div className="flex items-center gap-2">
           <Layers size={14} className="text-secondary" />
           <span className="text-[10px] font-bold uppercase tracking-widest text-secondary">
@@ -165,27 +166,24 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
             )}
           </span>
 
-          <button
-            type="button"
-            onClick={() => setShowBatchesModal(true)}
-            className="px-2.5 py-1 text-[11px] font-medium text-secondary hover:text-primary bg-muted/60 hover:bg-muted border border-border/60 rounded-md transition-colors flex items-center gap-1.5 cursor-pointer"
-            title="View history of all completed batches"
-          >
-            <History size={13} />
-            <span>Batches ({indexing.recent_batches?.length || 0})</span>
-          </button>
-
           {busy && (
-            <button
-              type="button"
+            <Button
               onClick={() => setConfirmCancelOpen(true)}
-              className="px-2.5 py-1 text-[11px] font-medium text-red-400 bg-red-500/10 border border-red-500/30 rounded-md hover:bg-red-500/20 transition-colors flex items-center gap-1.5 cursor-pointer"
+              variant="danger"
+              icon={XCircle}
               title="Cancel all active and queued Meilisearch indexing tasks"
             >
-              <XCircle size={13} />
               Cancel
-            </button>
+            </Button>
           )}
+
+          <Button
+            onClick={() => setShowBatchesModal(true)}
+            icon={History}
+            title="View history of all completed batches"
+          >
+            Batches ({indexing.recent_batches?.length || 0})
+          </Button>
         </div>
       </div>
 

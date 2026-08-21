@@ -4,6 +4,7 @@
    --------------------------------------------------------------------------- */
 
 @layer components {
+
   /* Admin Container & Layout */
   .admin-page-container {
     @apply min-h-screen bg-background text-primary p-4 sm:p-8;
@@ -93,11 +94,15 @@
   }
 
   .admin-btn-secondary {
-    @apply inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border-strong text-xs font-semibold text-secondary hover:text-primary hover:border-accent transition-colors cursor-pointer disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg border border-border-strong text-xs font-semibold text-secondary hover:text-primary hover:border-accent transition-colors cursor-pointer disabled:opacity-50;
   }
 
   .admin-btn-action {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-md bg-accent text-on-accent font-semibold text-xs hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50;
+    @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-accent text-on-accent font-semibold text-xs hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50;
+  }
+
+  .admin-btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-3 py-1.5 rounded-lg bg-red-500/10 border border-red-500/30 text-xs font-semibold text-red-400 hover:bg-red-500/20 transition-colors cursor-pointer disabled:opacity-50;
   }
 
   /* Data Table & List Items */
