@@ -37,24 +37,31 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
   };
 
   // Extract all distinct archive codes seen in metrics
+  // Filter points for breakdown mode to only include timestamps where archive sampling was active
+  const validPoints = useMemo(() => {
+    if (selectedArchive === 'all') return points;
+    return points.filter((p) => p.archives && typeof p.archives === 'object' && Object.keys(p.archives).length > 0);
+  }, [points, selectedArchive]);
+
+  // Extract all distinct archive codes seen in metrics
   const availableArchives = useMemo(() => {
     const set = new Set();
-    points.forEach((p) => {
+    validPoints.forEach((p) => {
       if (p.archives && typeof p.archives === 'object') {
         Object.keys(p.archives).forEach((k) => set.add(k));
       }
     });
 
     // Sort by latest document count descending so largest archive sits at bottom of stack
-    const latestArchives = points[points.length - 1]?.archives || {};
+    const latestArchives = validPoints[validPoints.length - 1]?.archives || {};
     return Array.from(set).sort((a, b) => (latestArchives[b] || 0) - (latestArchives[a] || 0));
-  }, [points]);
+  }, [validPoints]);
 
   const isStacked = selectedArchive === 'stacked';
 
   // Transform raw points to include archive values directly on point keys
   const transformedPoints = useMemo(() => {
-    return points.map((p) => {
+    return validPoints.map((p) => {
       const archivesObj = p.archives || {};
       let value = null;
       if (selectedArchive === 'all') {
@@ -69,7 +76,7 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
       });
       return row;
     });
-  }, [points, selectedArchive, availableArchives]);
+  }, [validPoints, selectedArchive, availableArchives]);
 
   const series = useMemo(() => {
     if (isStacked) {

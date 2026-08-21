@@ -234,11 +234,12 @@ function deployArchival(config) {
     );
   }
 
-  step('Pre-flight: Validating local Python syntax');
+  step('Pre-flight: Validating local Python syntax & API route contracts');
   try {
     run('python', ['-m', 'py_compile', 'services/archival-harvester/server.py']);
+    run('python', ['services/archival-harvester/test_gateway_contract.py']);
   } catch (err) {
-    fail('Local Python syntax validation failed! Aborting deployment to protect production.', String(err));
+    fail('Local Python pre-flight validation failed! Aborting deployment to protect production.', String(err));
   }
 
   step('Deploying self-hosted archival gateway');

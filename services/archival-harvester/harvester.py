@@ -11,53 +11,13 @@ import meilisearch
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger("archival-harvester")
 
-MEILI_HOST = os.environ.get("MEILI_HOST", "http://127.0.0.1:7700")
-MEILI_MASTER_KEY = os.environ.get("MEILI_MASTER_KEY", "")
-INDEX_NAME = "records"
+from config import MEILI_HOST, MEILI_MASTER_KEY, INDEX_NAME, meili_client, ensure_meilisearch_index_settings
 
-meili_client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY)
 
 def configure_meilisearch_index():
   """Initialises and configures Meilisearch index settings for archival search."""
-  logger.info(f"Connecting to Meilisearch at {MEILI_HOST}...")
-  index = meili_client.index(INDEX_NAME)
-
-  # Configure searchable & filterable attributes
-  index.update_settings({
-    "searchableAttributes": [
-      "full_names",
-      "person_names",
-      "event_place",
-      "deed_type",
-      "archive_name",
-      "event_year"
-    ],
-    "filterableAttributes": [
-      "event_type",
-      "event_year",
-      "event_place",
-      "archive_code",
-      "province"
-    ],
-    "rankingRules": [
-      "words",
-      "typo",
-      "proximity",
-      "attribute",
-      "sort",
-      "exactness"
-    ],
-    "proximityPrecision": "byAttribute",
-    "typoTolerance": {
-      "enabled": True,
-      "minWordSizeForTypos": {
-        "oneTypo": 4,
-        "twoTypos": 8
-      }
-    }
-  })
-  logger.info("Meilisearch index settings updated successfully.")
-  return index
+  ensure_meilisearch_index_settings()
+  return meili_client.index(INDEX_NAME)
 
 def transform_a2a_record(raw: Dict[str, Any], archive_code: str, identifier: str) -> Dict[str, Any]:
   """

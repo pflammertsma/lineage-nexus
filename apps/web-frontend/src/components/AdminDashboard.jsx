@@ -292,7 +292,7 @@ const AdminDashboard = ({ getIdToken }) => {
                       {online ? 'Online' : reconnecting ? 'Reconnecting…' : 'Offline / Unreachable'}
                     </span>
                     {online && status?.uptime_seconds != null && (
-                      <span className="text-secondary">· up {formatUptime(status.uptime_seconds)}</span>
+                      <span className="text-secondary">· up {formatUptime(status?.uptime_seconds)}</span>
                     )}
                   </div>
                 </div>
@@ -301,7 +301,7 @@ const AdminDashboard = ({ getIdToken }) => {
                   <Meter
                     icon={Cpu}
                     label="CPU"
-                    percent={status.system?.cpu_percent}
+                    percent={status?.system?.cpu_percent}
                     detail="Processor load"
                   />
                   <Meter
@@ -319,7 +319,7 @@ const AdminDashboard = ({ getIdToken }) => {
                   <Meter
                     icon={Activity}
                     label="I/O Wait"
-                    percent={status.system?.iowait_percent}
+                    percent={status?.system?.iowait_percent}
                     detail={
                       diskIo
                         ? `${diskIo.read_mbs?.toFixed(1) || '0.0'} MB/s r · ${diskIo.write_mbs?.toFixed(1) || '0.0'} MB/s w`

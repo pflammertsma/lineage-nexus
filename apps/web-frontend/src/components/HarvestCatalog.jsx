@@ -314,7 +314,7 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
                     {/* Kinds */}
                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                       <span className="text-[11px] text-secondary">Types:</span>
-                      {archive.kinds.map((k) => (
+                      {(archive.kinds || []).map((k) => (
                         <span
                           key={k}
                           className="px-1.5 py-0.2 text-[10px] rounded bg-card border border-border text-secondary font-mono"

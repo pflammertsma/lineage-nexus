@@ -1,0 +1,141 @@
+"""
+Configuration and Meilisearch client setup for Archival Harvester Gateway.
+"""
+
+import os
+import time
+import logging
+import meilisearch
+
+MEILI_HOST = os.environ.get("MEILI_HOST", "http://127.0.0.1:7700")
+MEILI_MASTER_KEY = os.environ.get("MEILI_MASTER_KEY", "")
+ADMIN_SECRET_TOKEN = os.environ.get("ADMIN_SECRET_TOKEN", "")
+INDEX_NAME = "records"
+START_TIME = time.time()
+
+ARCHIVE_NAMES = {
+  "aal": "Streekarchief Goeree-Overflakkee / Aalsmeer",
+  "ade": "Archief Delft",
+  "arg": "Archief Eemland",
+  "bhi": "Brabants Historisch Informatie Centrum",
+  "bor": "Gemeentearchief Borne",
+  "brb": "Brabants Historisch Informatie Centrum",
+  "brd": "Stadsarchief Breda",
+  "cod": "CODA Apeldoorn",
+  "dar": "Dordrechts Archief",
+  "den": "Erfgoed Leiden en Omstreken",
+  "dev": "Stadsarchief Deventer",
+  "dha": "Haags Gemeentearchief",
+  "dnt": "Drents Archief",
+  "dom": "Streekarchief Ommen-Dalfsen",
+  "eal": "Erfgoedcentrum Achterhoek en Liemers",
+  "eem": "Archief Eemland",
+  "ehb": "Erfgoed 's-Hertogenbosch",
+  "elo": "Erfgoed Leiden en Omstreken",
+  "frl": "Tresoar Fryslân",
+  "gel": "Gelders Archief",
+  "gra": "Groninger Archieven",
+  "hga": "Haags Gemeentearchief",
+  "hkk": "Historische Kring Krimpenerwaard",
+  "lim": "Regionaal Historisch Centrum Limburg",
+  "mhi": "Museum & Archief Hoorn",
+  "nha": "Noord-Hollands Archief",
+  "ovr": "Historisch Centrum Overijssel",
+  "pem": "Purmerends Museum",
+  "raa": "Streekarchief Rijnland en Midden-Holland",
+  "rad": "Streekarchief Midden-Holland",
+  "rag": "Regionaal Archief Gooi en Vechtstreek",
+  "ran": "Regionaal Archief Nijmegen",
+  "rar": "Regionaal Archief Rivierenland",
+  "rat": "Regionaal Archief Tilburg",
+  "rel": "Regionaal Archief Langstraat Heusden Altena",
+  "rhe": "Regionaal Historisch Centrum Vecht en Venen",
+  "rhl": "Regionaal Historisch Centrum Limburg",
+  "rht": "Regionaal Historisch Centrum Vecht en Venen",
+  "rmd": "Regionaal Archief Midden-Holland",
+  "rzh": "Regionaal Archief Zuid-Holland Zuid",
+  "saa": "Stadsarchief Amsterdam",
+  "sad": "Stadsarchief Delft",
+  "sag": "Stadsarchief 's-Hertogenbosch",
+  "sal": "Stadsarchief Amsterdam",
+  "sch": "Gemeentearchief Schiedam",
+  "sgo": "Streekarchief Goeree-Overflakkee",
+  "sgv": "Streekarchief Gooi en Vechtstreek",
+  "sha": "Stadsarchief Amsterdam",
+  "sla": "Streekarchief Langstraat Heusden Altena",
+  "smh": "Streekarchief Midden-Holland",
+  "snv": "Streekarchief Naarden-Vechtstreek",
+  "srm": "Streekarchief Rijnland en Midden-Holland",
+  "srt": "Streekarchief Rijn- en Vechtstreek",
+  "svp": "Streekarchief Voorne-Putten",
+  "swl": "Stadarchief Westland",
+  "szu": "Stadsarchief Zutphen",
+  "thl": "Tresoar Fryslân",
+  "ton": "Streekarchief Tiel-Ochten-Nederbetuwe",
+  "utr": "Het Utrechts Archief",
+  "ven": "Gemeentearchief Venlo",
+  "vev": "Regionaal Historisch Centrum Vecht en Venen",
+  "vkk": "West-Fries Archief",
+  "vls": "Gemeentearchief Vlissingen",
+  "was": "Wassenaar Gemeentearchief",
+  "wat": "Waterlands Archief",
+  "wba": "West-Brabants Archief",
+  "wfa": "West-Fries Archief",
+  "zar": "Zaans Archief",
+  "zdk": "Gemeentearchief Zuidplas",
+  "zld": "Zeeuws Archief",
+  "zou": "Zuid-Utrechts Archief",
+  "ztm": "Gemeentearchief Zoetermeer",
+}
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("gateway")
+
+meili_client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY)
+
+
+def ensure_meilisearch_index_settings():
+  """Configures Meilisearch for sub-50ms query latency by setting proximityPrecision to 'byAttribute'."""
+  try:
+    index = meili_client.index(INDEX_NAME)
+    index.update_settings({
+      "searchableAttributes": [
+        "full_names",
+        "person_names",
+        "event_place",
+        "deed_type",
+        "archive_name",
+        "event_year"
+      ],
+      "filterableAttributes": [
+        "event_type",
+        "event_year",
+        "event_place",
+        "archive_code",
+        "archive",
+        "kind",
+        "province"
+      ],
+      "rankingRules": [
+        "words",
+        "typo",
+        "proximity",
+        "attribute",
+        "sort",
+        "exactness"
+      ],
+      "proximityPrecision": "byAttribute",
+      "typoTolerance": {
+        "enabled": True,
+        "minWordSizeForTypos": {
+          "oneTypo": 4,
+          "twoTypos": 8
+        }
+      }
+    })
+    logger.info("Configured Meilisearch proximityPrecision: 'byAttribute' successfully.")
+  except Exception as e:
+    logger.warning(f"Could not auto-update Meilisearch index settings: {e}")
+
+
+ensure_meilisearch_index_settings()
