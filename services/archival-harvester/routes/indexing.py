@@ -23,6 +23,9 @@ global_eta_engine = EtaEngine()
 def _count_tasks(statuses: str) -> int:
   """Total matching tasks."""
   try:
+    if statuses == "failed":
+      res = _meili_get("/tasks?statuses=failed&limit=100").get("results", [])
+      return sum(1 for t in res if (t.get("error") or {}).get("code") != "index_already_exists")
     return _meili_get(f"/tasks?statuses={statuses}&limit=0").get("total", 0)
   except Exception:
     return 0
@@ -226,11 +229,15 @@ def admin_failed_tasks(limit: int = Query(20, ge=1, le=100)):
     failed_items = []
     for t in results:
       err = t.get("error") or {}
+      code = err.get("code")
+      # Filter out benign idempotent index creation tasks
+      if code == "index_already_exists":
+        continue
       failed_items.append({
         "uid": t.get("uid"),
         "index_uid": t.get("indexUid"),
         "status": t.get("status"),
-        "error_code": err.get("code"),
+        "error_code": code,
         "error_message": err.get("message"),
         "error_link": err.get("link"),
         "enqueued_at": t.get("enqueuedAt"),

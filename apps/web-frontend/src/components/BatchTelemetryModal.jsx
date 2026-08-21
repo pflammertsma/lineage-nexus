@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Download, RefreshCw, BarChart2, X, Activity, Clock } from 'lucide-react';
+import { Download, RefreshCw, BarChart2, X, Activity, Clock, AlertTriangle } from 'lucide-react';
 import { ADMIN_API_BASE_URL } from '../config';
 import SmoothLineChart from './SmoothLineChart';
 

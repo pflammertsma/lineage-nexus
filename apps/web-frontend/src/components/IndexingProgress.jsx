@@ -305,7 +305,7 @@ const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefresh }) 
                   {failedTasks.map((t) => (
                     <div key={t.uid} className="p-2 rounded bg-card/90 border border-red-500/20 text-xs space-y-1">
                       <div className="flex items-center justify-between text-secondary font-mono text-[11px]">
-                        <span>Task #{t.uid} ({t.index_uid || 'records'})</span>
+                        <span>Engine Task #{t.uid} ({t.index_uid || 'records'})</span>
                         {t.error_code && <span className="text-red-400 font-bold">{t.error_code}</span>}
                       </div>
                       <p className="text-primary text-xs leading-snug">{t.error_message || 'No detailed error message returned by engine.'}</p>
