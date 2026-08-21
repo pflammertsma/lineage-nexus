@@ -613,30 +613,12 @@ const ArchiveQuery = ({ getIdToken }) => {
                 <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => { setYearMin(''); setYearMax(''); }} />
               </span>
             )}
-            {father.trim() && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
-                Father: {father.trim()}
-                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setFather('')} />
+            {relatives.filter((r) => r.name && r.name.trim()).map((rel) => (
+              <span key={rel.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium capitalize">
+                {rel.role}: {rel.name.trim()}
+                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => removeRelative(rel.id)} />
               </span>
-            )}
-            {mother.trim() && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
-                Mother: {mother.trim()}
-                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setMother('')} />
-              </span>
-            )}
-            {spouse.trim() && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
-                Spouse: {spouse.trim()}
-                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setSpouse('')} />
-              </span>
-            )}
-            {child.trim() && (
-              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
-                Child: {child.trim()}
-                <X size={11} className="cursor-pointer hover:opacity-80" onClick={() => setChild('')} />
-              </span>
-            )}
+            ))}
             {role !== 'all' && (
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-accent/10 border border-accent/30 text-accent text-[11px] font-medium">
                 Role: {role}
