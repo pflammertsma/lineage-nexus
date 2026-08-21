@@ -239,9 +239,13 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
             </span>
             <span className="text-[11px] text-secondary tabular-nums">
               {batch.tasks?.toLocaleString()} tasks ·{' '}
-              {batch.documents?.toLocaleString()} docs ·{' '}
+              {batch.documents ? `${batch.documents.toLocaleString()} docs · ` : ''}
               {formatDuration(batch.elapsed_seconds)}
-              {indexing.eta_seconds != null ? (
+              {batch.is_indeterminate ? (
+                <span className="text-amber-500/90 font-medium ml-1">
+                  · ETA Indeterminate (Settings Rebuild)
+                </span>
+              ) : indexing.eta_seconds != null ? (
                 <button
                   type="button"
                   onClick={() => onOpenTelemetry?.(batch.uid)}
@@ -250,26 +254,47 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
                 >
                   · ETA ~{formatDuration(indexing.eta_seconds)}
                 </button>
-              ) : (
-                indexing.recent_batches?.length > 0 && (
-                  <span className="text-accent/80 font-medium ml-1" title="Estimated based on average duration of recent completed batches">
-                    · Est. ~{formatDuration(Math.max(0, (indexing.recent_batches.reduce((acc, b) => acc + (parseIsoDuration(b.duration) || 120), 0) / indexing.recent_batches.length) - (batch.elapsed_seconds || 0)))}
-                  </span>
-                )
-              )}
+              ) : null}
             </span>
           </div>
 
-          <div aria-hidden="true" className="h-1.5 rounded-full bg-muted overflow-hidden mb-1">
-            <div
-              className={`h-full rounded-full transition-all duration-500 ${stallLevel === 'alert' ? 'bg-red-500' : stallLevel === 'warn' ? 'bg-amber-500' : 'bg-accent'
-                }`}
-              style={{ width: `${Math.min(100, Math.max(0, pct ?? 0))}%` }}
-            />
-          </div>
-          <p className="text-[11px] text-secondary tabular-nums mb-3">
-            {pct === null ? 'progress unreported' : `${pct.toFixed(1)}%`}
-          </p>
+          {(() => {
+            const isIndeterminate = batch.is_indeterminate || (batch.virtual_percentage === undefined && batch.percentage === null);
+            const virtualPct = batch.virtual_percentage ?? batch.percentage;
+            const rawPct = batch.percentage;
+            return (
+              <>
+                <div aria-hidden="true" className="h-1.5 rounded-full bg-muted overflow-hidden mb-1">
+                  <div
+                    className={`h-full rounded-full transition-all duration-500 ${
+                      isIndeterminate
+                        ? 'bg-accent/80 animate-pulse w-full'
+                        : stallLevel === 'alert'
+                        ? 'bg-red-500'
+                        : stallLevel === 'warn'
+                        ? 'bg-amber-500'
+                        : 'bg-accent'
+                    }`}
+                    style={isIndeterminate ? {} : { width: `${Math.min(100, Math.max(0, virtualPct ?? 0))}%` }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[11px] text-secondary tabular-nums mb-3">
+                  <span>
+                    {isIndeterminate
+                      ? 'Indeterminate (Index-Wide Settings Rebuild)'
+                      : virtualPct === null
+                      ? 'progress unreported'
+                      : `${virtualPct.toFixed(1)}% phase weighted`}
+                  </span>
+                  {!isIndeterminate && rawPct != null && rawPct !== virtualPct && (
+                    <span className="text-[10px] text-secondary/70 font-mono">
+                      {rawPct.toFixed(1)}% raw steps
+                    </span>
+                  )}
+                </div>
+              </>
+            );
+          })()}
 
           {/* Engine internal step counters (preserving exact engine terminology) */}
           {batch.steps?.length > 0 && (
@@ -294,12 +319,20 @@ const IndexingProgress = ({ indexing, onOpenTelemetry }) => {
             </ul>
           )}
 
-          {busy && !job && (
-            <div className="mt-3 pt-3 border-t border-border/60 flex items-center gap-2 text-xs text-secondary">
-              <Loader2 size={13} className="animate-spin text-accent shrink-0" />
-              <span>
-                Engine is actively crunching word proximity matrices in memory.
+          {busy && (
+            <div className="mt-3 pt-3 border-t border-border/60 flex items-center justify-between gap-3 text-xs text-secondary flex-wrap">
+              <span className="flex items-center gap-2">
+                <Loader2 size={13} className="animate-spin text-accent shrink-0" />
+                <span>
+                  {batch.sub_step_details?.summary ||
+                    'Engine is actively crunching word proximity matrices in memory.'}
+                </span>
               </span>
+              {batch.sub_step_details?.read_mbs > 0 && (
+                <span className="text-[10px] font-mono text-secondary/70">
+                  I/O: {batch.sub_step_details.read_mbs.toFixed(1)} MB/s r
+                </span>
+              )}
             </div>
           )}
         </div>

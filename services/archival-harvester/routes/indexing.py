@@ -266,8 +266,27 @@ def admin_indexing():
 
     steps = current.get("steps") or []
     current_step_name = steps[-1]["step"] if steps else "indexing"
+    is_indeterminate = "settings" in current_step_name.lower() or "matrix" in current_step_name.lower()
+    current["is_indeterminate"] = is_indeterminate
     io_rates = _get_disk_io_rates()
+    read_mbs = io_rates.get("read_mbs", 0.0)
+    write_mbs = io_rates.get("write_mbs", 0.0)
+    read_gb = round((elapsed * read_mbs) / 1024, 2)
     iowait_pct = round(psutil.cpu_times_percent(interval=None).iowait, 1) if hasattr(psutil, "cpu_times_percent") else 0.0
+
+    current["sub_step_details"] = {
+      "step": current_step_name,
+      "read_mbs": read_mbs,
+      "write_mbs": write_mbs,
+      "processed_gb": read_gb,
+      "summary": (
+        f"Crunching word proximity matrices: {read_mbs} MB/s read (~{read_gb} GB cumulative multi-pass read)"
+        if read_mbs > 5.0
+        else f"Flushing LMDB index transactions to disk ({write_mbs} MB/s write)"
+        if write_mbs > 1.0
+        else "Analyzing index dictionary postings in memory..."
+      )
+    }
 
     telemetry_sample = {
       "timestamp": int(time.time()),

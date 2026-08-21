@@ -28,7 +28,7 @@ class EtaEngine:
     self.alpha = alpha
     self._last_ewma_rate: Dict[Any, float] = {}
 
-  def calculate_virtual_progress(self, progress_data: Dict[str, Any]) -> float:
+  def calculate_virtual_progress(self, progress_data: Dict[str, Any]) -> Optional[float]:
     """Converts raw step progress into a phase-weighted virtual progress percentage (0.0 to 100.0)."""
     if not progress_data:
       return 0.0
@@ -37,6 +37,11 @@ class EtaEngine:
     if not steps:
       pct = progress_data.get("percentage")
       return float(pct) if pct is not None else 0.0
+
+    # If active step is an unquantified engine task like settings updates, progress is indeterminate
+    current_step_name = (steps[-1].get("step") or steps[-1].get("currentStep") or "").lower()
+    if "settings" in current_step_name or "matrix" in current_step_name:
+      return None
 
     accumulated = 0.0
     for step_info in steps:
@@ -65,6 +70,10 @@ class EtaEngine:
 
     steps = current.get("steps") or []
     if not steps:
+      return None, None
+
+    current_step_name = (steps[-1].get("step") or steps[-1].get("currentStep") or "").lower()
+    if "settings" in current_step_name or "matrix" in current_step_name:
       return None, None
 
     completed_weight_fraction = 0.0
