@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional
 from fastapi import APIRouter, Query, Depends
 from fastapi.responses import Response
 
-from config import meili_client, INDEX_NAME, MEILI_HOST, MEILI_MASTER_KEY, START_TIME, ARCHIVE_NAMES
+from config import meili_client, INDEX_NAME, MEILI_HOST, MEILI_MASTER_KEY, START_TIME, ARCHIVE_NAMES, INGEST_LOG_DIR
 from auth import require_admin
 from metrics import _get_disk_io_rates, _metrics, _metrics_30d
 from telemetry import batch_telemetry, save_batch_telemetry, _meili_get, _elapsed_since, synthesize_past_batch_samples
@@ -376,6 +376,26 @@ def admin_indexing():
           "finished_at": finished,
           "documents": details.get("indexedDocuments") or details.get("receivedDocuments"),
         })
+  except Exception:
+    pass
+
+  # Persistent Batch History across container deployments
+  try:
+    history_path = os.path.join(INGEST_LOG_DIR, "batch_history.json")
+    history_batches = []
+    if os.path.exists(history_path):
+      with open(history_path, "r", encoding="utf-8") as f:
+        history_batches = json.load(f) or []
+
+    by_uid = {b["uid"]: b for b in history_batches if isinstance(b, dict) and "uid" in b}
+    for r in recent:
+      if isinstance(r, dict) and "uid" in r:
+        by_uid[r["uid"]] = r
+
+    recent = sorted(by_uid.values(), key=lambda item: item.get("uid", 0), reverse=True)[:50]
+    os.makedirs(INGEST_LOG_DIR, exist_ok=True)
+    with open(history_path, "w", encoding="utf-8") as f:
+      json.dump(recent, f)
   except Exception:
     pass
 

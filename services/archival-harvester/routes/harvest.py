@@ -54,6 +54,49 @@ def _wait_for_meili_indexing_to_complete(timeout_seconds: int = 7200, check_inte
     time.sleep(check_interval)
 
 
+def _save_persistent_queue():
+  try:
+    os.makedirs(INGEST_LOG_DIR, exist_ok=True)
+    queue_file = os.path.join(INGEST_LOG_DIR, "queue_state.json")
+    with open(queue_file, "w", encoding="utf-8") as f:
+      json.dump({
+        "current": _current_harvest_archive,
+        "pending": _harvest_queue_list,
+      }, f)
+  except Exception as exc:
+    logger.warning(f"Could not save persistent queue state: {exc}")
+
+
+def _load_persistent_queue():
+  global _harvest_runner_thread
+  queue_file = os.path.join(INGEST_LOG_DIR, "queue_state.json")
+  if not os.path.exists(queue_file):
+    return
+  try:
+    with open(queue_file, "r", encoding="utf-8") as f:
+      data = json.load(f) or {}
+    current = data.get("current")
+    pending = data.get("pending") or []
+
+    with _harvest_queue_lock:
+      items_to_add = []
+      if current and current not in _harvest_queue_list and current != _current_harvest_archive:
+        items_to_add.append(current)
+      for p in pending:
+        if p not in _harvest_queue_list and p != _current_harvest_archive and p not in items_to_add:
+          items_to_add.append(p)
+
+      if items_to_add:
+        _harvest_queue_list.extend(items_to_add)
+        logger.info(f"[Queue Worker] Restored persistent queue state from disk: {items_to_add}")
+
+    if _harvest_queue_list and (_harvest_runner_thread is None or not _harvest_runner_thread.is_alive()):
+      _harvest_runner_thread = threading.Thread(target=_harvest_queue_worker, daemon=True)
+      _harvest_runner_thread.start()
+  except Exception as exc:
+    logger.warning(f"Could not load persistent queue state: {exc}")
+
+
 def _harvest_queue_worker():
   """Background daemon worker executing queued archive harvests sequentially."""
   global _current_harvest_archive, _active_ingest_process
@@ -64,9 +107,11 @@ def _harvest_queue_worker():
     with _harvest_queue_lock:
       if not _harvest_queue_list:
         _current_harvest_archive = None
+        _save_persistent_queue()
         break
       archive_code = _harvest_queue_list.pop(0)
       _current_harvest_archive = archive_code
+      _save_persistent_queue()
 
     logger.info(f"[Queue Worker] Starting harvest for archive: {archive_code}")
     cmd = [sys.executable, "ingest.py", archive_code]
@@ -89,6 +134,7 @@ def _harvest_queue_worker():
 
   with _harvest_queue_lock:
     _current_harvest_archive = None
+    _save_persistent_queue()
 
 
 def _current_ingest() -> Optional[Dict[str, Any]]:
@@ -273,6 +319,7 @@ def admin_queue_harvest(req: HarvestQueueRequest):
       if code != _current_harvest_archive and code not in _harvest_queue_list:
         _harvest_queue_list.append(code)
         added.append(code)
+    _save_persistent_queue()
 
   if _harvest_runner_thread is None or not _harvest_runner_thread.is_alive():
     _harvest_runner_thread = threading.Thread(target=_harvest_queue_worker, daemon=True)
@@ -293,6 +340,7 @@ def admin_clear_harvest_queue():
   with _harvest_queue_lock:
     cleared_count = len(_harvest_queue_list)
     _harvest_queue_list.clear()
+    _save_persistent_queue()
   return {
     "status": "success",
     "cleared_count": cleared_count,
@@ -309,9 +357,17 @@ def admin_remove_from_harvest_queue(data: Dict[str, str]):
     if code in _harvest_queue_list:
       _harvest_queue_list.remove(code)
       removed = True
+      _save_persistent_queue()
   return {
     "status": "success",
     "removed": removed,
     "pending_queue": list(_harvest_queue_list)
   }
+
+
+# Auto-restore persistent harvest queue state on module load
+try:
+  _load_persistent_queue()
+except Exception as exc:
+  logger.warning(f"Failed to auto-restore queue on startup: {exc}")
 

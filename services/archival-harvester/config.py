@@ -12,6 +12,7 @@ MEILI_MASTER_KEY = os.environ.get("MEILI_MASTER_KEY", "")
 ADMIN_SECRET_TOKEN = os.environ.get("ADMIN_SECRET_TOKEN", "")
 INDEX_NAME = "records"
 START_TIME = time.time()
+INGEST_LOG_DIR = os.environ.get("INGEST_LOG_DIR", os.path.join(os.path.dirname(os.path.abspath(__file__)), "scratch"))
 
 ARCHIVE_NAMES = {
   "aal": "Streekarchief Goeree-Overflakkee / Aalsmeer",
