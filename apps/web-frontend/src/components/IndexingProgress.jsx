@@ -299,10 +299,10 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
               </span>
               <span className="text-xs text-secondary/70">
                 · {job.is_active === false
-                    ? 'Harvest stream completed'
-                    : (job.phase === 'indexing_in_engine'
-                        ? 'Payloads submitted — engine building search index'
-                        : `Harvesting ${job.kind ? getKindLabel(job.kind) : 'stream'}`)}
+                  ? 'Harvest stream completed'
+                  : (job.phase === 'indexing_in_engine'
+                    ? 'Payloads submitted — engine building search index'
+                    : `Harvesting ${job.kind ? getKindLabel(job.kind) : 'stream'}`)}
               </span>
             </div>
             {job.is_active !== false && (
@@ -321,11 +321,10 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
             <div
               className={`h-full transition-all duration-300 rounded-full ${job.phase === 'indexing_in_engine' ? 'bg-amber-500 animate-pulse' : 'bg-accent'}`}
               style={{
-                width: `${
-                  job.files_total > 0
-                    ? Math.min(100, Math.max(5, (((job.files_completed || 0) + (job.phase === 'indexing_in_engine' ? 1 : 0.5)) / job.files_total) * 100))
-                    : (job.phase === 'indexing_in_engine' ? 100 : 5)
-                }%`
+                width: `${job.files_total > 0
+                  ? Math.min(100, Math.max(5, (((job.files_completed || 0) + (job.phase === 'indexing_in_engine' ? 1 : 0.5)) / job.files_total) * 100))
+                  : (job.phase === 'indexing_in_engine' ? 100 : 5)
+                  }%`
               }}
             />
           </div>
@@ -372,7 +371,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
               )}
             </div>
             <span className="text-xs text-secondary">
-              {batch.tasks?.toLocaleString()} tasks · {batch.documents?.toLocaleString()} docs · {formatDuration(batch.elapsed_seconds)}
+              {batch.tasks?.toLocaleString()} processes · {batch.documents?.toLocaleString()} docs · {formatDuration(batch.elapsed_seconds)}
               {batch.eta_seconds != null && ` · ETA ~${formatDuration(batch.eta_seconds)}`}
             </span>
           </div>
@@ -403,7 +402,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
                       <span className="w-3 h-3 rounded-full border border-border/80 shrink-0 inline-block" />
                     )}
                     <span className={s.status === 'done' ? 'text-secondary/70' : s.status === 'active' ? 'text-primary font-semibold' : 'text-secondary/80'}>
-                      {s.label || s.step || `Phase ${i + 1}`}
+                      {s.label || s.step || `Process ${i + 1}`}
                     </span>
                   </span>
                   <span className={`tabular-nums shrink-0 font-mono text-[11px] ${s.status === 'done' ? 'text-green-500 font-medium' : s.status === 'active' ? 'text-accent font-bold' : 'text-secondary/60'}`}>

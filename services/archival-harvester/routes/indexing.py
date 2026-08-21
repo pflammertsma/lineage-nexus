@@ -295,8 +295,8 @@ def _format_step_label(step_val: Any, index: int) -> str:
   if str_val in labels:
     return labels[str_val]
   if str_val:
-    return f"Phase {index + 1}: {str_val}"
-  return f"Phase {index + 1}"
+    return f"Process {index + 1}: {str_val}"
+  return f"Process {index + 1}"
 
 
 def _get_task_archive_map() -> Dict[str, str]:
@@ -352,6 +352,27 @@ def admin_indexing():
         progress = batch.get("progress") or {}
         started = batch.get("startedAt")
         steps_raw = progress.get("steps") or []
+
+        first_active_idx = next(
+          (idx for idx, s in enumerate(steps_raw)
+           if s.get("finished") is None or s.get("total") is None or (s.get("finished") or 0) < (s.get("total") or 0)),
+          None
+        )
+
+        steps = []
+        for i, s in enumerate(steps_raw):
+          fin = s.get("finished", 0) or 0
+          tot = s.get("total", 0) or 0
+          is_done = bool(s.get("finished") is not None and s.get("total") is not None and fin >= tot and tot > 0)
+          is_active = not is_done and (fin > 0 or i == first_active_idx)
+          steps.append({
+            "step": s.get("currentStep"),
+            "label": _format_step_label(s.get("currentStep"), i),
+            "finished": fin,
+            "total": tot,
+            "status": "done" if is_done else ("active" if is_active else "pending"),
+          })
+
         current = {
           "uid": b_uid,
           "archive": arch_code,
@@ -360,16 +381,7 @@ def admin_indexing():
           "percentage": progress.get("percentage"),
           "started_at": started,
           "elapsed_seconds": _elapsed_since(started),
-          "steps": [
-            {
-              "step": s.get("currentStep"),
-              "label": _format_step_label(s.get("currentStep"), i),
-              "finished": s.get("finished", 0),
-              "total": s.get("total", 0),
-              "status": "done" if (s.get("finished") is not None and s.get("total") is not None and s.get("finished") >= s.get("total")) else ("active" if i == len(steps_raw) - 1 or (s.get("finished") or 0) > 0 else "pending"),
-            }
-            for i, s in enumerate(steps_raw)
-          ],
+          "steps": steps,
         }
       elif finished is not None and len(recent) < 12:
         details = batch.get("details") or {}
