@@ -298,3 +298,4 @@ Take it on a **different archive**, so nothing is contaminated by the v1 run.
    directly, the point where throughput falls off can be compared against the
    12 GB the box has, which is the number that decides whether more memory
    changes the answer.
+4. **Is pre-serialization JSON sizing a bottleneck?** `ingest.py` now logs cumulative `json_sizing_sec` (`time.perf_counter()` spent calling `json.dumps(doc, ensure_ascii=False)` per record during batch assembly). Telemetry will validate whether Python string serialization during batch sizing introduces noticeable latency vs. switching to fixed record counts or simple character length heuristics.

@@ -513,6 +513,9 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
 
     max_changed = ""
     skipped_unchanged = 0
+    json_sizing_sec = 0.0
+    http_post_sec = 0.0
+    await_queue_sec = 0.0
 
     for doc in merged_documents(counted(rows), archive, kind, prefixes):
         changed = doc.get("last_changed") or ""
@@ -537,35 +540,46 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
         # provenance tracking existed. Skip the submission, keep the counting.
         if not dry_run:
             batch.append(doc)
-            batch_bytes += len(json.dumps(doc, ensure_ascii=False))
+            t_json_0 = time.perf_counter()
+            doc_len = len(json.dumps(doc, ensure_ascii=False))
+            json_sizing_sec += (time.perf_counter() - t_json_0)
+            batch_bytes += doc_len
 
             if len(batch) >= BATCH_SIZE or batch_bytes >= MAX_BATCH_BYTES:
+                t_post_0 = time.perf_counter()
                 task_res = index.add_documents(batch)
+                http_post_sec += (time.perf_counter() - t_post_0)
                 _record_task_archive(task_res, archive)
-                logger.info("  %s.%s: %d submitted, %d docs / %.0f MB this batch (%.0f rec/s)",
+                logger.info("  %s.%s: %d submitted, %d recs / %.0f MB this batch (%.0f rec/s, json_sizing: %.2fs, post: %.2fs)",
                             archive, kind, count, len(batch), batch_bytes / (1 << 20),
-                            count / max(1e-6, time.time() - started))
+                            count / max(1e-6, time.time() - started), json_sizing_sec, http_post_sec)
                 batch = []
                 batch_bytes = 0
+                t_wait_0 = time.perf_counter()
                 await_queue()
+                await_queue_sec += (time.perf_counter() - t_wait_0)
         if limit and count >= limit:
             break
 
     if batch:
+        t_post_0 = time.perf_counter()
         task_res = index.add_documents(batch)
+        http_post_sec += (time.perf_counter() - t_post_0)
         _record_task_archive(task_res, archive)
-        logger.info("  %s.%s: final batch, %d docs / %.0f MB",
-                    archive, kind, len(batch), batch_bytes / (1 << 20))
+        logger.info("  %s.%s: final batch, %d recs / %.0f MB (json_sizing: %.2fs, post: %.2fs)",
+                    archive, kind, len(batch), batch_bytes / (1 << 20), json_sizing_sec, http_post_sec)
         batch = []
         batch_bytes = 0
+        t_wait_0 = time.perf_counter()
         await_queue()
+        await_queue_sec += (time.perf_counter() - t_wait_0)
 
     if since:
         logger.info("  %s.%s: %d records changed since %s, %d unchanged and skipped",
                     archive, kind, count, since, skipped_unchanged)
-    logger.info("  %s.%s: %d records from %d rows (%d merged or dropped), %.1fs",
-                archive, kind, count, row_count, row_count - count,
-                time.time() - started)
+    logger.info("  %s.%s: %d records from %d rows (%.1fs total | json_sizing: %.2fs, http_post: %.2fs, queue_wait: %.2fs)",
+                archive, kind, count, row_count,
+                time.time() - started, json_sizing_sec, http_post_sec, await_queue_sec)
 
     # Note what we took and which version of the source it came from, so a later
     # run can tell whether there is anything new to do.

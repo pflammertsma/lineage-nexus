@@ -333,7 +333,7 @@ def filterable_attributes():
 
 def searchable_attributes():
     """Ordered: a name match must outrank a place match on the same term."""
-    return ["names", "names_p", "event_place", "event_type", "institution"]
+    return ["names", "names_p", "event_place", "event_type"]
 
 
 def index_settings():
