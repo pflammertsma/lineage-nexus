@@ -388,17 +388,15 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="text-right text-[11px] text-secondary">
-                      {files.length} {files.length === 1 ? 'export file' : 'export files'}
-                    </div>
+                  <div className="flex items-center shrink-0">
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); toggleExpand(archive.code); }}
-                      className="text-secondary hover:text-primary focus:outline-none"
-                      title="Select individual export files"
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface hover:bg-muted border border-border text-xs text-secondary hover:text-primary transition-colors cursor-pointer focus:outline-none shadow-2xs"
+                      title="Select or view individual export files"
                     >
-                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                      <span>{files.length} {files.length === 1 ? 'export file' : 'export files'}</span>
+                      {isExpanded ? <ChevronDown size={16} className="text-accent shrink-0" /> : <ChevronRight size={16} className="shrink-0" />}
                     </button>
                   </div>
                 </div>
