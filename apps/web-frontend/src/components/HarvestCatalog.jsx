@@ -1,10 +1,25 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Layers, Search, CheckSquare, Square, Play, RefreshCw,
+  Layers, Search, CheckSquare, Square, MinusSquare, Play, RefreshCw,
   AlertCircle, CheckCircle, Clock, Archive, FileText, Sparkles, Filter,
+  ChevronRight, ChevronDown,
 } from 'lucide-react';
-import { ADMIN_API_BASE_URL, ADMIN_HARVEST_STATUS_FILTER_STORAGE } from '../config';
+import { ADMIN_API_BASE_URL, ADMIN_HARVEST_STATUS_FILTER_STORAGE, getKindLabel } from '../config';
 import Button from './Button';
+
+// A file that has never been harvested, or was harvested before provenance
+// tracking existed, carries no manifest entry — shown the same way rather
+// than as an error, since it is the expected state for most of the catalog.
+function formatHarvestedAt(isoString) {
+  if (!isoString) return null;
+  try {
+    return new Date(isoString).toLocaleString(undefined, {
+      year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    });
+  } catch {
+    return null;
+  }
+}
 
 export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
   const [loading, setLoading] = useState(true);
@@ -18,7 +33,15 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
       return 'all';
     }
   });
+  // Entries are either a whole archive code ("bhi") or a single export label
+  // ("bhi.dtb_d"). A code and its own file labels are kept mutually exclusive
+  // per archive so a selection always means one unambiguous thing.
   const [selectedCodes, setSelectedCodes] = useState(new Set());
+  const [expandedCodes, setExpandedCodes] = useState(new Set());
+  // Off by default: delta mode is what the harvester runs unless told
+  // otherwise, since re-submitting records already in the index is the
+  // expensive case, not the safe one.
+  const [fullHarvest, setFullHarvest] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitMessage, setSubmitMessage] = useState(null);
 
@@ -64,14 +87,39 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
     fetchCatalog();
   }, [fetchCatalog]);
 
-  const toggleSelect = (code) => {
+  // Selecting the archive as a whole clears any of its individual files, and
+  // vice versa, so a selection never means two things at once.
+  const toggleArchive = (archive) => {
     setSelectedCodes((prev) => {
       const next = new Set(prev);
-      if (next.has(code)) {
-        next.delete(code);
+      if (next.has(archive.code)) {
+        next.delete(archive.code);
       } else {
-        next.add(code);
+        next.add(archive.code);
+        (archive.files || []).forEach((f) => next.delete(f.label));
       }
+      return next;
+    });
+  };
+
+  const toggleFile = (label, code) => {
+    setSelectedCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) {
+        next.delete(label);
+      } else {
+        next.add(label);
+        next.delete(code);
+      }
+      return next;
+    });
+  };
+
+  const toggleExpand = (code) => {
+    setExpandedCodes((prev) => {
+      const next = new Set(prev);
+      if (next.has(code)) next.delete(code);
+      else next.add(code);
       return next;
     });
   };
@@ -113,7 +161,7 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ archives: Array.from(selectedCodes) }),
+        body: JSON.stringify({ archives: Array.from(selectedCodes), delta: !fullHarvest }),
       });
       const data = await res.json();
       if (res.ok && data.status === 'success') {
@@ -265,70 +313,134 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
       ) : (
         <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1">
           {filteredArchives.map((archive) => {
-            const isSelected = selectedCodes.has(archive.code);
+            const files = archive.files || [];
+            const selectedFileCount = files.filter((f) => selectedCodes.has(f.label)).length;
+            const isWholeSelected = selectedCodes.has(archive.code);
+            const isPartialSelected = !isWholeSelected && selectedFileCount > 0;
+            const isExpanded = expandedCodes.has(archive.code);
             return (
               <div
                 key={archive.code}
-                onClick={() => toggleSelect(archive.code)}
-                className={`admin-list-item ${isSelected ? 'admin-list-item-selected' : 'admin-list-item-default'
+                className={`admin-list-item flex-col items-stretch gap-0 ${isWholeSelected || isPartialSelected ? 'admin-list-item-selected' : 'admin-list-item-default'
                   }`}
               >
-                <div className="flex items-start gap-3 min-w-0">
-                  <button
-                    type="button"
-                    tabIndex={-1}
-                    className="mt-0.5 text-secondary hover:text-accent focus:outline-none"
-                  >
-                    {isSelected ? (
-                      <CheckSquare size={16} className="text-accent fill-accent/20" />
-                    ) : (
-                      <Square size={16} />
-                    )}
-                  </button>
-
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-semibold text-xs text-primary">{archive.name}</span>
-                      <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono text-secondary uppercase font-bold">
-                        {archive.code}
-                      </span>
-
-                      {/* Status Badges */}
-                      {archive.indexed_records > 0 ? (
-                        <span className="admin-badge-success">
-                          <CheckCircle size={10} />
-                          Indexed ({archive.indexed_records.toLocaleString()} recs)
-                        </span>
-                      ) : archive.status === 'queued' ? (
-                        <span className="admin-badge-warning">
-                          <Clock size={10} />
-                          Queued
-                        </span>
+                <div
+                  onClick={() => toggleArchive(archive)}
+                  className="flex items-start justify-between gap-3 cursor-pointer"
+                >
+                  <div className="flex items-start gap-3 min-w-0">
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      className="mt-0.5 text-secondary hover:text-accent focus:outline-none"
+                    >
+                      {isWholeSelected ? (
+                        <CheckSquare size={16} className="text-accent fill-accent/20" />
+                      ) : isPartialSelected ? (
+                        <MinusSquare size={16} className="text-accent" />
                       ) : (
-                        <span className="admin-badge-neutral">
-                          Available
-                        </span>
+                        <Square size={16} />
                       )}
-                    </div>
+                    </button>
 
-                    {/* Kinds */}
-                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                      <span className="text-[11px] text-secondary">Types:</span>
-                      {(archive.kinds || []).map((k) => (
-                        <span
-                          key={k}
-                          className="px-1.5 py-0.2 text-[10px] rounded bg-card border border-border text-secondary font-mono"
-                        >
-                          {k}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-xs text-primary">{archive.name}</span>
+                        <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] font-mono text-secondary uppercase font-bold">
+                          {archive.code}
                         </span>
-                      ))}
+
+                        {/* Status Badges */}
+                        {archive.indexed_records > 0 ? (
+                          <span className="admin-badge-success">
+                            <CheckCircle size={10} />
+                            Indexed ({archive.indexed_records.toLocaleString()} recs)
+                          </span>
+                        ) : archive.status === 'queued' ? (
+                          <span className="admin-badge-warning">
+                            <Clock size={10} />
+                            Queued
+                          </span>
+                        ) : (
+                          <span className="admin-badge-neutral">
+                            Available
+                          </span>
+                        )}
+                        {isPartialSelected && (
+                          <span className="admin-badge-neutral">
+                            {selectedFileCount} file{selectedFileCount === 1 ? '' : 's'} selected
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Kinds */}
+                      <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                        <span className="text-[11px] text-secondary">Types:</span>
+                        {(archive.kinds || []).map((k) => (
+                          <span
+                            key={k}
+                            className="px-1.5 py-0.2 text-[10px] rounded bg-card border border-border text-secondary font-mono"
+                          >
+                            {k}
+                          </span>
+                        ))}
+                      </div>
                     </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right text-[11px] text-secondary">
+                      {files.length} {files.length === 1 ? 'export file' : 'export files'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); toggleExpand(archive.code); }}
+                      className="text-secondary hover:text-primary focus:outline-none"
+                      title="Select individual export files"
+                    >
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </button>
                   </div>
                 </div>
 
-                <div className="text-right text-[11px] text-secondary shrink-0">
-                  {archive.files.length} {archive.files.length === 1 ? 'export file' : 'export files'}
-                </div>
+                {/* Per-file selection */}
+                {isExpanded && (
+                  <div className="mt-2 pt-2 border-t border-border space-y-1">
+                    {files.map((f) => {
+                      const fileSelected = selectedCodes.has(f.label);
+                      const harvestedAt = formatHarvestedAt(f.harvested_iso);
+                      return (
+                        <div
+                          key={f.label}
+                          onClick={() => toggleFile(f.label, archive.code)}
+                          className="flex items-center justify-between gap-2 py-1 px-2 rounded cursor-pointer hover:bg-muted/60"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            {fileSelected || isWholeSelected ? (
+                              <CheckSquare size={13} className="text-accent fill-accent/20 shrink-0" />
+                            ) : (
+                              <Square size={13} className="text-secondary shrink-0" />
+                            )}
+                            <span className="text-[11px] font-mono text-primary">{f.label}</span>
+                            <span className="text-[10px] text-secondary truncate">{getKindLabel(f.kind)}</span>
+                          </div>
+                          <div className="text-[10px] text-secondary shrink-0 flex items-center gap-1.5">
+                            {harvestedAt ? (
+                              <>
+                                <span>{f.mode === 'delta' ? 'delta' : 'full'} harvest {harvestedAt}</span>
+                                {f.complete === false && (
+                                  <span className="admin-badge-warning">incomplete</span>
+                                )}
+                              </>
+                            ) : (
+                              <span>not yet harvested</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             );
           })}
@@ -338,9 +450,20 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
       {/* Floating Action / Queuing Bar */}
       {selectedCodes.size > 0 && (
         <div className="mt-4 pt-4 border-t border-border flex items-center justify-between gap-4 flex-wrap bg-card">
-          <div className="text-xs text-primary font-medium flex items-center gap-2">
-            <Sparkles size={14} className="text-accent" />
-            <span>Selected {selectedCodes.size} archive datasets for queue</span>
+          <div className="text-xs text-primary font-medium flex items-center gap-3">
+            <span className="flex items-center gap-2">
+              <Sparkles size={14} className="text-accent" />
+              Selected {selectedCodes.size} dataset{selectedCodes.size === 1 ? '' : 's'} for queue
+            </span>
+            <label className="flex items-center gap-1.5 text-[11px] text-secondary font-normal cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={fullHarvest}
+                onChange={(e) => setFullHarvest(e.target.checked)}
+                className="accent-accent"
+              />
+              Full harvest (ignore previous progress)
+            </label>
           </div>
 
           <button
@@ -354,7 +477,7 @@ export default function HarvestCatalog({ getIdToken, onHarvestQueued }) {
             ) : (
               <Play size={13} className="fill-current" />
             )}
-            {submitting ? 'Queueing...' : `Queue Ingestion for ${selectedCodes.size} Archives`}
+            {submitting ? 'Queueing...' : `Queue Ingestion for ${selectedCodes.size} Dataset${selectedCodes.size === 1 ? '' : 's'}`}
           </button>
         </div>
       )}

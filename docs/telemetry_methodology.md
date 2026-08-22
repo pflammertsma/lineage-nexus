@@ -161,7 +161,35 @@ python ingest.py bhi --force                  # ignore the manifest
 
 The queue API takes the same labels: an entry of `bhi` harvests the archive,
 `bhi.dtb_d` harvests one export. Re-running a single failed export no longer
-costs a whole archive.
+costs a whole archive. The dashboard's catalog lets a file be selected the
+same way, and shows each file's manifest entry — when it was last harvested,
+in full or delta mode, and whether that pass was complete.
+
+**Delta is now the default**, both from the CLI and the queue API — a full
+re-harvest of a file already in the index is the expensive case, not the
+normal one. Pass `--force` for a genuine full re-pull, or uncheck "delta" in
+the queue request (the dashboard's "Full harvest" checkbox). A file with no
+completed prior harvest is unaffected either way: there is no watermark to
+delta against, so it is taken whole regardless of the flag.
+
+### Backfilling files harvested before the manifest existed
+
+Every file indexed before this feature landed has no manifest entry, which
+means the default delta behaviour above would treat the next harvest of any
+of them as a first-time full pass — re-submitting records already sitting in
+the index, exactly the cost this system exists to avoid.
+
+```
+python ingest.py bhi aal bor ade arg dev --backfill
+```
+
+`--backfill` runs the same download-and-parse pipeline as a normal harvest —
+so the version and the newest `SOURCE_LASTCHANGEDATE` it records are real,
+not guessed — but skips the search engine entirely: no connection is made to
+Meilisearch, nothing is submitted, nothing is settings-poked. It writes only
+to `harvest_manifest.json`. Safe to run repeatedly or across the whole
+catalog: a file the manifest already covers is skipped exactly like any
+other unchanged file, via the same HEAD check `--delta` uses.
 
 ---
 

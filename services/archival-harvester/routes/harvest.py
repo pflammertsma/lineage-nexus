@@ -17,6 +17,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from config import meili_client, INDEX_NAME, ARCHIVE_NAMES
 from auth import require_admin
 from telemetry import _meili_get
+import manifest
 
 logger = logging.getLogger("ingest.queue")
 router = APIRouter()
@@ -40,7 +41,10 @@ _INGEST_FINISHED = re.compile(
 
 _active_ingest_process: Optional[subprocess.Popen] = None
 _harvest_queue_list: List[str] = []
-_harvest_delta_mode: bool = False
+# Delta by default: a full re-harvest of an already-indexed file re-submits
+# every record it contains, which is exactly the cost the manifest exists to
+# avoid. The dashboard's "Full harvest" checkbox is what sets this False.
+_harvest_delta_mode: bool = True
 _harvest_queue_lock = threading.Lock()
 _harvest_runner_thread: Optional[threading.Thread] = None
 _current_harvest_archive: Optional[str] = None
@@ -271,6 +275,8 @@ def admin_harvest_exports():
     current_active = _current_harvest_archive
     pending_queue = list(_harvest_queue_list)
 
+  manifest_data = manifest.load()
+
   archives_dict: Dict[str, Dict[str, Any]] = {}
   for item in available_files:
     if isinstance(item, str):
@@ -293,13 +299,23 @@ def admin_harvest_exports():
         "status": "unindexed"
       }
     archives_dict[code]["export_count"] += 1
-    archives_dict[code]["files"].append(file_name)
 
-    parts = file_name.split(".")
-    if len(parts) > 1:
-      k = parts[1]
-      if k and k not in archives_dict[code]["kinds"]:
-        archives_dict[code]["kinds"].append(k)
+    kind = file_name.split(".", 1)[1] if "." in file_name else ""
+    entry = manifest_data.get(file_name) or {}
+    archives_dict[code]["files"].append({
+      "label": file_name,
+      "kind": kind,
+      # When this file was last harvested, and how much of it we have. Absent
+      # for anything indexed before provenance tracking existed, or never
+      # harvested at all — the dashboard shows those the same way.
+      "harvested_iso": entry.get("harvested_iso"),
+      "mode": entry.get("mode"),
+      "complete": entry.get("complete"),
+      "records": entry.get("records"),
+    })
+
+    if kind and kind not in archives_dict[code]["kinds"]:
+      archives_dict[code]["kinds"].append(kind)
 
   for code in archives_dict:
     if code == current_active:
@@ -330,8 +346,11 @@ class HarvestQueueRequest(pydantic.BaseModel):
   # Each entry is an archive code ("bhi") or one export label ("bhi.dtb_d").
   archives: List[str] = []
   # Only ingest records changed since the last completed harvest of each file.
-  # Falls back to a full pass for any file without one.
-  delta: bool = False
+  # Defaults on: re-submitting records already in the index is the expensive
+  # case, not the safe one. Falls back to a full pass for any file with no
+  # completed prior harvest, so a first-time archive is unaffected. The
+  # dashboard's "Full harvest" checkbox sends False to override this.
+  delta: bool = True
 
 
 @router.post("/api/v1/admin/harvest/queue", dependencies=[Depends(require_admin)])

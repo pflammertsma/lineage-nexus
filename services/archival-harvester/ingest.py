@@ -412,7 +412,7 @@ def merged_documents(rows: Iterator[Dict[str, str]], archive: str, kind: str,
 
 def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None,
                 since: Optional[str] = None, manifest_data: Optional[Dict[str, Any]] = None,
-                force: bool = False) -> int:
+                force: bool = False, dry_run: bool = False) -> int:
     url = f"{EXPORT_BASE}/{archive}.{kind}.csv.gz"
 
     # Ask what version is published before spending anything on it. A HEAD is
@@ -424,7 +424,9 @@ def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None,
                     archive, kind, entry.get("harvested_iso"))
         return 0
 
-    logger.info("streaming %s.%s", archive, kind)
+    logger.info("streaming %s.%s%s", archive, kind,
+                " (backfill: reconstructing the manifest, nothing is sent "
+                "to the search engine)" if dry_run else "")
     if since:
         logger.info("  %s.%s: delta mode, only records changed after %s",
                     archive, kind, since)
@@ -441,7 +443,7 @@ def ingest_file(index, archive: str, kind: str, limit: Optional[int] = None,
 
     try:
         return _ingest_staged(index, staged, archive, kind, limit, started, batch,
-                          since, manifest_data, version)
+                          since, manifest_data, version, dry_run)
     finally:
         # The staged copy exists only for the duration of one file.
         try:
@@ -481,7 +483,8 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
                    batch: List[Dict[str, Any]],
                    since: Optional[str] = None,
                    manifest_data: Optional[Dict[str, Any]] = None,
-                   version: Optional[Dict[str, Any]] = None) -> int:
+                   version: Optional[Dict[str, Any]] = None,
+                   dry_run: bool = False) -> int:
     count = 0
     batch_bytes = 0
     file_progress: Dict[str, Any] = {}
@@ -527,19 +530,24 @@ def _ingest_staged(index, staged: str, archive: str, kind: str,
             skipped_unchanged += 1
             continue
 
-        batch.append(doc)
-        batch_bytes += len(json.dumps(doc, ensure_ascii=False))
         count += 1
 
-        if len(batch) >= BATCH_SIZE or batch_bytes >= MAX_BATCH_BYTES:
-            task_res = index.add_documents(batch)
-            _record_task_archive(task_res, archive)
-            logger.info("  %s.%s: %d submitted, %d docs / %.0f MB this batch (%.0f rec/s)",
-                        archive, kind, count, len(batch), batch_bytes / (1 << 20),
-                        count / max(1e-6, time.time() - started))
-            batch = []
-            batch_bytes = 0
-            await_queue()
+        # A backfill run exists to learn what is already true of the index, not
+        # to change it — every one of these records was indexed by a run before
+        # provenance tracking existed. Skip the submission, keep the counting.
+        if not dry_run:
+            batch.append(doc)
+            batch_bytes += len(json.dumps(doc, ensure_ascii=False))
+
+            if len(batch) >= BATCH_SIZE or batch_bytes >= MAX_BATCH_BYTES:
+                task_res = index.add_documents(batch)
+                _record_task_archive(task_res, archive)
+                logger.info("  %s.%s: %d submitted, %d docs / %.0f MB this batch (%.0f rec/s)",
+                            archive, kind, count, len(batch), batch_bytes / (1 << 20),
+                            count / max(1e-6, time.time() - started))
+                batch = []
+                batch_bytes = 0
+                await_queue()
         if limit and count >= limit:
             break
 
@@ -593,6 +601,17 @@ def main() -> int:
         help="ingest even when the published file is byte-identical to the one "
              "already harvested.",
     )
+    parser.add_argument(
+        "--backfill", action="store_true",
+        help="reconstruct manifest entries for files that were indexed before "
+             "provenance tracking existed, or for which it was lost. Downloads "
+             "and parses each file exactly as a normal run would, to learn its "
+             "published version and its newest record date, but submits "
+             "nothing to the search engine. A file the manifest already has a "
+             "complete entry for is left alone, same as any other unchanged "
+             "file, so this is safe to run repeatedly or across the whole "
+             "catalog.",
+    )
     args = parser.parse_args()
 
     available = list_exports()
@@ -610,12 +629,18 @@ def main() -> int:
     if not args.archives:
         parser.error("give at least one archive code, or --list")
 
-    # Without a timeout the client waits indefinitely. The 40-minute hang above
-    # produced no error, no log line and no failed task — it simply stopped, and
-    # the dashboard went on reporting "Working".
-    client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY,
-                                timeout=int(os.environ.get("MEILI_TIMEOUT", "600")))
-    index = configure_index(client)
+    # A backfill run writes nothing to the search engine, so it has no need of
+    # it — skip the connection and the settings poke entirely rather than
+    # reaching for a client this run will never call.
+    if args.backfill:
+        index = None
+    else:
+        # Without a timeout the client waits indefinitely. The 40-minute hang
+        # above produced no error, no log line and no failed task — it simply
+        # stopped, and the dashboard went on reporting "Working".
+        client = meilisearch.Client(MEILI_HOST, MEILI_MASTER_KEY,
+                                    timeout=int(os.environ.get("MEILI_TIMEOUT", "600")))
+        index = configure_index(client)
 
     wanted = set(args.kinds.split(",")) if args.kinds else None
 
@@ -693,7 +718,7 @@ def main() -> int:
                                         archive, kind)
                     total += ingest_file(index, archive, kind, args.limit,
                                          since=since, manifest_data=manifest_data,
-                                         force=args.force)
+                                         force=args.force, dry_run=args.backfill)
                     break
                 except Exception as exc:
                     # One bad file should not abandon the rest of the run, but it
@@ -711,6 +736,12 @@ def main() -> int:
     if failures:
         logger.error("done with FAILURES: %d file(s) did not complete: %s",
                      len(failures), ", ".join(failures))
+
+    if args.backfill:
+        logger.info("backfill done: %d record(s) accounted for across %d file(s)",
+                    total, len(targets) - len(failures))
+        return 1 if failures else 0
+
     logger.info("done: %d documents submitted", total)
 
     # Submitting is not indexing. Every task of the first arg run failed on a
