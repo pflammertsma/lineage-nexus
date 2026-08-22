@@ -325,7 +325,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
                 <Loader2 size={12} className="animate-spin shrink-0 text-accent" />
                 <span>
                   {job.rows_per_second > 0
-                    ? `${Math.round(job.rows_per_second).toLocaleString()} docs/s`
+                    ? `${Math.round(job.rows_per_second).toLocaleString()} recs/s`
                     : (job.speed_mbs > 0 ? `${job.speed_mbs.toFixed(1)} MB/s` : 'Buffering stream...')}
                 </span>
               </span>
@@ -388,7 +388,7 @@ export const IndexingProgress = ({ indexing, onOpenTelemetry, getIdToken, onRefr
               )}
             </div>
             <span className="text-xs text-secondary">
-              {batch.tasks?.toLocaleString()} processes · {batch.documents?.toLocaleString()} docs · {formatDuration(batch.elapsed_seconds)}
+              {batch.tasks?.toLocaleString()} processes · {batch.documents?.toLocaleString()} recs · {formatDuration(batch.elapsed_seconds)}
               {batch.eta_seconds != null && ` · ETA ~${formatDuration(batch.eta_seconds)}`}
             </span>
           </div>

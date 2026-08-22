@@ -99,7 +99,7 @@ export const IndexingHistory = ({ isOpen, onClose, recentBatches = [], onOpenTel
 
                       {b.documents > 0 && (
                         <span className="px-2 py-0.5 rounded text-[11px] font-semibold bg-accent/10 border border-accent/20 text-accent">
-                          {b.documents.toLocaleString()} docs
+                          {b.documents.toLocaleString()} recs
                         </span>
                       )}
 

@@ -177,7 +177,7 @@ const CorpusGrowthChart = ({ points = [], height = 200, rangeMinutes = 360, onRa
         field: 'value',
         label: singleLabel,
         colour: 'var(--color-accent)',
-        formatter: (v) => (Number.isFinite(v) ? `${Math.round(v).toLocaleString()} docs` : '—'),
+        formatter: (v) => (Number.isFinite(v) ? `${Math.round(v).toLocaleString()} recs` : '—'),
       },
     ];
   }, [selectedFilter, isStackedArchives, isStackedKinds, availableArchives, availableKinds]);
