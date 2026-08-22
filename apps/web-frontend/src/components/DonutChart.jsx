@@ -1,9 +1,12 @@
 import React, { useMemo, useState } from 'react';
 
+const OTHER_GROUP_THRESHOLD_RATIO = 0.02; // Group segments representing < 5% of total
+const MIN_OTHER_ARC_DEGREES = 4.0; // Minimum forced arc size in degrees for "Other"
+
 /**
  * Generic Interactive SVG Donut / Pie Chart Component.
- * Supports 100% single-slice rendering, hover tooltips, center summary labels,
- * responsive layout, and optional inline legends.
+ * Automatically groups small tail segments (<5% of total) into an "Other" segment.
+ * Guarantees a minimum 1-degree SVG arc for "Other" so tiny slivers remain visible and interactive.
  */
 const DonutChart = ({
   data = [],
@@ -23,13 +26,77 @@ const DonutChart = ({
 
   const slices = useMemo(() => {
     if (!data || !data.length || totalValue <= 0) return [];
-    let cumulative = 0;
-    return data.map((d, i) => {
+
+    // 1. Group any segment individually < threshold (e.g. < 3%) into "Other"
+    const thresholdValue = OTHER_GROUP_THRESHOLD_RATIO * totalValue;
+    const largeItems = [];
+    const smallItems = [];
+
+    data.forEach((d) => {
       const val = d.value || 0;
-      const startAngle = (cumulative / totalValue) * 2 * Math.PI;
-      cumulative += val;
-      const endAngle = (cumulative / totalValue) * 2 * Math.PI;
-      const percentage = ((val / totalValue) * 100).toFixed(1);
+      if (val < thresholdValue) {
+        smallItems.push(d);
+      } else {
+        largeItems.push(d);
+      }
+    });
+
+    let processedItems = [];
+    if (smallItems.length > 0 && largeItems.length > 0) {
+      const smallTotal = smallItems.reduce((acc, d) => acc + (d.value || 0), 0);
+      const otherColor = '#64748B'; // Slate gray accent for Other group
+      const subLabels = smallItems.map((s) => `${s.label}: ${s.value.toLocaleString()}`).join(' · ');
+      const otherEntry = {
+        label: smallItems.length === 1 ? `Other (${smallItems[0].label})` : 'Other',
+        value: smallTotal,
+        color: otherColor,
+        isOther: true,
+        description: `Grouped (${smallItems.length} items): ${subLabels}`,
+        subItems: smallItems,
+      };
+      processedItems = [...largeItems, otherEntry];
+    } else {
+      processedItems = [...data];
+    }
+
+    // 2. Calculate initial arc degrees for each slice
+    const rawSlices = processedItems.map((d) => {
+      const val = d.value || 0;
+      const rawDegrees = (val / totalValue) * 360;
+      return { ...d, val, rawDegrees };
+    });
+
+    // 3. Enforce a minimum arc of exactly 1 degree for the "Other" slice if < 1 degree
+    let adjustedSlices = rawSlices.map((s) => {
+      let degrees = s.rawDegrees;
+      if (s.isOther && degrees < MIN_OTHER_ARC_DEGREES) {
+        degrees = MIN_OTHER_ARC_DEGREES;
+      }
+      return { ...s, degrees };
+    });
+
+    // Re-normalize non-Other slice degrees so total sum equals 360 degrees
+    const forcedDegreesSum = adjustedSlices.reduce((acc, s) => acc + (s.degrees > s.rawDegrees ? s.degrees : 0), 0);
+    const unforcedValSum = adjustedSlices.reduce((acc, s) => acc + (s.degrees > s.rawDegrees ? 0 : s.val), 0);
+    const degreesRemaining = 360 - forcedDegreesSum;
+
+    if (forcedDegreesSum > 0 && unforcedValSum > 0 && degreesRemaining > 0) {
+      adjustedSlices = adjustedSlices.map((s) => {
+        if (s.degrees > s.rawDegrees) return s; // Retain forced 1-degree arc
+        const normDegrees = (s.val / unforcedValSum) * degreesRemaining;
+        return { ...s, degrees: normDegrees };
+      });
+    }
+
+    // 4. Convert degrees to startAngle and endAngle in radians
+    let cumulativeDegrees = 0;
+    return adjustedSlices.map((d, i) => {
+      const startAngle = (cumulativeDegrees / 360) * 2 * Math.PI;
+      cumulativeDegrees += d.degrees;
+      const endAngle = (cumulativeDegrees / 360) * 2 * Math.PI;
+      const pctVal = (d.val / totalValue) * 100;
+      const percentage = pctVal < 0.1 && d.val > 0 ? '< 0.1' : pctVal.toFixed(1);
+
       return {
         ...d,
         startAngle,
@@ -127,6 +194,14 @@ const DonutChart = ({
               <span className="text-[10px] font-medium text-secondary">
                 {activeSlice.percentage}%
               </span>
+              {activeSlice.subItems && (
+                <span
+                  className="text-[9px] text-secondary/80 max-w-[130px] truncate mt-0.5"
+                  title={activeSlice.description}
+                >
+                  {activeSlice.subItems.map((sub) => sub.label).join(', ')}
+                </span>
+              )}
             </>
           ) : (
             <>
@@ -153,9 +228,8 @@ const DonutChart = ({
               key={s.key || s.label}
               onMouseEnter={() => setHoverIndex(s.index)}
               onMouseLeave={() => setHoverIndex(null)}
-              className={`flex items-center gap-1.5 cursor-pointer transition-opacity ${
-                hoverIndex !== null && hoverIndex !== s.index ? 'opacity-40' : 'opacity-100'
-              }`}
+              className={`flex items-center gap-1.5 cursor-pointer transition-opacity ${hoverIndex !== null && hoverIndex !== s.index ? 'opacity-40' : 'opacity-100'
+                }`}
             >
               <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
               <span className="text-secondary hover:text-primary transition-colors">{s.label}</span>
