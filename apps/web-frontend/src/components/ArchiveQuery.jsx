@@ -2,6 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Search, ExternalLink, Loader2, ChevronRight, SlidersHorizontal, MapPin, X, HelpCircle, UserPlus, Plus } from 'lucide-react';
 import { ADMIN_API_BASE_URL, getKindLabel } from '../config';
+import RelationshipDiagram from './RecordDiagram';
+import RecordDetails from './RecordDetails';
+import JsonTree from './JsonTree';
+
+const RECORD_TABS = [
+  { id: 'diagram', label: 'Relationship' },
+  { id: 'details', label: 'Details' },
+  { id: 'raw', label: 'Raw JSON' },
+];
 
 const kindLabel = (kind) => getKindLabel(kind);
 
@@ -255,6 +264,8 @@ const ArchiveQuery = ({ getIdToken }) => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
   const [expanded, setExpanded] = useState(() => new Set());
+  // Which tab is showing per expanded card, defaulting to the diagram.
+  const [activeTab, setActiveTab] = useState({});
 
   const toggle = (id) =>
     setExpanded((open) => {
@@ -262,6 +273,9 @@ const ArchiveQuery = ({ getIdToken }) => {
       if (next.has(id)) next.delete(id); else next.add(id);
       return next;
     });
+
+  const tabFor = (id) => activeTab[id] || 'diagram';
+  const setTabFor = (id, tab) => setActiveTab((prev) => ({ ...prev, [id]: tab }));
 
   const activeFilterCount =
     (archive !== 'all' ? 1 : 0) +
@@ -362,6 +376,7 @@ const ArchiveQuery = ({ getIdToken }) => {
       }
       setResult(data);
       setExpanded(new Set());
+      setActiveTab({});
     } catch {
       setError('Could not reach the archival API.');
     } finally {
@@ -789,20 +804,29 @@ const ArchiveQuery = ({ getIdToken }) => {
             </p>
           ) : (
             <ol className="space-y-2">
-              {result.hits.map((hit) => (
-                <li key={hit.id} className="border border-border/60 rounded-lg p-3 text-xs">
+              {result.hits.map((hit) => {
+                const isExpanded = expanded.has(hit.id);
+                return (
+                <li
+                  key={hit.id}
+                  onClick={() => { if (!isExpanded) toggle(hit.id); }}
+                  className={`border border-border/60 rounded-lg p-3 text-xs transition-colors ${isExpanded ? '' : 'cursor-pointer hover:bg-muted/20'
+                    }`}
+                >
                   <div className="flex items-start justify-between gap-3 mb-1.5">
-                    <button
-                      type="button"
-                      onClick={() => toggle(hit.id)}
-                      aria-expanded={expanded.has(hit.id)}
-                      className="flex items-start gap-2 text-left text-primary font-semibold break-words hover:text-accent transition-colors cursor-pointer flex-1"
-                    >
-                      <ChevronRight
-                        size={13}
-                        className={`mt-1 shrink-0 transition-transform ${expanded.has(hit.id) ? 'rotate-90' : ''
-                          }`}
-                      />
+                    <div className="flex items-start gap-2 text-primary font-semibold break-words flex-1">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); toggle(hit.id); }}
+                        aria-expanded={isExpanded}
+                        aria-label={isExpanded ? 'Collapse record' : 'Expand record'}
+                        className="mt-1 shrink-0 text-secondary hover:text-accent transition-colors cursor-pointer"
+                      >
+                        <ChevronRight
+                          size={13}
+                          className={`transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                        />
+                      </button>
                       {hit.persons?.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5 items-center">
                           {hit.persons.map((p, i) => {
@@ -828,7 +852,7 @@ const ArchiveQuery = ({ getIdToken }) => {
                       ) : (
                         <span>{renderHighlightedName(hit.names, null, globalTokens, roleScopedTokens).rendered}</span>
                       )}
-                    </button>
+                    </div>
                     {/* Why this record is here. Without it a differently-spelled
                         hit looks like a mistake — "Clasina" for a search of
                         "Klasina" reads as noise until you can see it was matched
@@ -846,6 +870,7 @@ const ArchiveQuery = ({ getIdToken }) => {
                         href={hit.url}
                         target="_blank"
                         rel="noreferrer noopener"
+                        onClick={(e) => e.stopPropagation()}
                         className="shrink-0 text-accent hover:underline inline-flex items-center gap-1 mt-0.5"
                         title="Open at Open Archieven"
                       >
@@ -886,13 +911,31 @@ const ArchiveQuery = ({ getIdToken }) => {
                     )}
                   </div>
 
-                  {expanded.has(hit.id) && (
-                    <pre className="mb-2 p-2.5 rounded bg-muted/60 border border-border/60 text-[10px] leading-relaxed font-mono text-secondary overflow-x-auto max-h-72 overflow-y-auto">
-                      {JSON.stringify(hit.raw ?? hit, null, 2)}
-                    </pre>
+                  {isExpanded && (
+                    <div className="mt-1">
+                      <div className="flex items-center gap-1 border-b border-border/60 mb-3">
+                        {RECORD_TABS.map((tab) => (
+                          <button
+                            key={tab.id}
+                            type="button"
+                            onClick={() => setTabFor(hit.id, tab.id)}
+                            className={`px-2.5 py-1.5 text-[11px] font-semibold border-b-2 -mb-px transition-colors cursor-pointer ${tabFor(hit.id) === tab.id
+                                ? 'border-accent text-accent'
+                                : 'border-transparent text-secondary hover:text-primary'
+                              }`}
+                          >
+                            {tab.label}
+                          </button>
+                        ))}
+                      </div>
+                      {tabFor(hit.id) === 'diagram' && <RelationshipDiagram hit={hit} />}
+                      {tabFor(hit.id) === 'details' && <RecordDetails hit={hit} />}
+                      {tabFor(hit.id) === 'raw' && <JsonTree data={hit.raw ?? hit} />}
+                    </div>
                   )}
                 </li>
-              ))}
+                );
+              })}
             </ol>
           )}
         </>
