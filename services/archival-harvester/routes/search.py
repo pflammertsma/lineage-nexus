@@ -3,6 +3,7 @@ Search and record lookup endpoints.
 """
 
 import time
+import concurrent.futures
 
 from phonetics import phonetic, phonetic_all
 import re
@@ -146,6 +147,22 @@ def get_record(archive_code: str, identifier: str):
 
 
 
+def _is_literal_match(query: str, hit: Dict[str, Any]) -> bool:
+  """
+  True when every query token appears, as spelled, in the hit's own name text.
+
+  Whether a hit came back from the exact-text pass or the phonetic-key pass
+  says nothing about whether its *spelling* matches — see the comment below on
+  reclassification. This checks the document itself instead of trusting which
+  query happened to surface it.
+  """
+  tokens = [t for t in re.split(r"\s+", query.lower()) if t]
+  if not tokens:
+    return False
+  names_lower = (hit.get("names") or "").lower()
+  return all(t in names_lower for t in tokens)
+
+
 def _search_with_variants(index, query, params, fuzzy):
   """
   Runs the query as typed, then again phonetically, and merges.
@@ -159,24 +176,35 @@ def _search_with_variants(index, query, params, fuzzy):
   Exact hits are kept ahead of phonetic ones. Spelling a name the way the clerk
   spelled it is evidence, and a search that buries the record you typed exactly
   underneath its variants is worse than one that never finds them.
+
+  The two searches run concurrently: they are independent HTTP calls to the
+  same Meilisearch instance, and running them sequentially was pure added
+  latency with nothing to show for it.
   """
-  exact = index.search(query, dict(params))
-  hits = list(exact.get("hits", []))
-  for hit in hits:
-    hit["_match"] = "exact"
-
-  if not fuzzy:
-    return exact
-
-  keyed = phonetic(query)
-  if not keyed or keyed == query.lower():
-    return exact
+  keyed = phonetic(query) if (fuzzy and query) else None
+  run_phonetic = bool(keyed) and keyed != query.lower()
 
   variant_params = dict(params)
   # The keys live in their own attribute; searching anywhere else would compare
   # a key against a name and find nothing.
   variant_params["attributesToSearchOn"] = ["names_p"]
-  variants = index.search(keyed, variant_params)
+
+  if run_phonetic:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+      exact_future = pool.submit(index.search, query, dict(params))
+      variants_future = pool.submit(index.search, keyed, variant_params)
+      exact = exact_future.result()
+      variants = variants_future.result()
+  else:
+    exact = index.search(query, dict(params))
+    variants = None
+
+  hits = list(exact.get("hits", []))
+  for hit in hits:
+    hit["_match"] = "exact"
+
+  if not run_phonetic:
+    return exact
 
   seen = {h.get("id") for h in hits}
   for hit in variants.get("hits", []):
@@ -184,6 +212,21 @@ def _search_with_variants(index, query, params, fuzzy):
       continue
     hit["_match"] = "phonetic"
     hits.append(hit)
+
+  # A hit's own spelling decides the badge, not which pass found it. The two
+  # passes rank over different fields with different candidate pools — a
+  # common surname can have 1000+ exact hits, far more than either pass
+  # returns, so a genuinely exact spelling can rank outside the exact pass's
+  # own result window while still landing inside the phonetic pass's. That
+  # mislabelled an exact "Lammertsma" as "sounds alike" simply because the
+  # phonetic pass (over "lamertsma", the folded key) surfaced it and the exact
+  # pass's top 50 out of 1000+ hits happened not to. Only upgrading
+  # phonetic -> exact here, never the reverse: an exact-pass hit can still be a
+  # typo-tolerance match rather than a true exact spelling, and this check
+  # cannot tell those apart, so it should not relabel away from "exact".
+  for hit in hits:
+    if hit.get("_match") == "phonetic" and _is_literal_match(query, hit):
+      hit["_match"] = "exact"
 
   # Rank merged hits by term coverage so a 3/3 token match (Klazina Cornelia Spruijt)
   # outranks a partial 2/3 token match (Clasina Margaretha Oppelaar), while exact
