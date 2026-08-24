@@ -416,6 +416,16 @@ const SmoothLineChart = ({
             className="absolute top-0 pointer-events-none z-[100]"
             style={{
               left: `${(x(hovered.t) / W) * 100}%`,
+              // width: max-content, not the default auto. A `left`-only
+              // absolutely positioned box with width:auto is sized by the
+              // CSS shrink-to-fit algorithm, which bounds it to the space
+              // remaining between `left` and the containing block's own
+              // right edge — before the transform below ever gets to move
+              // it. Past ~90% that remaining space is a sliver, so the card
+              // got laid out squeezed into it and only *then* translated
+              // into open space, arriving already narrowed. max-content
+              // sizes to the label text with no such ceiling.
+              width: 'max-content',
               transform:
                 x(hovered.t) / W > 0.5
                   ? 'translateX(calc(-100% - 10px))'
